@@ -1,0 +1,162 @@
+# Regras de Negócio — agendaGo
+
+Documento de referência das regras de negócio da agenda. Define como o prestador
+configura sua disponibilidade, como os horários são ofertados ao cliente e como o
+agendamento evolui até a conclusão.
+
+## Visão geral do fluxo
+
+A agenda se apoia em três camadas, refletidas no domínio
+(`internal/domain/{user,availability,slot,appointment}`):
+
+1. **Disponibilidade (regra)** — o prestador define quando trabalha.
+2. **Slots (oferta)** — horários livres, **calculados** a partir da disponibilidade menos
+   os agendamentos existentes.
+3. **Agendamento (reserva)** — o cliente solicita um slot; o prestador confirma.
+
+> A separação disponibilidade → slots → agendamento é o eixo do sistema. O cliente só
+> consegue marcar em dias e horários efetivamente disponíveis.
+
+---
+
+## 1. Disponibilidade do prestador
+
+### Padrão semanal recorrente
+O prestador define, por dia da semana, um ou mais **blocos** de horário em que trabalha.
+
+> Exemplo: Segunda 07:00–19:00; Terça 08:00–12:00, 14:00–18:00, 19:00–23:00; demais dias
+> não trabalha.
+
+### Exceções por data
+Sobre o padrão semanal, o prestador pode registrar exceções para datas específicas:
+- **BLOQUEIO** — data que normalmente seria trabalhada e não será (folga, feriado).
+- **EXTRA** — disponibilidade num dia/data que normalmente não trabalha.
+
+A exceção da data tem **precedência** sobre o padrão semanal.
+
+### Default (sem configuração)
+Se o prestador **não** configurar sua agenda, assume-se um **dia comercial padrão**
+(ex.: 08:00–12:00 e 14:00–18:00, de segunda a sexta).
+
+O default só vale para prestador com a agenda **ativa** (`aceita_agendamentos = true`). Um
+prestador que não deseja atender mantém a flag desativada e **nunca** oferta slots, mesmo
+sem configuração.
+
+### Validação dos blocos (estrita)
+Ao salvar a disponibilidade, o sistema valida:
+- Sem blocos **sobrepostos** no mesmo dia.
+- `fim > início` (proíbe bloco invertido ou de duração zero).
+- **Proíbe cruzar a meia-noite** — um expediente noturno deve ser partido em dois dias.
+- Horários em **minutos cheios** (granularidade mínima a definir na implementação).
+- Blocos **adjacentes** são mesclados (ex.: 08:00–12:00 + 12:00–14:00 → 08:00–14:00).
+
+### Resolução da disponibilidade de um dia
+A disponibilidade efetiva de uma data resolve-se nesta ordem:
+
+```
+exceção da data  →  padrão semanal  →  (se nada configurado e prestador ativo) default comercial
+```
+
+---
+
+## 2. Slots (horários ofertados)
+
+Os slots são **calculados sob demanda**, não pré-gravados. O cliente, ao consultar,
+recebe os horários livres calculados como:
+
+```
+slots livres = blocos do dia − agendamentos (SOLICITADO/CONFIRMADO)
+```
+
+### Fatiamento por serviço + buffer
+Cada bloco é fatiado em slots conforme a **duração do serviço escolhido** somada ao
+**buffer** do prestador:
+
+- **Buffer configurável por prestador** (`buffer_minutos`: 0, 10, 15…) — intervalo de
+  preparação/limpeza entre atendimentos. O próximo slot só abre após
+  `duração_serviço + buffer`.
+- **Sobra descartada** — só vira slot o intervalo que cabe o **serviço inteiro (+ buffer)**
+  dentro do bloco. O tempo que sobra no fim do bloco é ignorado; um atendimento nunca
+  "vaza" para fora do bloco.
+
+---
+
+## 3. Agendamento (reserva)
+
+### Reserva ao solicitar + expiração (anti-overbooking)
+Quando o cliente solicita um horário, o agendamento já **ocupa o intervalo** (reserva
+pessimista) com um prazo de expiração (`expira_em = agora + TTL`). Outros clientes não
+conseguem solicitar o mesmo intervalo.
+
+- Se o prestador não confirmar dentro do TTL, a pendência vira **EXPIRADO** e o intervalo
+  volta a ficar livre.
+- O conflito é barrado também no banco, por uma constraint de exclusão sobre
+  `(provider_id, intervalo)` para os status que ocupam horário, dentro de transação.
+
+> Isso elimina a janela de overbooking entre "solicitar" e "confirmar".
+
+### Confirmação
+O agendamento só é **concluído após a confirmação do prestador**. Enquanto isso, fica
+pendente (`SOLICITADO`) e ocupando o intervalo.
+
+### Ciclo de vida (máquina de estados)
+
+```
+SOLICITADO ──► CONFIRMADO ──► REALIZADO
+    │              │
+    │              ├──► NÃO_COMPARECEU
+    │              └──► CANCELADO
+    ├──► RECUSADO        (cancelamento por cliente ou prestador)
+    └──► EXPIRADO
+```
+
+- **SOLICITADO** — cliente pediu; ocupa o intervalo; aguardando o prestador.
+- **CONFIRMADO** — prestador aceitou.
+- **REALIZADO** — atendimento aconteceu.
+- **RECUSADO** — prestador negou enquanto SOLICITADO.
+- **EXPIRADO** — pendência venceu o TTL sem confirmação.
+- **CANCELADO** — cancelado por cliente ou prestador (ver regra de antecedência).
+- **NÃO_COMPARECEU** — confirmado, mas o cliente não apareceu.
+
+Toda transição que encerra a reserva (RECUSADO, EXPIRADO, CANCELADO) **libera o intervalo**.
+
+### Cancelamento
+**Cliente e prestador** podem cancelar um agendamento `CONFIRMADO`, respeitando uma
+**antecedência mínima** (config; ex.: até 24h antes do início). Cancelamentos dentro da
+janela mínima são bloqueados (tratamento de penalidade fica fora de escopo por enquanto).
+Ao cancelar, o intervalo volta a ficar livre.
+
+---
+
+## 4. Fuso horário
+
+Todo o sistema assume um **fuso único fixo**: `America/Sao_Paulo`. Os horários são
+interpretados e exibidos nesse fuso. O fuso deve ser centralizado em uma
+constante/configuração única (não espalhar `time.Local` pelo código), para facilitar uma
+eventual evolução para múltiplos fusos no futuro.
+
+---
+
+## Parâmetros a calibrar na implementação
+
+Três valores numéricos ainda precisam ser fixados (sugestões iniciais entre parênteses):
+
+| Parâmetro | Descrição | Sugestão inicial |
+|---|---|---|
+| TTL da pendência | Prazo até uma solicitação não confirmada expirar | 24h |
+| Antecedência mínima de cancelamento | Prazo antes do início em que ainda se pode cancelar | 24h |
+| Granularidade de minutos | Múltiplo mínimo dos horários dos blocos | a definir (ex.: 5 ou 15 min) |
+
+---
+
+## Mapa para o código
+
+| Conceito | Local | Conteúdo |
+|---|---|---|
+| Prestador | `internal/domain/user/` | `aceita_agendamentos`, `buffer_minutos` |
+| Disponibilidade | `internal/domain/availability/` | `WeeklySchedule`, `TimeBlock`, `DateException`, validação estrita, `BlocosDoDia` |
+| Slot | `internal/domain/slot/` | `Slot`, `SlotsLivres` (cálculo puro: duração + buffer, sobra descartada) |
+| Agendamento | `internal/domain/appointment/` | `Appointment` + máquina de estados |
+| Orquestração | `internal/usecase/{availability,appointment}/` | solicitar, confirmar, recusar, cancelar, expirar |
+| Configuração | `config/` | fuso fixo, TTL, antecedência mínima |
+| Persistência | `migrations/` | `providers`, `weekly_schedules`, `date_exceptions`, `appointments` (exclusion constraint anti-overbooking) |
