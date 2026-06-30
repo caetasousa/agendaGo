@@ -1,5 +1,6 @@
 # binários compilados
 /agendago
+/api
 *.exe
 
 # dependências e cache Go
