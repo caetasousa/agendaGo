@@ -37,9 +37,12 @@ Postgres  →  Flyway (migrations)  →  API (hot reload)
 |---------|-----------|
 | **Postgres** | Aguarda ficar saudável antes de permitir o próximo passo |
 | **Flyway** | Aplica as migrations e encerra |
-| **API** | Sobe com hot reload via Air — alterações em `.go` reiniciam a API automaticamente |
+| **API** | Gera a documentação Swagger (`swag init`) e sobe com hot reload via Air — alterações em `.go` reiniciam a API automaticamente |
 
 A API estará disponível em `http://localhost:8080`.
+
+> A pasta `docs/` (documentação Swagger) é gerada automaticamente pelo container a cada
+> `docker compose up` e não é versionada — não é necessário rodar `swag init` manualmente.
 
 ### Encerrando
 
