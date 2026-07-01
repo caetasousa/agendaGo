@@ -9,23 +9,37 @@ package main
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	_ "agendago/docs"
-
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	httpSwagger "github.com/swaggo/http-swagger"
+	"agendago/config"
+	"agendago/internal/adapter/http/handler"
+	"agendago/internal/adapter/repository"
+	ucprovider "agendago/internal/usecase/provider"
 )
 
 func main() {
-	r := chi.NewRouter()
-	r.Use(middleware.Logger)
+	// repositórios
+	providerRepo := repository.NovoProviderMemoria()
 
+	// usecases
+	cadastrarProvider := ucprovider.NovoCadastrarUseCase(providerRepo)
+
+	// handlers
+	providerHandler := handler.NovoProviderHandler(cadastrarProvider)
+
+	// roteador
+	r := config.NovoRouter()
 	r.Get("/health", health)
-	r.Get("/swagger/*", httpSwagger.WrapHandler)
+	r.Post("/providers", providerHandler.Cadastrar)
 
-	http.ListenAndServe(":8080", r)
+	// servidor
+	srv := config.NovoServidor(r)
+	log.Printf("servidor iniciado na porta %s", config.Porta)
+	if err := srv.ListenAndServe(); err != nil {
+		log.Fatalf("erro ao iniciar servidor: %v", err)
+	}
 }
 
 // health godoc
