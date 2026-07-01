@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: agendago_postgres
+    environment:
+      POSTGRES_DB: agendago
+      POSTGRES_USER: agendago
+      POSTGRES_PASSWORD: agendago
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agendago"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  flyway:
+    image: flyway/flyway:10-alpine
+    container_name: agendago_flyway
+    command: migrate
+    environment:
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/agendago
+      FLYWAY_USER: agendago
+      FLYWAY_PASSWORD: agendago
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql
+      FLYWAY_BASELINE_ON_MIGRATE: "true"
+    volumes:
+      - ./migrations:/flyway/sql
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agendago_api
+    ports:
+      - "8080:8080"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: agendago
+      DB_USER: agendago
+      DB_PASSWORD: agendago
+    volumes:
+      - .:/app
+    depends_on:
+      flyway:
+        condition: service_completed_successfully
+
+volumes:
+  postgres_data:

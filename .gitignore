@@ -3,6 +3,9 @@
 /api
 *.exe
 
+# air (hot reload)
+tmp/
+
 # dependências e cache Go
 vendor/
 
