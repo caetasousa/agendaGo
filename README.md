@@ -27,7 +27,7 @@
 docker compose up
 ```
 
-Os serviços sobem na seguinte ordem:
+Os serviços de backend sobem na seguinte ordem (o `web` sobe em paralelo, sem depender dessa cadeia):
 
 ```
 Postgres  →  Flyway (migrations)  →  API (hot reload)
@@ -38,8 +38,9 @@ Postgres  →  Flyway (migrations)  →  API (hot reload)
 | **Postgres** | Aguarda ficar saudável antes de permitir o próximo passo |
 | **Flyway** | Aplica as migrations e encerra |
 | **API** | Gera a documentação Swagger (`swag init`) e sobe com hot reload via Air — alterações em `.go` reiniciam a API automaticamente |
+| **Web** | Instala as dependências e sobe o frontend (SvelteKit) com hot reload via Vite |
 
-A API estará disponível em `http://localhost:8080`.
+A API estará disponível em `http://localhost:8080` e o frontend em `http://localhost:5173`.
 
 > A pasta `docs/` (documentação Swagger) é gerada automaticamente pelo container a cada
 > `docker compose up` e não é versionada — não é necessário rodar `swag init` manualmente.
@@ -65,9 +66,10 @@ docker compose down -v     # apaga os dados do banco junto
 
 ## Testes
 
-Os testes rodam localmente sem Docker, exigem apenas Go instalado:
+Os testes do backend rodam localmente sem Docker, exigem apenas Go instalado:
 
 ```bash
+cd backend
 go test ./test/... -v
 ```
 
@@ -82,33 +84,39 @@ test/
 
 ## Estrutura do projeto
 
+Monorepo com backend (Go) e frontend (SvelteKit) em pastas separadas:
+
 ```
 agendaGo/
-├── cmd/api/              entrypoint do servidor HTTP
-├── config/               configuração do servidor chi (porta, timeouts)
-├── internal/
-│   ├── adapter/
-│   │   ├── http/
-│   │   │   ├── dto/      request e response HTTP
-│   │   │   ├── handler/  handlers das rotas
-│   │   │   └── middleware/
-│   │   └── repository/   implementações de repositório (memória, postgres)
-│   ├── domain/
-│   │   ├── appointment/  agendamento e máquina de estados
-│   │   ├── availability/ disponibilidade do prestador
-│   │   ├── client/       cliente
-│   │   ├── provider/     prestador de serviço
-│   │   └── slot/         slots de horário (calculados sob demanda)
-│   └── usecase/
-│       ├── appointment/  solicitar, confirmar, recusar, cancelar, expirar
-│       ├── availability/ definir disponibilidade e exceções
-│       ├── client/       cadastro e busca de cliente
-│       └── provider/     cadastro e configuração do prestador
-├── migrations/           arquivos SQL versionados pelo Flyway (V1__, V2__...)
-└── test/
-    ├── domain/
-    ├── handler/
-    └── usecase/
+├── backend/              API em Go (arquitetura hexagonal)
+│   ├── cmd/api/          entrypoint do servidor HTTP
+│   ├── config/           configuração do servidor chi (porta, timeouts)
+│   ├── internal/
+│   │   ├── adapter/
+│   │   │   ├── http/
+│   │   │   │   ├── dto/      request e response HTTP
+│   │   │   │   ├── handler/  handlers das rotas
+│   │   │   │   └── middleware/
+│   │   │   └── repository/   implementações de repositório (memória, postgres)
+│   │   ├── domain/
+│   │   │   ├── appointment/  agendamento e máquina de estados
+│   │   │   ├── availability/ disponibilidade do prestador
+│   │   │   ├── client/       cliente
+│   │   │   ├── provider/     prestador de serviço
+│   │   │   └── slot/         slots de horário (calculados sob demanda)
+│   │   └── usecase/
+│   │       ├── appointment/  solicitar, confirmar, recusar, cancelar, expirar
+│   │       ├── availability/ definir disponibilidade e exceções
+│   │       ├── client/       cadastro e busca de cliente
+│   │       └── provider/     cadastro e configuração do prestador
+│   ├── migrations/       arquivos SQL versionados pelo Flyway (V1__, V2__...)
+│   └── test/
+│       ├── domain/
+│       ├── handler/
+│       └── usecase/
+└── frontend/             cliente web em SvelteKit + TypeScript
+    ├── src/
+    └── static/
 ```
 
 ---
