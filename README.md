@@ -27,20 +27,12 @@
 docker compose up
 ```
 
-Os serviços de backend sobem na seguinte ordem (o `web` sobe em paralelo, sem depender dessa cadeia):
+O comando acima sobe backend e frontend juntos, na seguinte sequência:
 
-```
-Postgres  →  Flyway (migrations)  →  API (hot reload)
-```
-
-| Serviço | Descrição |
-|---------|-----------|
-| **Postgres** | Aguarda ficar saudável antes de permitir o próximo passo |
-| **Flyway** | Aplica as migrations e encerra |
-| **API** | Gera a documentação Swagger (`swag init`) e sobe com hot reload via Air — alterações em `.go` reiniciam a API automaticamente |
-| **Web** | Instala as dependências e sobe o frontend (SvelteKit) com hot reload via Vite |
-
-A API estará disponível em `http://localhost:8080` e o frontend em `http://localhost:5173`.
+1. **Postgres** sobe e aguarda ficar saudável (healthcheck) antes de liberar o próximo passo.
+2. **Flyway** aplica as migrations (`backend/migrations`) contra o Postgres e encerra.
+3. **API** gera a documentação Swagger (`swag init`) e sobe com hot reload via Air — alterações em arquivos `.go` reiniciam a API automaticamente. Disponível em `http://localhost:8080`.
+4. **Web** instala as dependências e sobe o frontend (SvelteKit) com hot reload via Vite. Roda em paralelo aos passos 1-3, sem depender dessa cadeia. Disponível em `http://localhost:5173`.
 
 > A pasta `docs/` (documentação Swagger) é gerada automaticamente pelo container a cada
 > `docker compose up` e não é versionada — não é necessário rodar `swag init` manualmente.
