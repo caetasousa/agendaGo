@@ -27,14 +27,14 @@ services:
       FLYWAY_LOCATIONS: filesystem:/flyway/sql
       FLYWAY_BASELINE_ON_MIGRATE: "true"
     volumes:
-      - ./migrations:/flyway/sql
+      - ./backend/migrations:/flyway/sql
     depends_on:
       postgres:
         condition: service_healthy
 
   api:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     container_name: agendago_api
     ports:
@@ -46,7 +46,7 @@ services:
       DB_USER: agendago
       DB_PASSWORD: agendago
     volumes:
-      - .:/app
+      - ./backend:/app
     depends_on:
       flyway:
         condition: service_completed_successfully

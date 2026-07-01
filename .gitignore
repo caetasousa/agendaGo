@@ -1,22 +1,3 @@
-# binários compilados
-/agendago
-/api
-*.exe
-
-# air (hot reload)
-tmp/
-
-# dependências e cache Go
-vendor/
-
-# variáveis de ambiente
-.env
-.env.*
-!.env.example
-
-# arquivos gerados pelo swag
-docs/
-
 # IDEs
 .idea/
 .vscode/
