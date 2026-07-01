@@ -6,11 +6,15 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 // Porta define o endereço em que o servidor HTTP escuta.
 const Porta = ":8080"
+
+// OrigemFrontend é a origem permitida do frontend em desenvolvimento.
+const OrigemFrontend = "http://localhost:5173"
 
 // Servidor encapsula o http.Server com as configurações do projeto.
 type Servidor struct {
@@ -35,6 +39,11 @@ func NovoRouter() *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins: []string{OrigemFrontend},
+		AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders: []string{"Content-Type"},
+	}))
 	r.Get("/swagger/*", httpSwagger.WrapHandler)
 	return r
 }
