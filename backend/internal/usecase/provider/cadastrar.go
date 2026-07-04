@@ -38,7 +38,10 @@ func NovoCadastrarUseCase(repo repositorioCadastrar) *CadastrarUseCase {
 // Executar valida os dados, verifica duplicidade de email e persiste o novo prestador.
 // Retorna erro se o email já estiver cadastrado ou se os dados forem inválidos.
 func (uc *CadastrarUseCase) Executar(input CadastrarInput) (*CadastrarOutput, error) {
-	existente, _ := uc.repo.BuscarPorEmail(input.Email)
+	existente, err := uc.repo.BuscarPorEmail(input.Email)
+	if err != nil {
+		return nil, err
+	}
 	if existente != nil {
 		return nil, ErrEmailJaCadastrado
 	}

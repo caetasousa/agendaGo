@@ -1,13 +1,10 @@
 package repository
 
 import (
-	"errors"
 	"sync"
 
 	"agendago/internal/domain/provider"
 )
-
-var ErrProviderNaoEncontrado = errors.New("prestador não encontrado")
 
 type ProviderMemoria struct {
 	mu   sync.RWMutex
@@ -25,6 +22,8 @@ func (r *ProviderMemoria) Salvar(p *provider.Provider) error {
 	return nil
 }
 
+// BuscarPorEmail retorna (nil, nil) quando não há prestador com o email,
+// seguindo o mesmo contrato do repositório Postgres.
 func (r *ProviderMemoria) BuscarPorEmail(email string) (*provider.Provider, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -33,15 +32,5 @@ func (r *ProviderMemoria) BuscarPorEmail(email string) (*provider.Provider, erro
 			return p, nil
 		}
 	}
-	return nil, ErrProviderNaoEncontrado
-}
-
-func (r *ProviderMemoria) BuscarPorID(id string) (*provider.Provider, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	p, ok := r.dados[id]
-	if !ok {
-		return nil, ErrProviderNaoEncontrado
-	}
-	return p, nil
+	return nil, nil
 }
