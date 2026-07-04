@@ -8,6 +8,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -20,8 +21,15 @@ import (
 )
 
 func main() {
+	// banco de dados
+	pool, err := config.NovoPool(context.Background())
+	if err != nil {
+		log.Fatalf("erro ao conectar no banco: %v", err)
+	}
+	defer pool.Close()
+
 	// repositórios
-	providerRepo := repository.NovoProviderMemoria()
+	providerRepo := repository.NovoProviderPostgres(pool)
 
 	// usecases
 	cadastrarProvider := ucprovider.NovoCadastrarUseCase(providerRepo)
