@@ -7,3 +7,6 @@
 # OS
 .DS_Store
 Thumbs.db
+
+# Docs geradas pelo swag (regeneradas pelo container)
+docs/
