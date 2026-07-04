@@ -58,18 +58,39 @@ docker compose down -v     # apaga os dados do banco junto
 
 ## Testes
 
-Os testes do backend rodam localmente sem Docker, exigem apenas Go instalado:
+A forma recomendada de rodar tudo (rápidos + integração) com saída legível:
 
 ```bash
 cd backend
-go test ./test/... -v
+make test
 ```
+
+`make test` lista cada caso de teste com `PASS`/`FAIL` e falha se algum quebrar. Exige Docker rodando (sobe um Postgres efêmero para os testes de integração).
+
+Os testes se dividem em dois grupos, que também podem ser rodados diretamente:
+
+**Testes rápidos** — regras de negócio, usecases e contrato HTTP. Rodam em memória, exigem apenas Go instalado (sem Docker):
+
+```bash
+go test ./...        # ou: make test-fast
+```
+
+**Testes de integração** — exercitam o repositório Postgres (SQL real) contra um banco efêmero criado sob demanda via [Testcontainers](https://testcontainers.com/). Exigem Docker rodando e a build tag `integration`:
+
+```bash
+go test -tags=integration ./...
+```
+
+O container do Postgres é criado, migrado e destruído automaticamente pelo próprio teste — não é necessário subir o `docker compose`.
+
+> Use `-v` para ver cada caso de teste individualmente e `-count=1` para ignorar o cache.
 
 ```
 test/
-├── domain/    testes das regras de negócio
-├── usecase/   testes dos fluxos de usecase
-└── handler/   testes do contrato HTTP
+├── domain/       testes das regras de negócio
+├── usecase/      testes dos fluxos de usecase
+├── handler/      testes do contrato HTTP
+└── repository/   testes de integração do repositório Postgres (Testcontainers)
 ```
 
 ---
@@ -105,6 +126,7 @@ agendaGo/
 │   └── test/
 │       ├── domain/
 │       ├── handler/
+│       ├── repository/   integração do repositório Postgres (build tag `integration`)
 │       └── usecase/
 └── frontend/             cliente web em SvelteKit + TypeScript
     ├── src/
