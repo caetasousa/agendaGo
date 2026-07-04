@@ -5,15 +5,24 @@
 	let nome = $state('');
 	let email = $state('');
 	let senha = $state('');
+	let confirmarSenha = $state('');
 
 	let enviando = $state(false);
 	let erro = $state<string | null>(null);
 	let sucesso = $state<CadastrarProviderResponse | null>(null);
 
+	const senhasDivergentes = $derived(confirmarSenha.length > 0 && senha !== confirmarSenha);
+
 	async function enviar(evento: SubmitEvent) {
 		evento.preventDefault();
 		erro = null;
 		sucesso = null;
+
+		if (senha !== confirmarSenha) {
+			erro = 'As senhas não coincidem.';
+			return;
+		}
+
 		enviando = true;
 
 		try {
@@ -21,6 +30,7 @@
 			nome = '';
 			email = '';
 			senha = '';
+			confirmarSenha = '';
 		} catch (e) {
 			// A API é a fonte da verdade da validação: mostramos a mensagem que ela devolve
 			// (400 = dado inválido, 409 = e-mail já cadastrado).
@@ -100,9 +110,28 @@
 				/>
 			</div>
 
+			<div>
+				<label for="confirmar-senha" class="block text-sm font-medium text-ink"
+					>Confirmar senha</label
+				>
+				<input
+					id="confirmar-senha"
+					type="password"
+					bind:value={confirmarSenha}
+					required
+					minlength="8"
+					placeholder="Repita a senha"
+					aria-invalid={senhasDivergentes}
+					class={inputClasse}
+				/>
+				{#if senhasDivergentes}
+					<p class="mt-1.5 text-sm text-accent-red">As senhas não coincidem.</p>
+				{/if}
+			</div>
+
 			<button
 				type="submit"
-				disabled={enviando}
+				disabled={enviando || senhasDivergentes}
 				class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-on transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
 			>
 				{enviando ? 'Enviando…' : 'Cadastrar'}
