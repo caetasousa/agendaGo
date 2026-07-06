@@ -9,4 +9,4 @@
 Thumbs.db
 
 # Docs geradas pelo swag (regeneradas pelo container)
-docs/
+/backend/docs/
