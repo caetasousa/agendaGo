@@ -22,9 +22,9 @@ func NovoProviderPostgres(pool *pgxpool.Pool) *ProviderPostgres {
 // do DEFAULT NOW() da tabela — por isso não são enviados no INSERT.
 func (r *ProviderPostgres) Salvar(p *provider.Provider) error {
 	_, err := r.pool.Exec(context.Background(),
-		`INSERT INTO providers (id, nome, email, senha, aceita_agendamentos, descanso_minutos)
+		`INSERT INTO providers (id, nome, email, senha_hash, aceita_agendamentos, descanso_minutos)
 		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		p.ID, p.Nome, p.Email, p.Senha, p.AceitaAgendamentos, p.DescansoMinutos,
+		p.ID, p.Nome, p.Email, p.SenhaHash, p.AceitaAgendamentos, p.DescansoMinutos,
 	)
 	return err
 }
@@ -34,10 +34,30 @@ func (r *ProviderPostgres) Salvar(p *provider.Provider) error {
 func (r *ProviderPostgres) BuscarPorEmail(email string) (*provider.Provider, error) {
 	var p provider.Provider
 	err := r.pool.QueryRow(context.Background(),
-		`SELECT id, nome, email, senha, aceita_agendamentos, descanso_minutos, criado_em, atualizado_em
+		`SELECT id, nome, email, senha_hash, aceita_agendamentos, descanso_minutos, criado_em, atualizado_em
 		 FROM providers WHERE email = $1`, email,
 	).Scan(
-		&p.ID, &p.Nome, &p.Email, &p.Senha, &p.AceitaAgendamentos,
+		&p.ID, &p.Nome, &p.Email, &p.SenhaHash, &p.AceitaAgendamentos,
+		&p.DescansoMinutos, &p.CriadoEm, &p.AtualizadoEm,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// BuscarPorID retorna (prestador, nil) quando encontra, (nil, nil) quando não
+// existe prestador com o id, e (nil, err) em falha real de infraestrutura.
+func (r *ProviderPostgres) BuscarPorID(id string) (*provider.Provider, error) {
+	var p provider.Provider
+	err := r.pool.QueryRow(context.Background(),
+		`SELECT id, nome, email, senha_hash, aceita_agendamentos, descanso_minutos, criado_em, atualizado_em
+		 FROM providers WHERE id = $1`, id,
+	).Scan(
+		&p.ID, &p.Nome, &p.Email, &p.SenhaHash, &p.AceitaAgendamentos,
 		&p.DescansoMinutos, &p.CriadoEm, &p.AtualizadoEm,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {

@@ -27,15 +27,16 @@ type CadastrarOutput struct {
 
 // CadastrarUseCase orquestra o cadastro de um novo prestador.
 type CadastrarUseCase struct {
-	repo repositorioCadastrar
+	repo   repositorioCadastrar
+	hasher hasherSenha
 }
 
-// NovoCadastrarUseCase cria uma instância de CadastrarUseCase com o repositório injetado.
-func NovoCadastrarUseCase(repo repositorioCadastrar) *CadastrarUseCase {
-	return &CadastrarUseCase{repo: repo}
+// NovoCadastrarUseCase cria uma instância de CadastrarUseCase com o repositório e o hasher de senha injetados.
+func NovoCadastrarUseCase(repo repositorioCadastrar, hasher hasherSenha) *CadastrarUseCase {
+	return &CadastrarUseCase{repo: repo, hasher: hasher}
 }
 
-// Executar valida os dados, verifica duplicidade de email e persiste o novo prestador.
+// Executar valida os dados, verifica duplicidade de email, hasheia a senha e persiste o novo prestador.
 // Retorna erro se o email já estiver cadastrado ou se os dados forem inválidos.
 func (uc *CadastrarUseCase) Executar(input CadastrarInput) (*CadastrarOutput, error) {
 	existente, err := uc.repo.BuscarPorEmail(input.Email)
@@ -46,7 +47,12 @@ func (uc *CadastrarUseCase) Executar(input CadastrarInput) (*CadastrarOutput, er
 		return nil, ErrEmailJaCadastrado
 	}
 
-	p, err := provider.Novo(uuid.NewString(), input.Nome, input.Email, input.Senha)
+	senhaHash, err := uc.hasher.Gerar(input.Senha)
+	if err != nil {
+		return nil, err
+	}
+
+	p, err := provider.Novo(uuid.NewString(), input.Nome, input.Email, senhaHash)
 	if err != nil {
 		return nil, err
 	}

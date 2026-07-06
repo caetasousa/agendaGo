@@ -7,12 +7,12 @@ import (
 
 // Provider representa um prestador de serviço no sistema de agendamento.
 type Provider struct {
-	ID                  string
-	Nome                string
-	Email               string
-	Senha               string
-	AceitaAgendamentos  bool
-	DescansoMinutos       int
+	ID                 string
+	Nome               string
+	Email              string
+	SenhaHash          string
+	AceitaAgendamentos bool
+	DescansoMinutos    int
 	CriadoEm           time.Time
 	AtualizadoEm       time.Time
 }
@@ -22,18 +22,24 @@ var (
 	ErrNomeObrigatorio = errors.New("nome é obrigatório")
 	// ErrEmailObrigatorio é retornado quando o email do prestador está vazio.
 	ErrEmailObrigatorio = errors.New("email é obrigatório")
+	// ErrSenhaObrigatoria é retornado quando o hash de senha do prestador está vazio.
+	ErrSenhaObrigatoria = errors.New("senha é obrigatória")
 	// ErrDescansoInvalido é retornado quando o tempo de descanso é negativo.
 	ErrDescansoInvalido = errors.New("descanso não pode ser negativo")
 )
 
-// Novo cria um Provider com agenda desativada por padrão.
-// Retorna erro se nome ou email estiverem vazios.
-func Novo(id, nome, email, senha string) (*Provider, error) {
+// Novo cria um Provider com agenda desativada por padrão. Recebe o hash da
+// senha já calculado — o domínio não conhece o algoritmo de hash usado.
+// Retorna erro se nome, email ou senhaHash estiverem vazios.
+func Novo(id, nome, email, senhaHash string) (*Provider, error) {
 	if nome == "" {
 		return nil, ErrNomeObrigatorio
 	}
 	if email == "" {
 		return nil, ErrEmailObrigatorio
+	}
+	if senhaHash == "" {
+		return nil, ErrSenhaObrigatoria
 	}
 
 	agora := time.Now()
@@ -41,11 +47,11 @@ func Novo(id, nome, email, senha string) (*Provider, error) {
 		ID:                 id,
 		Nome:               nome,
 		Email:              email,
-		Senha:              senha,
+		SenhaHash:          senhaHash,
 		AceitaAgendamentos: false,
-		DescansoMinutos:       0,
-		CriadoEm:          agora,
-		AtualizadoEm:      agora,
+		DescansoMinutos:    0,
+		CriadoEm:           agora,
+		AtualizadoEm:       agora,
 	}, nil
 }
 

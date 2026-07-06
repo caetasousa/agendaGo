@@ -9,12 +9,13 @@ import (
 
 	"agendago/internal/adapter/http/handler"
 	"agendago/internal/adapter/repository"
+	"agendago/internal/adapter/security"
 	ucprovider "agendago/internal/usecase/provider"
 )
 
 func novoHandler() *handler.ProviderHandler {
 	repo := repository.NovoProviderMemoria()
-	uc := ucprovider.NovoCadastrarUseCase(repo)
+	uc := ucprovider.NovoCadastrarUseCase(repo, security.NovoHasherArgon2id())
 	return handler.NovoProviderHandler(uc)
 }
 

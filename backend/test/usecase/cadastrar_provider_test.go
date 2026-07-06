@@ -4,11 +4,12 @@ import (
 	"testing"
 
 	"agendago/internal/adapter/repository"
+	"agendago/internal/adapter/security"
 	ucprovider "agendago/internal/usecase/provider"
 )
 
 func novoUseCase() *ucprovider.CadastrarUseCase {
-	return ucprovider.NovoCadastrarUseCase(repository.NovoProviderMemoria())
+	return ucprovider.NovoCadastrarUseCase(repository.NovoProviderMemoria(), security.NovoHasherArgon2id())
 }
 
 func TestCadastrarProvider(t *testing.T) {
@@ -54,6 +55,24 @@ func TestCadastrarProvider(t *testing.T) {
 		})
 		if err == nil {
 			t.Error("esperava erro para nome vazio")
+		}
+	})
+
+	t.Run("persiste a senha com hash, nunca em texto puro", func(t *testing.T) {
+		repo := repository.NovoProviderMemoria()
+		uc := ucprovider.NovoCadastrarUseCase(repo, security.NovoHasherArgon2id())
+		uc.Executar(ucprovider.CadastrarInput{
+			Nome:  "João Silva",
+			Email: "joao@email.com",
+			Senha: "12345678",
+		})
+
+		p, _ := repo.BuscarPorEmail("joao@email.com")
+		if p.SenhaHash == "12345678" {
+			t.Error("senha não deveria ser persistida em texto puro")
+		}
+		if p.SenhaHash == "" {
+			t.Error("hash de senha não deveria ser vazio")
 		}
 	})
 }

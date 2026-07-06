@@ -34,3 +34,14 @@ func (r *ProviderMemoria) BuscarPorEmail(email string) (*provider.Provider, erro
 	}
 	return nil, nil
 }
+
+// BuscarPorID retorna (nil, nil) quando não há prestador com o id, seguindo
+// o mesmo contrato do repositório Postgres.
+func (r *ProviderMemoria) BuscarPorID(id string) (*provider.Provider, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if p, ok := r.dados[id]; ok {
+		return p, nil
+	}
+	return nil, nil
+}

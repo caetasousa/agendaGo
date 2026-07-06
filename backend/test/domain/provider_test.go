@@ -36,6 +36,13 @@ func TestNovo(t *testing.T) {
 			t.Errorf("esperava ErrEmailObrigatorio, got: %v", err)
 		}
 	})
+
+	t.Run("retorna erro quando hash de senha é vazio", func(t *testing.T) {
+		_, err := provider.Novo("1", "João Silva", "joao@email.com", "")
+		if err != provider.ErrSenhaObrigatoria {
+			t.Errorf("esperava ErrSenhaObrigatoria, got: %v", err)
+		}
+	})
 }
 
 func TestAgenda(t *testing.T) {

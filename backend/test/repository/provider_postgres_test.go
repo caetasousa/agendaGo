@@ -9,6 +9,7 @@ package repository_test
 import (
 	"context"
 	"path/filepath"
+	"sort"
 	"testing"
 
 	"agendago/internal/adapter/repository"
@@ -20,22 +21,39 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// novoPool sobe um Postgres efêmero com a migration aplicada e devolve um pool
-// pronto para uso. O container é encerrado automaticamente no fim do teste.
+// migrationsOrdenadas devolve os caminhos absolutos de todas as migrations em
+// ordem, para aplicá-las em sequência no banco de teste.
+func migrationsOrdenadas(t *testing.T) []string {
+	t.Helper()
+	caminhos, err := filepath.Glob("../../migrations/V*.sql")
+	if err != nil {
+		t.Fatalf("resolver caminhos das migrations: %v", err)
+	}
+	sort.Strings(caminhos)
+
+	absolutos := make([]string, len(caminhos))
+	for i, c := range caminhos {
+		abs, err := filepath.Abs(c)
+		if err != nil {
+			t.Fatalf("resolver caminho absoluto da migration %s: %v", c, err)
+		}
+		absolutos[i] = abs
+	}
+	return absolutos
+}
+
+// novoPool sobe um Postgres efêmero com todas as migrations aplicadas e
+// devolve um pool pronto para uso. O container é encerrado automaticamente
+// no fim do teste.
 func novoPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	ctx := context.Background()
-
-	migration, err := filepath.Abs("../../migrations/V1__cria_tabela_providers.sql")
-	if err != nil {
-		t.Fatalf("resolver caminho da migration: %v", err)
-	}
 
 	container, err := tcpostgres.Run(ctx, "postgres:16-alpine",
 		tcpostgres.WithDatabase("agendago_test"),
 		tcpostgres.WithUsername("test"),
 		tcpostgres.WithPassword("test"),
-		tcpostgres.WithInitScripts(migration),
+		tcpostgres.WithInitScripts(migrationsOrdenadas(t)...),
 		testcontainers.WithWaitStrategy(
 			wait.ForListeningPort("5432/tcp"),
 		),
@@ -105,6 +123,34 @@ func TestProviderPostgres(t *testing.T) {
 		}
 		if err := repo.Salvar(p2); err == nil {
 			t.Error("esperava erro ao salvar email duplicado")
+		}
+	})
+
+	t.Run("salva e busca prestador por ID", func(t *testing.T) {
+		p, _ := provider.Novo("88888888-8888-8888-8888-888888888888", "Carlos Souza", "carlos@email.com", "12345678")
+		if err := repo.Salvar(p); err != nil {
+			t.Fatalf("esperava sucesso ao salvar, got: %v", err)
+		}
+
+		encontrado, err := repo.BuscarPorID(p.ID)
+		if err != nil {
+			t.Fatalf("esperava sucesso na busca, got: %v", err)
+		}
+		if encontrado == nil {
+			t.Fatal("esperava encontrar o prestador salvo")
+		}
+		if encontrado.Email != "carlos@email.com" {
+			t.Errorf("esperava email 'carlos@email.com', got: %s", encontrado.Email)
+		}
+	})
+
+	t.Run("retorna (nil, nil) quando ID não existe", func(t *testing.T) {
+		encontrado, err := repo.BuscarPorID("99999999-9999-9999-9999-999999999999")
+		if err != nil {
+			t.Fatalf("não esperava erro para ID inexistente, got: %v", err)
+		}
+		if encontrado != nil {
+			t.Errorf("esperava nil para ID inexistente, got: %v", encontrado)
 		}
 	})
 }
