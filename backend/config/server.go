@@ -2,6 +2,7 @@ package config
 
 import (
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -15,6 +16,13 @@ const Porta = ":8080"
 
 // OrigemFrontend é a origem permitida do frontend em desenvolvimento.
 const OrigemFrontend = "http://localhost:5173"
+
+// CookieSeguro informa se o cookie de sessão deve ter o atributo Secure.
+// Em desenvolvimento (http://localhost) o navegador nem sempre entrega
+// cookies Secure de forma confiável, por isso o atributo só é ativado em produção.
+func CookieSeguro() bool {
+	return os.Getenv("APP_ENV") == "production"
+}
 
 // Servidor encapsula o http.Server com as configurações do projeto.
 type Servidor struct {
@@ -40,9 +48,10 @@ func NovoRouter() *chi.Mux {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins: []string{OrigemFrontend},
-		AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders: []string{"Content-Type"},
+		AllowedOrigins:   []string{OrigemFrontend},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Content-Type"},
+		AllowCredentials: true,
 	}))
 	r.Get("/swagger/*", httpSwagger.WrapHandler)
 	return r
