@@ -1,7 +1,13 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { ApiError } from '$lib/api/client';
-	import { cadastrarProvider, type CadastrarProviderResponse } from '$lib/api/provider';
+	import { cadastrarProvider } from '$lib/api/provider';
+	import { cadastrarClient } from '$lib/api/customer';
+	import { login } from '$lib/api/auth';
 
+	type TipoConta = 'provider' | 'client';
+
+	let tipo = $state<TipoConta>('provider');
 	let nome = $state('');
 	let email = $state('');
 	let senha = $state('');
@@ -9,14 +15,12 @@
 
 	let enviando = $state(false);
 	let erro = $state<string | null>(null);
-	let sucesso = $state<CadastrarProviderResponse | null>(null);
 
 	const senhasDivergentes = $derived(confirmarSenha.length > 0 && senha !== confirmarSenha);
 
 	async function enviar(evento: SubmitEvent) {
 		evento.preventDefault();
 		erro = null;
-		sucesso = null;
 
 		if (senha !== confirmarSenha) {
 			erro = 'As senhas não coincidem.';
@@ -26,11 +30,14 @@
 		enviando = true;
 
 		try {
-			sucesso = await cadastrarProvider({ nome, email, senha });
-			nome = '';
-			email = '';
-			senha = '';
-			confirmarSenha = '';
+			if (tipo === 'provider') {
+				await cadastrarProvider({ nome, email, senha });
+			} else {
+				await cadastrarClient({ nome, email, senha });
+			}
+
+			await login({ email, senha });
+			goto('/painel');
 		} catch (e) {
 			// A API é a fonte da verdade da validação: mostramos a mensagem que ela devolve
 			// (400 = dado inválido, 409 = e-mail já cadastrado).
@@ -42,26 +49,32 @@
 
 	const inputClasse =
 		'mt-2 h-10 w-full rounded-md border border-hairline-strong bg-surface-card px-3.5 text-sm text-ink outline-none transition placeholder:text-mute focus:border-ink';
+
+	const opcaoBaseClasse =
+		'flex-1 rounded-md border px-4 py-2 text-sm font-medium transition cursor-pointer text-center';
+	const opcaoAtivaClasse = 'border-ink bg-surface-elevated text-ink';
+	const opcaoInativaClasse = 'border-hairline-strong text-mute hover:text-ink';
 </script>
 
 <div class="mx-auto max-w-xl">
 	<a href="/" class="text-sm text-mute transition hover:text-ink">← Voltar</a>
 
-	<h1 class="display mt-4 text-4xl text-ink sm:text-5xl">Cadastrar prestador</h1>
-	<p class="mt-3 text-body">Crie sua conta de prestador para começar a receber agendamentos.</p>
+	<h1 class="display mt-4 text-4xl text-ink sm:text-5xl">Criar conta</h1>
+	<p class="mt-3 text-body">Escolha o tipo de conta para começar.</p>
 
 	<div class="mt-8 rounded-lg border border-hairline-strong bg-surface-card p-8">
-		{#if sucesso}
-			<div class="mb-6 rounded-md border border-hairline-strong bg-surface-elevated p-4">
-				<div class="flex items-center gap-2">
-					<span class="h-2 w-2 rounded-full bg-accent-green"></span>
-					<p class="font-medium text-ink">Prestador cadastrado!</p>
-				</div>
-				<p class="mt-1 text-sm text-body">{sucesso.nome} ({sucesso.email})</p>
+		<form class="space-y-5" novalidate onsubmit={enviar}>
+			<div role="radiogroup" aria-label="Tipo de conta" class="flex gap-3">
+				<label class="{opcaoBaseClasse} {tipo === 'provider' ? opcaoAtivaClasse : opcaoInativaClasse}">
+					<input type="radio" name="tipo" value="provider" bind:group={tipo} class="sr-only" />
+					Prestador
+				</label>
+				<label class="{opcaoBaseClasse} {tipo === 'client' ? opcaoAtivaClasse : opcaoInativaClasse}">
+					<input type="radio" name="tipo" value="client" bind:group={tipo} class="sr-only" />
+					Cliente
+				</label>
 			</div>
-		{/if}
 
-		<form class="space-y-5" onsubmit={enviar}>
 			{#if erro}
 				<div
 					class="flex items-start gap-2 rounded-md border border-hairline-strong bg-surface-elevated p-3 text-sm"
@@ -137,5 +150,10 @@
 				{enviando ? 'Enviando…' : 'Cadastrar'}
 			</button>
 		</form>
+
+		<p class="mt-6 text-sm text-body">
+			Já tem conta?
+			<a href="/login" class="font-medium text-ink underline">Entrar</a>
+		</p>
 	</div>
 </div>

@@ -32,6 +32,7 @@ export async function apiPost<TReq, TRes>(caminho: string, corpo: TReq): Promise
 	const resposta = await fetch(`${BASE_URL}${caminho}`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
+		credentials: 'include',
 		body: JSON.stringify(corpo)
 	});
 
@@ -40,4 +41,28 @@ export async function apiPost<TReq, TRes>(caminho: string, corpo: TReq): Promise
 	}
 
 	return resposta.json() as Promise<TRes>;
+}
+
+export async function apiGet<TRes>(caminho: string): Promise<TRes> {
+	const resposta = await fetch(`${BASE_URL}${caminho}`, {
+		credentials: 'include'
+	});
+
+	if (!resposta.ok) {
+		return parseErro(resposta);
+	}
+
+	return resposta.json() as Promise<TRes>;
+}
+
+// apiPostVazio é para rotas que respondem sem corpo (ex: 204 No Content).
+export async function apiPostVazio(caminho: string): Promise<void> {
+	const resposta = await fetch(`${BASE_URL}${caminho}`, {
+		method: 'POST',
+		credentials: 'include'
+	});
+
+	if (!resposta.ok) {
+		return parseErro(resposta);
+	}
 }
