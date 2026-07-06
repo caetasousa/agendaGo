@@ -1,48 +1,45 @@
 # agendaGo
 
-> API de agendamento entre clientes e prestadores de serviço, construída em Go com arquitetura hexagonal.
+> Agendamento entre clientes e prestadores de serviço — API em Go (arquitetura hexagonal) + frontend SvelteKit. Projeto de estudo.
+
+![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
+![Svelte](https://img.shields.io/badge/Svelte-5-FF3E00?logo=svelte&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 
 ---
 
-## Sumário
+## Stack
 
-- [Requisitos](#requisitos)
-- [Executando o projeto](#executando-o-projeto)
-- [Rotas disponíveis](#rotas-disponíveis)
-- [Testes](#testes)
-- [Estrutura do projeto](#estrutura-do-projeto)
-- [Regras de negócio](#regras-de-negócio)
+| Camada | Tecnologia |
+|---|---|
+| Backend | Go 1.26 · [chi](https://github.com/go-chi/chi) · [pgx](https://github.com/jackc/pgx) · [Argon2id](https://github.com/alexedwards/argon2id) |
+| Banco | PostgreSQL 16 · [Flyway](https://flywaydb.org/) (migrations) |
+| Frontend | [Svelte 5](https://svelte.dev) · SvelteKit · TypeScript · Tailwind CSS 4 |
+| Testes | Go testing · [Testcontainers](https://testcontainers.com/) · [Vitest](https://vitest.dev/) · [Playwright](https://playwright.dev/) |
 
----
-
-## Requisitos
-
-- [Docker](https://docs.docker.com/get-docker/) e Docker Compose
+Guia completo, com o "porquê" de cada escolha e fontes para estudo: **[docs/tecnologias.md](docs/tecnologias.md)**.
 
 ---
 
 ## Executando o projeto
 
+Requisito: [Docker](https://docs.docker.com/get-docker/) e Docker Compose.
+
 ```bash
 docker compose up
 ```
 
-O comando acima sobe backend e frontend juntos, na seguinte sequência:
-
-1. **Postgres** sobe e aguarda ficar saudável (healthcheck) antes de liberar o próximo passo.
-2. **Flyway** aplica as migrations (`backend/migrations`) contra o Postgres e encerra.
-3. **API** gera a documentação Swagger (`swag init`) e sobe com hot reload via Air — alterações em arquivos `.go` reiniciam a API automaticamente. Disponível em `http://localhost:8080`.
-4. **Web** instala as dependências e sobe o frontend (SvelteKit) com hot reload via Vite. Roda em paralelo aos passos 1-3, sem depender dessa cadeia. Disponível em `http://localhost:5173`.
-
-> A pasta `docs/` (documentação Swagger) é gerada automaticamente pelo container a cada
-> `docker compose up` e não é versionada — não é necessário rodar `swag init` manualmente.
-
-### Encerrando
+Sobe Postgres → Flyway (migrations) → API (`:8080`, hot reload via Air) → frontend (`:5173`, hot reload via Vite). A documentação Swagger é gerada automaticamente.
 
 ```bash
 docker compose down        # mantém os dados do banco
 docker compose down -v     # apaga os dados do banco junto
 ```
+
+- App: [http://localhost:5173](http://localhost:5173)
+- API: [http://localhost:8080](http://localhost:8080)
+- Swagger: [http://localhost:8080/swagger/index.html](http://localhost:8080/swagger/index.html)
 
 ---
 
@@ -50,92 +47,43 @@ docker compose down -v     # apaga os dados do banco junto
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| `GET` | `/health` | Status do servidor |
-| `POST` | `/providers` | Cadastrar prestador |
+| `GET` | [`/health`](http://localhost:8080/swagger/index.html#/infra/get_health) | Status do servidor |
+| `POST` | [`/providers`](http://localhost:8080/swagger/index.html#/providers/post_providers) | Cadastrar prestador |
+| `POST` | [`/clients`](http://localhost:8080/swagger/index.html#/clients/post_clients) | Cadastrar cliente (com conta) |
+| `POST` | [`/auth/provider/login`](http://localhost:8080/swagger/index.html#/auth/post_auth_provider_login) | Login do prestador |
+| `POST` | [`/auth/client/login`](http://localhost:8080/swagger/index.html#/auth/post_auth_client_login) | Login do cliente |
+| `POST` | [`/auth/logout`](http://localhost:8080/swagger/index.html#/auth/post_auth_logout) | Encerrar sessão |
+| `GET` | [`/auth/me`](http://localhost:8080/swagger/index.html#/auth/get_auth_me) | Usuário autenticado atual |
 | `GET` | [`/swagger/index.html`](http://localhost:8080/swagger/index.html) | Documentação interativa |
 
 ---
 
 ## Testes
 
-A forma recomendada de rodar tudo (rápidos + integração) com saída legível:
-
 ```bash
-cd backend
-make test
+make test        # rápidos (backend + frontend), sem Docker/browser
+make test-all     # tudo: + integração (Postgres) + E2E (Playwright)
 ```
 
-`make test` lista cada caso de teste com `PASS`/`FAIL` e falha se algum quebrar. Exige Docker rodando (sobe um Postgres efêmero para os testes de integração).
+Guia completo (build tags, Testcontainers, Playwright): **[docs/testes.md](docs/testes.md)**.
 
-Os testes se dividem em dois grupos, que também podem ser rodados diretamente:
+---
 
-**Testes rápidos** — regras de negócio, usecases e contrato HTTP. Rodam em memória, exigem apenas Go instalado (sem Docker):
+## Documentação
 
-```bash
-go test ./...        # ou: make test-fast
-```
-
-**Testes de integração** — exercitam o repositório Postgres (SQL real) contra um banco efêmero criado sob demanda via [Testcontainers](https://testcontainers.com/). Exigem Docker rodando e a build tag `integration`:
-
-```bash
-go test -tags=integration ./...
-```
-
-O container do Postgres é criado, migrado e destruído automaticamente pelo próprio teste — não é necessário subir o `docker compose`.
-
-> Use `-v` para ver cada caso de teste individualmente e `-count=1` para ignorar o cache.
-
-```
-test/
-├── domain/       testes das regras de negócio
-├── usecase/      testes dos fluxos de usecase
-├── handler/      testes do contrato HTTP
-└── repository/   testes de integração do repositório Postgres (Testcontainers)
-```
+- **[docs/tecnologias.md](docs/tecnologias.md)** — guia de estudo: o que é cada tecnologia, por que está aqui, fontes oficiais
+- **[docs/testes.md](docs/testes.md)** — como rodar cada camada de teste
+- **[docs/regra-de-negocio.md](docs/regra-de-negocio.md)** — modelo de negócio: disponibilidade, slots, ciclo de vida do agendamento
 
 ---
 
 ## Estrutura do projeto
 
-Monorepo com backend (Go) e frontend (SvelteKit) em pastas separadas:
+Monorepo com arquitetura hexagonal no backend (`domain` → `usecase` → `adapter`) e SvelteKit no frontend:
 
 ```
 agendaGo/
-├── backend/              API em Go (arquitetura hexagonal)
-│   ├── cmd/api/          entrypoint do servidor HTTP
-│   ├── config/           configuração do servidor chi (porta, timeouts)
-│   ├── internal/
-│   │   ├── adapter/
-│   │   │   ├── http/
-│   │   │   │   ├── dto/      request e response HTTP
-│   │   │   │   ├── handler/  handlers das rotas
-│   │   │   │   └── middleware/
-│   │   │   └── repository/   implementações de repositório (memória, postgres)
-│   │   ├── domain/
-│   │   │   ├── appointment/  agendamento e máquina de estados
-│   │   │   ├── availability/ disponibilidade do prestador
-│   │   │   ├── client/       cliente
-│   │   │   ├── provider/     prestador de serviço
-│   │   │   └── slot/         slots de horário (calculados sob demanda)
-│   │   └── usecase/
-│   │       ├── appointment/  solicitar, confirmar, recusar, cancelar, expirar
-│   │       ├── availability/ definir disponibilidade e exceções
-│   │       ├── client/       cadastro e busca de cliente
-│   │       └── provider/     cadastro e configuração do prestador
-│   ├── migrations/       arquivos SQL versionados pelo Flyway (V1__, V2__...)
-│   └── test/
-│       ├── domain/
-│       ├── handler/
-│       ├── repository/   integração do repositório Postgres (build tag `integration`)
-│       └── usecase/
-└── frontend/             cliente web em SvelteKit + TypeScript
-    ├── src/
-    └── static/
+├── backend/    API em Go — cmd/, config/, internal/{domain,usecase,adapter}/, migrations/, test/
+├── frontend/   SvelteKit — src/{lib,routes}/, e2e/
+└── docs/       tecnologias.md · testes.md · regra-de-negocio.md
 ```
-
----
-
-## Regras de negócio
-
-Consulte [regra-de-negocio.md](regra-de-negocio.md) para entender o modelo completo:
-disponibilidade do prestador, geração de slots, ciclo de vida do agendamento e decisões de arquitetura.
