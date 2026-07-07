@@ -138,10 +138,12 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	}
 
 	responderJSON(w, http.StatusOK, dto.MeResponse{
-		ID:    perfil.ID,
-		Nome:  perfil.Nome,
-		Email: perfil.Email,
-		Tipo:  perfil.Tipo,
+		ID:                 perfil.ID,
+		Nome:               perfil.Nome,
+		Email:              perfil.Email,
+		Tipo:               perfil.Tipo,
+		AceitaAgendamentos: perfil.AceitaAgendamentos,
+		DescansoMinutos:    perfil.DescansoMinutos,
 	})
 }
 

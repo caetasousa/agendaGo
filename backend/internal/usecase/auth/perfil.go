@@ -2,12 +2,15 @@ package auth
 
 import "agendago/internal/domain/session"
 
-// PerfilOutput contém os dados do usuário autenticado.
+// PerfilOutput contém os dados do usuário autenticado. AceitaAgendamentos e
+// DescansoMinutos só são preenchidos para prestadores — ficam nil para clientes.
 type PerfilOutput struct {
-	ID    string
-	Nome  string
-	Email string
-	Tipo  string
+	ID                 string
+	Nome               string
+	Email              string
+	Tipo               string
+	AceitaAgendamentos *bool
+	DescansoMinutos    *int
 }
 
 // PerfilUseCase consulta os dados do usuário autenticado a partir da sua identidade de sessão.
@@ -32,7 +35,14 @@ func (uc *PerfilUseCase) Executar(id Identidade) (*PerfilOutput, error) {
 		if p == nil {
 			return nil, ErrSessaoInvalida
 		}
-		return &PerfilOutput{ID: p.ID, Nome: p.Nome, Email: p.Email, Tipo: string(session.TipoProvider)}, nil
+		return &PerfilOutput{
+			ID:                 p.ID,
+			Nome:               p.Nome,
+			Email:              p.Email,
+			Tipo:               string(session.TipoProvider),
+			AceitaAgendamentos: &p.AceitaAgendamentos,
+			DescansoMinutos:    &p.DescansoMinutos,
+		}, nil
 
 	case session.TipoClient:
 		c, err := uc.clients.BuscarPorID(id.UserID)
