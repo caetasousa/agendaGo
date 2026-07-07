@@ -19,3 +19,17 @@ type CadastrarProviderResponse struct {
 	Nome  string `json:"nome"`
 	Email string `json:"email"`
 }
+
+type AtualizarPreferenciasRequest struct {
+	AceitaAgendamentos bool `json:"aceitaAgendamentos"`
+	DescansoMinutos    int  `json:"descansoMinutos" validate:"min=0"`
+}
+
+func (r AtualizarPreferenciasRequest) Validar() error {
+	return validate.Struct(r)
+}
+
+type AtualizarPreferenciasResponse struct {
+	AceitaAgendamentos bool `json:"aceitaAgendamentos"`
+	DescansoMinutos    int  `json:"descansoMinutos"`
+}

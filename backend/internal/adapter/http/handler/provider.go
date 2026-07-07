@@ -5,19 +5,36 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 
 	"agendago/internal/adapter/http/dto"
+	"agendago/internal/domain/provider"
+	ucauth "agendago/internal/usecase/auth"
 	ucprovider "agendago/internal/usecase/provider"
 
 	"github.com/go-playground/validator/v10"
 )
 
+// ProviderHandler concentra os handlers de prestador. identidadeDoContexto
+// extrai a identidade posta no contexto pelo middleware de autenticação —
+// recebida como função para evitar um import cycle entre os pacotes handler
+// e middleware (mesmo padrão do AuthHandler).
 type ProviderHandler struct {
-	cadastrar *ucprovider.CadastrarUseCase
+	cadastrar             *ucprovider.CadastrarUseCase
+	atualizarPreferencias *ucprovider.AtualizarPreferenciasUseCase
+	identidadeDoContexto  func(r *http.Request) (ucauth.Identidade, bool)
 }
 
-func NovoProviderHandler(cadastrar *ucprovider.CadastrarUseCase) *ProviderHandler {
-	return &ProviderHandler{cadastrar: cadastrar}
+func NovoProviderHandler(
+	cadastrar *ucprovider.CadastrarUseCase,
+	atualizarPreferencias *ucprovider.AtualizarPreferenciasUseCase,
+	identidadeDoContexto func(r *http.Request) (ucauth.Identidade, bool),
+) *ProviderHandler {
+	return &ProviderHandler{
+		cadastrar:             cadastrar,
+		atualizarPreferencias: atualizarPreferencias,
+		identidadeDoContexto:  identidadeDoContexto,
+	}
 }
 
 // Cadastrar godoc
@@ -71,6 +88,66 @@ func (h *ProviderHandler) Cadastrar(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// AtualizarPreferencias godoc
+//
+//	@Summary		Atualizar preferências do prestador
+//	@Description	Atualiza as preferências de agenda do prestador autenticado
+//	@Tags			providers
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		dto.AtualizarPreferenciasRequest	true	"Preferências"
+//	@Success		200		{object}	dto.AtualizarPreferenciasResponse
+//	@Failure		400		{object}	map[string]string
+//	@Failure		401		{object}	map[string]string
+//	@Failure		403		{object}	map[string]string
+//	@Failure		404		{object}	map[string]string
+//	@Router			/providers/me/preferencias [put]
+func (h *ProviderHandler) AtualizarPreferencias(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.identidadeDoContexto(r)
+	if !ok {
+		responderErro(w, http.StatusUnauthorized, "não autenticado")
+		return
+	}
+
+	var req dto.AtualizarPreferenciasRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		responderErro(w, http.StatusBadRequest, "corpo da requisição inválido")
+		return
+	}
+
+	if err := req.Validar(); err != nil {
+		var ve validator.ValidationErrors
+		if errors.As(err, &ve) {
+			responderErro(w, http.StatusBadRequest, mensagemValidacao(ve[0]))
+			return
+		}
+		responderErro(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	output, err := h.atualizarPreferencias.Executar(ucprovider.AtualizarPreferenciasInput{
+		ProviderID:         id.UserID,
+		AceitaAgendamentos: req.AceitaAgendamentos,
+		DescansoMinutos:    req.DescansoMinutos,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, provider.ErrDescansoInvalido):
+			responderErro(w, http.StatusBadRequest, err.Error())
+		case errors.Is(err, ucprovider.ErrProviderNaoEncontrado):
+			responderErro(w, http.StatusNotFound, err.Error())
+		default:
+			responderErro(w, http.StatusInternalServerError, "erro interno")
+		}
+		return
+	}
+
+	responderJSON(w, http.StatusOK, dto.AtualizarPreferenciasResponse{
+		AceitaAgendamentos: output.AceitaAgendamentos,
+		DescansoMinutos:    output.DescansoMinutos,
+	})
+}
+
 func mensagemValidacao(fe validator.FieldError) string {
 	switch fe.Tag() {
 	case "required":
@@ -78,7 +155,10 @@ func mensagemValidacao(fe validator.FieldError) string {
 	case "email":
 		return fmt.Sprintf("%s deve ser um e-mail válido", fe.Field())
 	case "min":
-		return fmt.Sprintf("%s deve ter no mínimo %s caracteres", fe.Field(), fe.Param())
+		if fe.Kind() == reflect.String {
+			return fmt.Sprintf("%s deve ter no mínimo %s caracteres", fe.Field(), fe.Param())
+		}
+		return fmt.Sprintf("%s deve ser no mínimo %s", fe.Field(), fe.Param())
 	case "max":
 		return fmt.Sprintf("%s deve ter no máximo %s caracteres", fe.Field(), fe.Param())
 	default:

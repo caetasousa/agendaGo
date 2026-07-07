@@ -44,6 +44,7 @@ func main() {
 
 	// usecases
 	cadastrarProvider := ucprovider.NovoCadastrarUseCase(providerRepo, hasher)
+	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(providerRepo)
 	cadastrarClient := ucclient.NovoCadastrarUseCase(clientRepo, hasher)
 	loginProvider := ucauth.NovoLoginProviderUseCase(providerRepo, sessionRepo, hasher)
 	loginClient := ucauth.NovoLoginClientUseCase(clientRepo, sessionRepo, hasher)
@@ -52,11 +53,11 @@ func main() {
 	perfil := ucauth.NovoPerfilUseCase(providerRepo, clientRepo)
 
 	// handlers
-	providerHandler := handler.NovoProviderHandler(cadastrarProvider)
-	clientHandler := handler.NovoClientHandler(cadastrarClient)
 	identidadeDoContexto := func(r *http.Request) (ucauth.Identidade, bool) {
 		return middleware.IdentidadeDoContexto(r.Context())
 	}
+	providerHandler := handler.NovoProviderHandler(cadastrarProvider, atualizarPreferencias, identidadeDoContexto)
+	clientHandler := handler.NovoClientHandler(cadastrarClient)
 	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, logout, perfil, config.CookieSeguro(), identidadeDoContexto)
 
 	// middlewares
@@ -73,6 +74,11 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(authMw.Autenticar)
 		r.Get("/auth/me", authHandler.Me)
+	})
+	r.Group(func(r chi.Router) {
+		r.Use(authMw.Autenticar)
+		r.Use(middleware.ExigirProvider)
+		r.Put("/providers/me/preferencias", providerHandler.AtualizarPreferencias)
 	})
 
 	// servidor
