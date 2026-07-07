@@ -45,3 +45,13 @@ func (r *ProviderMemoria) BuscarPorID(id string) (*provider.Provider, error) {
 	}
 	return nil, nil
 }
+
+// Atualizar espelha o contrato do Postgres. Como BuscarPorID devolve o
+// ponteiro guardado no mapa, o usecase já muta a mesma instância antes de
+// chamar Atualizar — reatribuir ao mapa mantém o estado consistente.
+func (r *ProviderMemoria) Atualizar(p *provider.Provider) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.dados[p.ID] = p
+	return nil
+}

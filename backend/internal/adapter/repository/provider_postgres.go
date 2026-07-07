@@ -49,6 +49,18 @@ func (r *ProviderPostgres) BuscarPorEmail(email string) (*provider.Provider, err
 	return &p, nil
 }
 
+// Atualizar persiste as preferências mutáveis do prestador (agenda e
+// descanso). Não altera nome, email ou senha.
+func (r *ProviderPostgres) Atualizar(p *provider.Provider) error {
+	_, err := r.pool.Exec(context.Background(),
+		`UPDATE providers
+		 SET aceita_agendamentos = $2, descanso_minutos = $3, atualizado_em = $4
+		 WHERE id = $1`,
+		p.ID, p.AceitaAgendamentos, p.DescansoMinutos, p.AtualizadoEm,
+	)
+	return err
+}
+
 // BuscarPorID retorna (prestador, nil) quando encontra, (nil, nil) quando não
 // existe prestador com o id, e (nil, err) em falha real de infraestrutura.
 func (r *ProviderPostgres) BuscarPorID(id string) (*provider.Provider, error) {
