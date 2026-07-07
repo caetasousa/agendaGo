@@ -153,4 +153,33 @@ func TestProviderPostgres(t *testing.T) {
 			t.Errorf("esperava nil para ID inexistente, got: %v", encontrado)
 		}
 	})
+
+	t.Run("Atualizar persiste as preferências e reflete no BuscarPorID", func(t *testing.T) {
+		p, _ := provider.Novo("44444444-4444-4444-4444-444444444444", "Diana Prince", "diana@email.com", "12345678")
+		if err := repo.Salvar(p); err != nil {
+			t.Fatalf("esperava sucesso ao salvar, got: %v", err)
+		}
+
+		p.AtivarAgenda()
+		if err := p.DefinirDescanso(20); err != nil {
+			t.Fatalf("esperava sucesso ao definir descanso, got: %v", err)
+		}
+		if err := repo.Atualizar(p); err != nil {
+			t.Fatalf("esperava sucesso ao atualizar, got: %v", err)
+		}
+
+		encontrado, err := repo.BuscarPorID(p.ID)
+		if err != nil {
+			t.Fatalf("esperava sucesso na busca, got: %v", err)
+		}
+		if !encontrado.AceitaAgendamentos {
+			t.Error("esperava AceitaAgendamentos true após Atualizar")
+		}
+		if encontrado.DescansoMinutos != 20 {
+			t.Errorf("esperava DescansoMinutos 20, got: %d", encontrado.DescansoMinutos)
+		}
+		if !encontrado.AtualizadoEm.After(encontrado.CriadoEm) {
+			t.Error("esperava AtualizadoEm posterior a CriadoEm após Atualizar")
+		}
+	})
 }

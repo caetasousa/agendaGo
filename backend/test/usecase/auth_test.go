@@ -171,6 +171,9 @@ func TestPerfil(t *testing.T) {
 		if out.Tipo != "provider" {
 			t.Errorf("esperava tipo 'provider', got: %s", out.Tipo)
 		}
+		if out.AceitaAgendamentos == nil || out.DescansoMinutos == nil {
+			t.Error("esperava AceitaAgendamentos e DescansoMinutos preenchidos para prestador")
+		}
 	})
 
 	t.Run("devolve perfil do cliente", func(t *testing.T) {
@@ -184,6 +187,9 @@ func TestPerfil(t *testing.T) {
 		}
 		if out.Tipo != "client" {
 			t.Errorf("esperava tipo 'client', got: %s", out.Tipo)
+		}
+		if out.AceitaAgendamentos != nil || out.DescansoMinutos != nil {
+			t.Error("esperava AceitaAgendamentos e DescansoMinutos nil para cliente")
 		}
 	})
 

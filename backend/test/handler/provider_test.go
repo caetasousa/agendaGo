@@ -8,15 +8,28 @@ import (
 	"testing"
 
 	"agendago/internal/adapter/http/handler"
+	"agendago/internal/adapter/http/middleware"
 	"agendago/internal/adapter/repository"
 	"agendago/internal/adapter/security"
+	"agendago/internal/domain/client"
+	"agendago/internal/domain/provider"
+	ucauth "agendago/internal/usecase/auth"
 	ucprovider "agendago/internal/usecase/provider"
+
+	"github.com/go-chi/chi/v5"
 )
+
+// identidadeAusente simula uma requisição sem identidade no contexto —
+// suficiente para os testes que só exercitam Cadastrar (rota pública).
+func identidadeAusente(r *http.Request) (ucauth.Identidade, bool) {
+	return ucauth.Identidade{}, false
+}
 
 func novoHandler() *handler.ProviderHandler {
 	repo := repository.NovoProviderMemoria()
-	uc := ucprovider.NovoCadastrarUseCase(repo, security.NovoHasherArgon2id())
-	return handler.NovoProviderHandler(uc)
+	cadastrar := ucprovider.NovoCadastrarUseCase(repo, security.NovoHasherArgon2id())
+	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
+	return handler.NovoProviderHandler(cadastrar, atualizarPreferencias, identidadeAusente)
 }
 
 func fazerRequisicao(t *testing.T, h *handler.ProviderHandler, body any) *httptest.ResponseRecorder {
@@ -27,6 +40,61 @@ func fazerRequisicao(t *testing.T, h *handler.ProviderHandler, body any) *httpte
 	rr := httptest.NewRecorder()
 	h.Cadastrar(rr, req)
 	return rr
+}
+
+// novoRouterPreferencias monta um router chi com um prestador e um cliente já
+// cadastrados e a rota PUT /providers/me/preferencias protegida por
+// Autenticar + ExigirProvider, espelhando o wiring de main.go.
+func novoRouterPreferencias(t *testing.T) (r *chi.Mux, providerID string) {
+	t.Helper()
+	hasher := security.NovoHasherArgon2id()
+
+	providerRepo := repository.NovoProviderMemoria()
+	clientRepo := repository.NovoClientMemoria()
+	sessionRepo := repository.NovoSessionMemoria()
+
+	senhaHash, _ := hasher.Gerar("12345678")
+	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", senhaHash)
+	providerRepo.Salvar(p)
+
+	c, _ := client.NovoComConta("client-1", "Maria Silva", "maria@email.com", senhaHash)
+	clientRepo.Salvar(c)
+
+	loginProvider := ucauth.NovoLoginProviderUseCase(providerRepo, sessionRepo, hasher)
+	loginClient := ucauth.NovoLoginClientUseCase(clientRepo, sessionRepo, hasher)
+	validarSessao := ucauth.NovoValidarSessaoUseCase(sessionRepo)
+
+	identidadeDoContexto := func(req *http.Request) (ucauth.Identidade, bool) {
+		return middleware.IdentidadeDoContexto(req.Context())
+	}
+	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(providerRepo)
+	providerHandler := handler.NovoProviderHandler(nil, atualizarPreferencias, identidadeDoContexto)
+	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, nil, nil, false, identidadeDoContexto)
+	authMw := middleware.NovoAuth(validarSessao)
+
+	router := chi.NewRouter()
+	router.Post("/auth/provider/login", authHandler.LoginProvider)
+	router.Post("/auth/client/login", authHandler.LoginClient)
+	router.Group(func(router chi.Router) {
+		router.Use(authMw.Autenticar)
+		router.Use(middleware.ExigirProvider)
+		router.Put("/providers/me/preferencias", providerHandler.AtualizarPreferencias)
+	})
+
+	return router, p.ID
+}
+
+func loginEObterCookie(t *testing.T, r *chi.Mux, rota, email, senha string) *http.Cookie {
+	t.Helper()
+	body, _ := json.Marshal(map[string]string{"email": email, "senha": senha})
+	req := httptest.NewRequest(http.MethodPost, rota, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("esperava 200 no login, got: %d", rr.Code)
+	}
+	return rr.Result().Cookies()[0]
 }
 
 func TestHandlerCadastrarProvider(t *testing.T) {
@@ -89,6 +157,78 @@ func TestHandlerCadastrarProvider(t *testing.T) {
 		novoHandler().Cadastrar(rr, req)
 		if rr.Code != http.StatusBadRequest {
 			t.Errorf("esperava 400, got: %d", rr.Code)
+		}
+	})
+}
+
+func TestHandlerAtualizarPreferencias(t *testing.T) {
+	t.Run("retorna 200 e persiste as preferências para sessão de prestador", func(t *testing.T) {
+		r, _ := novoRouterPreferencias(t)
+		cookie := loginEObterCookie(t, r, "/auth/provider/login", "joao@email.com", "12345678")
+
+		body, _ := json.Marshal(map[string]any{"aceitaAgendamentos": true, "descansoMinutos": 15})
+		req := httptest.NewRequest(http.MethodPut, "/providers/me/preferencias", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.AddCookie(cookie)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("esperava 200, got: %d", rr.Code)
+		}
+		var resp map[string]any
+		json.NewDecoder(rr.Body).Decode(&resp)
+		if resp["aceitaAgendamentos"] != true {
+			t.Errorf("esperava aceitaAgendamentos true, got: %v", resp["aceitaAgendamentos"])
+		}
+		if resp["descansoMinutos"] != float64(15) {
+			t.Errorf("esperava descansoMinutos 15, got: %v", resp["descansoMinutos"])
+		}
+	})
+
+	t.Run("retorna 400 quando descanso é negativo", func(t *testing.T) {
+		r, _ := novoRouterPreferencias(t)
+		cookie := loginEObterCookie(t, r, "/auth/provider/login", "joao@email.com", "12345678")
+
+		body, _ := json.Marshal(map[string]any{"aceitaAgendamentos": true, "descansoMinutos": -5})
+		req := httptest.NewRequest(http.MethodPut, "/providers/me/preferencias", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.AddCookie(cookie)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("esperava 400, got: %d", rr.Code)
+		}
+	})
+
+	t.Run("retorna 403 quando cliente tenta atualizar preferências de prestador", func(t *testing.T) {
+		r, _ := novoRouterPreferencias(t)
+		cookie := loginEObterCookie(t, r, "/auth/client/login", "maria@email.com", "12345678")
+
+		body, _ := json.Marshal(map[string]any{"aceitaAgendamentos": true, "descansoMinutos": 10})
+		req := httptest.NewRequest(http.MethodPut, "/providers/me/preferencias", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.AddCookie(cookie)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusForbidden {
+			t.Errorf("esperava 403, got: %d", rr.Code)
+		}
+	})
+
+	t.Run("retorna 401 sem cookie de sessão", func(t *testing.T) {
+		r, _ := novoRouterPreferencias(t)
+
+		body, _ := json.Marshal(map[string]any{"aceitaAgendamentos": true, "descansoMinutos": 10})
+		req := httptest.NewRequest(http.MethodPut, "/providers/me/preferencias", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusUnauthorized {
+			t.Errorf("esperava 401, got: %d", rr.Code)
 		}
 	})
 }
