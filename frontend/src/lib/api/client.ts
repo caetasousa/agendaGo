@@ -43,6 +43,21 @@ export async function apiPost<TReq, TRes>(caminho: string, corpo: TReq): Promise
 	return resposta.json() as Promise<TRes>;
 }
 
+export async function apiPut<TReq, TRes>(caminho: string, corpo: TReq): Promise<TRes> {
+	const resposta = await fetch(`${BASE_URL}${caminho}`, {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json' },
+		credentials: 'include',
+		body: JSON.stringify(corpo)
+	});
+
+	if (!resposta.ok) {
+		return parseErro(resposta);
+	}
+
+	return resposta.json() as Promise<TRes>;
+}
+
 export async function apiGet<TRes>(caminho: string): Promise<TRes> {
 	const resposta = await fetch(`${BASE_URL}${caminho}`, {
 		credentials: 'include'

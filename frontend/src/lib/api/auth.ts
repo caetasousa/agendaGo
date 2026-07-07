@@ -19,6 +19,8 @@ export interface MeResponse {
 	nome: string;
 	email: string;
 	tipo: string;
+	aceitaAgendamentos?: boolean;
+	descansoMinutos?: number;
 }
 
 export function loginProvider(dados: LoginRequest): Promise<LoginResponse> {

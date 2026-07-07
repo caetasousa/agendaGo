@@ -17,5 +17,14 @@
 		<p class="text-sm text-body">
 			Tipo: {data.usuario.tipo === 'provider' ? 'Prestador' : 'Cliente'}
 		</p>
+
+		{#if data.usuario.tipo === 'provider'}
+			<a
+				href="/painel/preferencias"
+				class="mt-6 inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-on transition hover:opacity-90"
+			>
+				Preferências
+			</a>
+		{/if}
 	</div>
 </div>
