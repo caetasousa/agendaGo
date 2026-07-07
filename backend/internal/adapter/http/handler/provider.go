@@ -161,6 +161,10 @@ func mensagemValidacao(fe validator.FieldError) string {
 		return fmt.Sprintf("%s deve ser no mínimo %s", fe.Field(), fe.Param())
 	case "max":
 		return fmt.Sprintf("%s deve ter no máximo %s caracteres", fe.Field(), fe.Param())
+	case "oneof":
+		return fmt.Sprintf("%s deve ser um dos valores: %s", fe.Field(), fe.Param())
+	case "datetime":
+		return fmt.Sprintf("%s deve estar no formato AAAA-MM-DD", fe.Field())
 	default:
 		return fmt.Sprintf("%s é inválido", fe.Field())
 	}
