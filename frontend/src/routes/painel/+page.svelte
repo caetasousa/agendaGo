@@ -19,12 +19,20 @@
 		</p>
 
 		{#if data.usuario.tipo === 'provider'}
-			<a
-				href="/painel/preferencias"
-				class="mt-6 inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-on transition hover:opacity-90"
-			>
-				Preferências
-			</a>
+			<div class="mt-6 flex gap-3">
+				<a
+					href="/painel/preferencias"
+					class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-on transition hover:opacity-90"
+				>
+					Preferências
+				</a>
+				<a
+					href="/painel/disponibilidade"
+					class="inline-flex h-9 items-center rounded-md border border-hairline-strong px-4 text-sm font-medium text-ink transition hover:bg-surface-elevated"
+				>
+					Disponibilidade
+				</a>
+			</div>
 		{/if}
 	</div>
 </div>

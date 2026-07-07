@@ -81,3 +81,15 @@ export async function apiPostVazio(caminho: string): Promise<void> {
 		return parseErro(resposta);
 	}
 }
+
+// apiDelete é para rotas que respondem sem corpo (204 No Content).
+export async function apiDelete(caminho: string): Promise<void> {
+	const resposta = await fetch(`${BASE_URL}${caminho}`, {
+		method: 'DELETE',
+		credentials: 'include'
+	});
+
+	if (!resposta.ok) {
+		return parseErro(resposta);
+	}
+}
