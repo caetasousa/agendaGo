@@ -1,55 +1,46 @@
 // Tipos e chamadas da API de disponibilidade do prestador.
 // Espelham backend/internal/adapter/http/dto/availability.go
 
-import { apiDelete, apiGet, apiPost, apiPut } from './client';
+import { apiDelete, apiGet, apiPut } from './client';
 
 export interface Bloco {
 	inicioMinutos: number;
 	fimMinutos: number;
 }
 
-export interface DiaGrade {
-	diaSemana: number;
+// OrigemDia indica de onde veio a disponibilidade resolvida de uma data:
+// expediente padrão, dia bloqueado ou horários personalizados.
+export type OrigemDia = 'padrao' | 'bloqueio' | 'extra';
+
+export interface DiaAgenda {
+	data: string;
+	origem: OrigemDia;
 	blocos: Bloco[];
 }
 
-export interface GradeSemanalResponse {
-	dias: DiaGrade[];
+export interface AgendaResponse {
+	aceitaAgendamentos: boolean;
+	dias: DiaAgenda[];
 }
 
-export interface Excecao {
-	id: string;
-	data: string;
+export interface DefinirDiaRequest {
 	tipo: 'bloqueio' | 'extra';
 	blocos: Bloco[];
 }
 
-export interface ListarExcecoesResponse {
-	excecoes: Excecao[];
+// consultarAgenda resolve a disponibilidade de cada dia do período (inclusivo,
+// datas YYYY-MM-DD): definição própria da data ou expediente padrão.
+export function consultarAgenda(de: string, ate: string): Promise<AgendaResponse> {
+	return apiGet<AgendaResponse>(`/providers/me/agenda?de=${de}&ate=${ate}`);
 }
 
-export interface CriarExcecaoRequest {
-	data: string;
-	tipo: 'bloqueio' | 'extra';
-	blocos: Bloco[];
+// definirDia cria ou substitui a definição própria da data: bloqueio (dia
+// indisponível) ou extra (horários personalizados).
+export function definirDia(data: string, corpo: DefinirDiaRequest): Promise<DiaAgenda> {
+	return apiPut<DefinirDiaRequest, DiaAgenda>(`/providers/me/dias/${data}`, corpo);
 }
 
-export function consultarGradeSemanal(): Promise<GradeSemanalResponse> {
-	return apiGet<GradeSemanalResponse>('/providers/me/disponibilidade');
-}
-
-export function definirGradeSemanal(dias: DiaGrade[]): Promise<GradeSemanalResponse> {
-	return apiPut<{ dias: DiaGrade[] }, GradeSemanalResponse>('/providers/me/disponibilidade', { dias });
-}
-
-export function listarExcecoes(): Promise<ListarExcecoesResponse> {
-	return apiGet<ListarExcecoesResponse>('/providers/me/excecoes');
-}
-
-export function criarExcecao(dados: CriarExcecaoRequest): Promise<Excecao> {
-	return apiPost<CriarExcecaoRequest, Excecao>('/providers/me/excecoes', dados);
-}
-
-export function removerExcecao(id: string): Promise<void> {
-	return apiDelete(`/providers/me/excecoes/${id}`);
+// removerDia apaga a definição própria da data; o dia volta ao expediente padrão.
+export function removerDia(data: string): Promise<void> {
+	return apiDelete(`/providers/me/dias/${data}`);
 }

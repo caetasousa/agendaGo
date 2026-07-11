@@ -2,6 +2,7 @@
 // Espelham backend/internal/adapter/http/dto/auth.go
 
 import { ApiError, apiGet, apiPost, apiPostVazio } from './client';
+import type { Bloco } from './availability';
 
 export interface LoginRequest {
 	email: string;
@@ -21,6 +22,7 @@ export interface MeResponse {
 	tipo: string;
 	aceitaAgendamentos?: boolean;
 	descansoMinutos?: number;
+	horariosPadrao?: Bloco[];
 }
 
 export function loginProvider(dados: LoginRequest): Promise<LoginResponse> {
