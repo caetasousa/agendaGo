@@ -55,11 +55,9 @@ docker compose down -v     # apaga os dados do banco junto
 | `POST` | [`/auth/logout`](http://localhost:8080/swagger/index.html#/auth/post_auth_logout) | Encerrar sessão |
 | `GET` | [`/auth/me`](http://localhost:8080/swagger/index.html#/auth/get_auth_me) | Usuário autenticado atual |
 | `PUT` | [`/providers/me/preferencias`](http://localhost:8080/swagger/index.html#/providers/put_providers_me_preferencias) | Atualizar preferências do prestador |
-| `GET` | [`/providers/me/disponibilidade`](http://localhost:8080/swagger/index.html#/availability/get_providers_me_disponibilidade) | Consultar grade semanal do prestador |
-| `PUT` | [`/providers/me/disponibilidade`](http://localhost:8080/swagger/index.html#/availability/put_providers_me_disponibilidade) | Definir grade semanal do prestador |
-| `GET` | [`/providers/me/excecoes`](http://localhost:8080/swagger/index.html#/availability/get_providers_me_excecoes) | Listar exceções de data do prestador |
-| `POST` | [`/providers/me/excecoes`](http://localhost:8080/swagger/index.html#/availability/post_providers_me_excecoes) | Criar exceção de data (bloqueio ou extra) |
-| `DELETE` | [`/providers/me/excecoes/{id}`](http://localhost:8080/swagger/index.html#/availability/delete_providers_me_excecoes__id_) | Remover exceção de data |
+| `GET` | [`/providers/me/agenda`](http://localhost:8080/swagger/index.html#/availability/get_providers_me_agenda) | Consultar agenda resolvida do prestador (por período) |
+| `PUT` | [`/providers/me/dias/{data}`](http://localhost:8080/swagger/index.html#/availability/put_providers_me_dias__data_) | Definir um dia (bloqueio ou horários personalizados) |
+| `DELETE` | [`/providers/me/dias/{data}`](http://localhost:8080/swagger/index.html#/availability/delete_providers_me_dias__data_) | Remover a definição de um dia (volta ao padrão) |
 | `GET` | [`/swagger/index.html`](http://localhost:8080/swagger/index.html) | Documentação interativa |
 
 ---

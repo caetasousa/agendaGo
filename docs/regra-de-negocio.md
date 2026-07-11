@@ -21,29 +21,30 @@ A agenda se apoia em três camadas, refletidas no domínio
 
 ## 1. Disponibilidade do prestador
 
-### Padrão semanal recorrente
-O prestador define, por dia da semana, um ou mais **blocos** de horário em que trabalha.
+### Expediente padrão
+Não há grade recorrente por dia da semana: o prestador configura, em Preferências, um
+único conjunto de **blocos de horário** (`horarios_padrao`) que vale igual de segunda a
+sexta — quantos períodos quiser, inclusive blocos curtos, com os intervalos que fizer
+sentido entre eles. Um prestador recém-cadastrado começa com uma sugestão de dia
+comercial (08:00–12:00 e 14:00–18:00), livre para editar ou zerar. Sábados e domingos são
+indisponíveis por padrão, independente do expediente configurado.
 
-> Exemplo: Segunda 07:00–19:00; Terça 08:00–12:00, 14:00–18:00, 19:00–23:00; demais dias
-> não trabalha.
+O expediente padrão só vale para o prestador com a agenda **ativa**
+(`aceita_agendamentos = true`). Um prestador que não deseja atender mantém a flag
+desativada e **nunca** oferta slots, mesmo com blocos configurados.
 
-### Exceções por data
-Sobre o padrão semanal, o prestador pode registrar exceções para datas específicas:
-- **BLOQUEIO** — data que normalmente seria trabalhada e não será (folga, feriado).
-- **EXTRA** — disponibilidade num dia/data que normalmente não trabalha.
+### Definições por data
+O que o prestador persiste são apenas os **desvios** do padrão, data a data
+(`date_exceptions`):
+- **BLOQUEIO** — a data fica indisponível o dia inteiro (folga, feriado).
+- **EXTRA** — a data ganha **horários personalizados**, que substituem o expediente
+  padrão (serve tanto para atender num sábado quanto para mudar as horas de um dia útil).
 
-A exceção da data tem **precedência** sobre o padrão semanal.
-
-### Default (sem configuração)
-Se o prestador **não** configurar sua agenda, assume-se um **dia comercial padrão**
-(ex.: 08:00–12:00 e 14:00–18:00, de segunda a sexta).
-
-O default só vale para prestador com a agenda **ativa** (`aceita_agendamentos = true`). Um
-prestador que não deseja atender mantém a flag desativada e **nunca** oferta slots, mesmo
-sem configuração.
+A definição da data tem **precedência** sobre o expediente padrão, e é **uma por data**:
+salvar de novo substitui a anterior (upsert).
 
 ### Validação dos blocos (estrita)
-Ao salvar a disponibilidade, o sistema valida:
+Ao salvar os horários de uma data, o sistema valida:
 - Sem blocos **sobrepostos** no mesmo dia.
 - `fim > início` (proíbe bloco invertido ou de duração zero).
 - **Proíbe cruzar a meia-noite** — um expediente noturno deve ser partido em dois dias.
@@ -54,8 +55,16 @@ Ao salvar a disponibilidade, o sistema valida:
 A disponibilidade efetiva de uma data resolve-se nesta ordem:
 
 ```
-exceção da data  →  padrão semanal  →  (se nada configurado e prestador ativo) default comercial
+definição da data  →  (se agenda ativa e dia útil) expediente padrão  →  indisponível
 ```
+
+### Antecedência para alterar o dia de hoje
+Qualquer alteração no dia **de hoje** — bloquear, definir/editar horários personalizados —
+exige **24h de antecedência**: não se cancela nem se cria oferta "em cima da hora". A
+única exceção é **restaurar o padrão a partir de um bloqueio**: isso só reduz a oferta
+(nunca a amplia), então nunca surpreende um cliente. Hoje a regra é aplicada na interface;
+quando existirem agendamentos, a validação passa a valer também no backend (um dia com
+agendamento não poderá ser bloqueado).
 
 ---
 
@@ -153,10 +162,10 @@ Três valores numéricos ainda precisam ser fixados (sugestões iniciais entre p
 
 | Conceito | Local | Conteúdo |
 |---|---|---|
-| Prestador | `internal/domain/user/` | `aceita_agendamentos`, `buffer_minutos` |
-| Disponibilidade | `internal/domain/availability/` | `WeeklySchedule`, `TimeBlock`, `DateException`, validação estrita, `BlocosDoDia` |
+| Prestador | `internal/domain/provider/` | `aceita_agendamentos`, `descanso_minutos`, `HorariosPadrao` (expediente configurável) |
+| Disponibilidade | `internal/domain/availability/` | `TimeBlock`, `DateException` (bloqueio/extra), validação estrita |
 | Slot | `internal/domain/slot/` | `Slot`, `SlotsLivres` (cálculo puro: duração + buffer, sobra descartada) |
 | Agendamento | `internal/domain/appointment/` | `Appointment` + máquina de estados |
-| Orquestração | `internal/usecase/{availability,appointment}/` | solicitar, confirmar, recusar, cancelar, expirar |
+| Orquestração | `internal/usecase/{provider,availability,appointment}/` | atualizar preferências, solicitar, confirmar, recusar, cancelar, expirar |
 | Configuração | `config/` | fuso fixo, TTL, antecedência mínima |
-| Persistência | `migrations/` | `providers`, `weekly_schedules`, `date_exceptions`, `appointments` (exclusion constraint anti-overbooking) |
+| Persistência | `migrations/` | `providers`, `horarios_padrao`, `date_exceptions`, `appointments` (exclusion constraint anti-overbooking) |
