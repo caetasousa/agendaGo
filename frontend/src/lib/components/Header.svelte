@@ -27,7 +27,10 @@
 
 <header class="sticky top-0 z-10 border-b border-hairline bg-canvas/80 backdrop-blur">
 	<div class="mx-auto flex h-16 max-w-5xl items-center justify-between px-6">
-		<a href="/" class="text-lg font-semibold tracking-tight text-ink">agendaGo</a>
+		<a href="/" class="flex items-center gap-2 text-lg font-semibold tracking-tight text-ink">
+			<span class="h-2 w-2 rounded-full bg-accent-green" aria-hidden="true"></span>
+			agendaGo
+		</a>
 
 		<div class="flex items-center gap-4">
 			{#if sessao.carregando}

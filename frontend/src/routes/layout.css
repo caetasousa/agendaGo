@@ -129,6 +129,13 @@ body {
 	text-rendering: optimizeLegibility;
 }
 
+/* Foco visível consistente para navegação por teclado, em ambos os temas. */
+:where(a, button, select, input, textarea, [tabindex]):focus-visible {
+	outline: 2px solid var(--link);
+	outline-offset: 2px;
+	border-radius: var(--radius-xs);
+}
+
 /* Manchete editorial: serifa Fraunces com empilhamento apertado (lineHeight 1). */
 .display {
 	font-family: var(--font-display);

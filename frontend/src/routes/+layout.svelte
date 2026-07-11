@@ -14,10 +14,17 @@
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
 
-<div class="min-h-screen bg-canvas text-body">
+<div class="flex min-h-screen flex-col bg-canvas text-body">
 	<Header />
 
-	<main class="mx-auto max-w-5xl px-6 py-16">
+	<main class="mx-auto w-full max-w-5xl flex-1 px-6 py-16">
 		{@render children()}
 	</main>
+
+	<footer class="border-t border-hairline">
+		<div class="mx-auto flex max-w-5xl items-center justify-between px-6 py-8 text-xs text-mute">
+			<span>agendaGo — agendamento entre clientes e prestadores.</span>
+			<span>Projeto de estudo · Go + SvelteKit</span>
+		</div>
+	</footer>
 </div>

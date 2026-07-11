@@ -34,7 +34,7 @@
 	<h1 class="display mt-4 text-4xl text-ink sm:text-5xl">Entrar</h1>
 	<p class="mt-3 text-body">Acesse sua conta de prestador ou cliente.</p>
 
-	<div class="mt-8 rounded-lg border border-hairline-strong bg-surface-card p-8">
+	<div class="mt-8 rounded-xl border border-hairline-strong bg-surface-card p-8">
 		<form class="space-y-5" novalidate onsubmit={enviar}>
 			{#if erro}
 				<div
@@ -72,7 +72,7 @@
 			<button
 				type="submit"
 				disabled={enviando}
-				class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-on transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+				class="flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-on transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
 			>
 				{enviando ? 'Entrando…' : 'Entrar'}
 			</button>

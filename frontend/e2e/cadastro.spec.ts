@@ -10,9 +10,8 @@ test('cadastro como prestador leva ao painel com o tipo correto', async ({ page 
 	await page.click('button[type="submit"]');
 
 	await page.waitForURL('/painel');
-	await expect(page.getByText('Você está logado!')).toBeVisible();
-	await expect(page.getByText('Nome: Prestador Teste')).toBeVisible();
-	await expect(page.getByText('Tipo: Prestador')).toBeVisible();
+	await expect(page.getByText('Olá, Prestador Teste')).toBeVisible();
+	await expect(page.getByText('Conta de prestador')).toBeVisible();
 });
 
 test('cadastro como cliente leva ao painel com o tipo correto', async ({ page }) => {
@@ -25,5 +24,5 @@ test('cadastro como cliente leva ao painel com o tipo correto', async ({ page })
 	await page.click('button[type="submit"]');
 
 	await page.waitForURL('/painel');
-	await expect(page.getByText('Tipo: Cliente')).toBeVisible();
+	await expect(page.getByText('Conta de cliente')).toBeVisible();
 });
