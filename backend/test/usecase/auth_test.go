@@ -174,6 +174,9 @@ func TestPerfil(t *testing.T) {
 		if out.AceitaAgendamentos == nil || out.DescansoMinutos == nil {
 			t.Error("esperava AceitaAgendamentos e DescansoMinutos preenchidos para prestador")
 		}
+		if len(out.HorariosPadrao) != 2 {
+			t.Errorf("esperava 2 blocos do expediente padrão sugerido, got: %v", out.HorariosPadrao)
+		}
 	})
 
 	t.Run("devolve perfil do cliente", func(t *testing.T) {
@@ -190,6 +193,9 @@ func TestPerfil(t *testing.T) {
 		}
 		if out.AceitaAgendamentos != nil || out.DescansoMinutos != nil {
 			t.Error("esperava AceitaAgendamentos e DescansoMinutos nil para cliente")
+		}
+		if len(out.HorariosPadrao) != 0 {
+			t.Errorf("esperava HorariosPadrao vazio para cliente, got: %v", out.HorariosPadrao)
 		}
 	})
 

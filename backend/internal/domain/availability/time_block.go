@@ -48,10 +48,16 @@ func NovoTimeBlock(inicioMinutos, fimMinutos int) (TimeBlock, error) {
 	return TimeBlock{InicioMinutos: inicioMinutos, FimMinutos: fimMinutos}, nil
 }
 
-// normalizarBlocos ordena os blocos por início e mescla somente os que são
+// NormalizarBlocos ordena os blocos por início e mescla somente os que são
 // exatamente adjacentes (fim de um igual ao início do próximo). Overlap
 // franco — blocos que se cruzam sem serem meramente adjacentes — é
-// considerado erro do usuário e retorna ErrBlocosSobrepostos.
+// considerado erro do usuário e retorna ErrBlocosSobrepostos. Reaproveitada
+// por qualquer conjunto de blocos de um único dia (grade de exceção, ou o
+// expediente padrão configurável do prestador).
+func NormalizarBlocos(blocos []TimeBlock) ([]TimeBlock, error) {
+	return normalizarBlocos(blocos)
+}
+
 func normalizarBlocos(blocos []TimeBlock) ([]TimeBlock, error) {
 	if len(blocos) == 0 {
 		return nil, nil

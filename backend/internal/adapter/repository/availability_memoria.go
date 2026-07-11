@@ -8,39 +8,18 @@ import (
 )
 
 type AvailabilityMemoria struct {
-	mu        sync.RWMutex
-	schedules map[string]*availability.WeeklySchedule
-	excecoes  map[string]*availability.DateException
+	mu       sync.RWMutex
+	excecoes map[string]*availability.DateException
 }
 
 func NovoAvailabilityMemoria() *AvailabilityMemoria {
 	return &AvailabilityMemoria{
-		schedules: make(map[string]*availability.WeeklySchedule),
-		excecoes:  make(map[string]*availability.DateException),
+		excecoes: make(map[string]*availability.DateException),
 	}
 }
 
-// Buscar retorna (nil, nil) quando o prestador nunca configurou a grade
-// semanal, seguindo o mesmo contrato do repositório Postgres.
-func (r *AvailabilityMemoria) Buscar(providerID string) (*availability.WeeklySchedule, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	if s, ok := r.schedules[providerID]; ok {
-		return s, nil
-	}
-	return nil, nil
-}
-
-// Salvar substitui a grade semanal do prestador por completo.
-func (r *AvailabilityMemoria) Salvar(s *availability.WeeklySchedule) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.schedules[s.ProviderID] = s
-	return nil
-}
-
-// BuscarPorData retorna (nil, nil) quando não há exceção para a data,
-// seguindo o mesmo contrato do repositório Postgres.
+// BuscarPorData retorna (nil, nil) quando não há definição própria para a
+// data, seguindo o mesmo contrato do repositório Postgres.
 func (r *AvailabilityMemoria) BuscarPorData(providerID string, data time.Time) (*availability.DateException, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -52,17 +31,7 @@ func (r *AvailabilityMemoria) BuscarPorData(providerID string, data time.Time) (
 	return nil, nil
 }
 
-// BuscarPorID retorna (nil, nil) quando não há exceção com o id.
-func (r *AvailabilityMemoria) BuscarPorID(id string) (*availability.DateException, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	if e, ok := r.excecoes[id]; ok {
-		return e, nil
-	}
-	return nil, nil
-}
-
-// Listar retorna todas as exceções de data do prestador.
+// Listar retorna todas as definições de data do prestador.
 func (r *AvailabilityMemoria) Listar(providerID string) ([]*availability.DateException, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -75,15 +44,21 @@ func (r *AvailabilityMemoria) Listar(providerID string) ([]*availability.DateExc
 	return excecoes, nil
 }
 
-// SalvarExcecao persiste uma nova exceção de data.
+// SalvarExcecao persiste a definição de uma data, substituindo uma definição
+// anterior do mesmo prestador para a mesma data (upsert).
 func (r *AvailabilityMemoria) SalvarExcecao(e *availability.DateException) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	for id, existente := range r.excecoes {
+		if existente.ProviderID == e.ProviderID && existente.Data.Equal(e.Data) {
+			delete(r.excecoes, id)
+		}
+	}
 	r.excecoes[e.ID] = e
 	return nil
 }
 
-// Remover apaga a exceção com o id informado. Não é erro remover uma exceção inexistente.
+// Remover apaga a definição com o id informado. Não é erro remover uma definição inexistente.
 func (r *AvailabilityMemoria) Remover(id string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

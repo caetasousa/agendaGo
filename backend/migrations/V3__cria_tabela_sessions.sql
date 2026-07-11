@@ -1,3 +1,4 @@
+-- Sessões autenticadas (cookie HttpOnly). Guarda só o hash do token.
 CREATE TABLE sessions (
     token_hash CHAR(64)    PRIMARY KEY,
     user_id    UUID        NOT NULL,

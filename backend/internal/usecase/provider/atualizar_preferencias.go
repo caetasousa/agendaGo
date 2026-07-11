@@ -2,10 +2,18 @@ package provider
 
 import (
 	"errors"
+
+	"agendago/internal/domain/availability"
 )
 
 // ErrProviderNaoEncontrado é retornado quando o prestador da sessão não existe mais.
 var ErrProviderNaoEncontrado = errors.New("prestador não encontrado")
+
+// BlocoInput representa um bloco do expediente padrão, ainda não validado pelo domínio.
+type BlocoInput struct {
+	InicioMinutos int
+	FimMinutos    int
+}
 
 // AtualizarPreferenciasInput contém as preferências a aplicar. ProviderID vem
 // da identidade da sessão autenticada, nunca do corpo da requisição.
@@ -13,12 +21,14 @@ type AtualizarPreferenciasInput struct {
 	ProviderID         string
 	AceitaAgendamentos bool
 	DescansoMinutos    int
+	HorariosPadrao     []BlocoInput
 }
 
 // AtualizarPreferenciasOutput contém as preferências após a atualização.
 type AtualizarPreferenciasOutput struct {
 	AceitaAgendamentos bool
 	DescansoMinutos    int
+	HorariosPadrao     []availability.TimeBlock
 }
 
 // AtualizarPreferenciasUseCase orquestra a atualização das preferências de um prestador.
@@ -53,6 +63,18 @@ func (uc *AtualizarPreferenciasUseCase) Executar(in AtualizarPreferenciasInput) 
 		return nil, err
 	}
 
+	blocos := make([]availability.TimeBlock, 0, len(in.HorariosPadrao))
+	for _, b := range in.HorariosPadrao {
+		bloco, err := availability.NovoTimeBlock(b.InicioMinutos, b.FimMinutos)
+		if err != nil {
+			return nil, err
+		}
+		blocos = append(blocos, bloco)
+	}
+	if err := p.DefinirHorariosPadrao(blocos); err != nil {
+		return nil, err
+	}
+
 	if err := uc.repo.Atualizar(p); err != nil {
 		return nil, err
 	}
@@ -60,5 +82,6 @@ func (uc *AtualizarPreferenciasUseCase) Executar(in AtualizarPreferenciasInput) 
 	return &AtualizarPreferenciasOutput{
 		AceitaAgendamentos: p.AceitaAgendamentos,
 		DescansoMinutos:    p.DescansoMinutos,
+		HorariosPadrao:     p.HorariosPadrao,
 	}, nil
 }

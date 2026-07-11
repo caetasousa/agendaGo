@@ -19,177 +19,115 @@ import (
 const layoutData = "2006-01-02"
 
 // AvailabilityHandler concentra os handlers de disponibilidade do prestador
-// (grade semanal e exceções de data). identidadeDoContexto extrai a
+// (agenda resolvida e definições por data). identidadeDoContexto extrai a
 // identidade posta no contexto pelo middleware de autenticação — recebida
 // como função para evitar um import cycle entre os pacotes handler e middleware.
 type AvailabilityHandler struct {
-	definirGradeSemanal   *ucavailability.DefinirGradeSemanalUseCase
-	consultarGradeSemanal *ucavailability.ConsultarGradeSemanalUseCase
-	criarExcecao          *ucavailability.CriarExcecaoUseCase
-	removerExcecao        *ucavailability.RemoverExcecaoUseCase
-	listarExcecoes        *ucavailability.ListarExcecoesUseCase
-	identidadeDoContexto  func(r *http.Request) (ucauth.Identidade, bool)
+	consultarAgenda      *ucavailability.ConsultarAgendaUseCase
+	definirDia           *ucavailability.DefinirDiaUseCase
+	removerDia           *ucavailability.RemoverDiaUseCase
+	identidadeDoContexto func(r *http.Request) (ucauth.Identidade, bool)
 }
 
 // NovoAvailabilityHandler cria uma instância de AvailabilityHandler com os usecases injetados.
 func NovoAvailabilityHandler(
-	definirGradeSemanal *ucavailability.DefinirGradeSemanalUseCase,
-	consultarGradeSemanal *ucavailability.ConsultarGradeSemanalUseCase,
-	criarExcecao *ucavailability.CriarExcecaoUseCase,
-	removerExcecao *ucavailability.RemoverExcecaoUseCase,
-	listarExcecoes *ucavailability.ListarExcecoesUseCase,
+	consultarAgenda *ucavailability.ConsultarAgendaUseCase,
+	definirDia *ucavailability.DefinirDiaUseCase,
+	removerDia *ucavailability.RemoverDiaUseCase,
 	identidadeDoContexto func(r *http.Request) (ucauth.Identidade, bool),
 ) *AvailabilityHandler {
 	return &AvailabilityHandler{
-		definirGradeSemanal:   definirGradeSemanal,
-		consultarGradeSemanal: consultarGradeSemanal,
-		criarExcecao:          criarExcecao,
-		removerExcecao:        removerExcecao,
-		listarExcecoes:        listarExcecoes,
-		identidadeDoContexto:  identidadeDoContexto,
+		consultarAgenda:      consultarAgenda,
+		definirDia:           definirDia,
+		removerDia:           removerDia,
+		identidadeDoContexto: identidadeDoContexto,
 	}
 }
 
-// ConsultarGradeSemanal godoc
+// ConsultarAgenda godoc
 //
-//	@Summary		Consultar grade semanal do prestador
-//	@Description	Retorna a grade semanal de disponibilidade configurada pelo prestador autenticado
+//	@Summary		Consultar agenda resolvida do prestador
+//	@Description	Resolve a disponibilidade de cada dia do período (inclusivo): definição própria da data ou expediente padrão
 //	@Tags			availability
 //	@Produce		json
-//	@Success		200	{object}	dto.GradeSemanalResponse
+//	@Param			de	query		string	true	"Data inicial (YYYY-MM-DD)"
+//	@Param			ate	query		string	true	"Data final (YYYY-MM-DD)"
+//	@Success		200	{object}	dto.AgendaResponse
+//	@Failure		400	{object}	map[string]string
 //	@Failure		401	{object}	map[string]string
 //	@Failure		403	{object}	map[string]string
-//	@Router			/providers/me/disponibilidade [get]
-func (h *AvailabilityHandler) ConsultarGradeSemanal(w http.ResponseWriter, r *http.Request) {
+//	@Router			/providers/me/agenda [get]
+func (h *AvailabilityHandler) ConsultarAgenda(w http.ResponseWriter, r *http.Request) {
 	id, ok := h.identidadeDoContexto(r)
 	if !ok {
 		responderErro(w, http.StatusUnauthorized, "não autenticado")
 		return
 	}
 
-	out, err := h.consultarGradeSemanal.Executar(ucavailability.ConsultarGradeSemanalInput{ProviderID: id.UserID})
+	de, err := time.Parse(layoutData, r.URL.Query().Get("de"))
 	if err != nil {
-		responderErro(w, http.StatusInternalServerError, "erro interno")
+		responderErro(w, http.StatusBadRequest, "parâmetro 'de' inválido (YYYY-MM-DD)")
+		return
+	}
+	ate, err := time.Parse(layoutData, r.URL.Query().Get("ate"))
+	if err != nil {
+		responderErro(w, http.StatusBadRequest, "parâmetro 'ate' inválido (YYYY-MM-DD)")
 		return
 	}
 
-	responderJSON(w, http.StatusOK, dto.GradeSemanalResponse{Dias: gradeParaDTO(out.Dias)})
-}
-
-// DefinirGradeSemanal godoc
-//
-//	@Summary		Definir grade semanal do prestador
-//	@Description	Substitui por completo a grade semanal de disponibilidade do prestador autenticado
-//	@Tags			availability
-//	@Accept			json
-//	@Produce		json
-//	@Param			body	body		dto.DefinirGradeSemanalRequest	true	"Grade semanal"
-//	@Success		200		{object}	dto.GradeSemanalResponse
-//	@Failure		400		{object}	map[string]string
-//	@Failure		401		{object}	map[string]string
-//	@Failure		403		{object}	map[string]string
-//	@Router			/providers/me/disponibilidade [put]
-func (h *AvailabilityHandler) DefinirGradeSemanal(w http.ResponseWriter, r *http.Request) {
-	id, ok := h.identidadeDoContexto(r)
-	if !ok {
-		responderErro(w, http.StatusUnauthorized, "não autenticado")
-		return
-	}
-
-	var req dto.DefinirGradeSemanalRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		responderErro(w, http.StatusBadRequest, "corpo da requisição inválido")
-		return
-	}
-	if err := req.Validar(); err != nil {
-		var ve validator.ValidationErrors
-		if errors.As(err, &ve) {
-			responderErro(w, http.StatusBadRequest, mensagemValidacao(ve[0]))
-			return
-		}
-		responderErro(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	blocosPorDia := make(map[availability.DiaSemana][]ucavailability.BlocoInput, len(req.Dias))
-	for _, dia := range req.Dias {
-		blocos := make([]ucavailability.BlocoInput, 0, len(dia.Blocos))
-		for _, b := range dia.Blocos {
-			blocos = append(blocos, ucavailability.BlocoInput{InicioMinutos: b.InicioMinutos, FimMinutos: b.FimMinutos})
-		}
-		blocosPorDia[availability.DiaSemana(dia.DiaSemana)] = blocos
-	}
-
-	out, err := h.definirGradeSemanal.Executar(ucavailability.DefinirGradeSemanalInput{
-		ProviderID:   id.UserID,
-		BlocosPorDia: blocosPorDia,
+	out, err := h.consultarAgenda.Executar(ucavailability.ConsultarAgendaInput{
+		ProviderID: id.UserID,
+		De:         de,
+		Ate:        ate,
 	})
 	if err != nil {
 		responderErroDisponibilidade(w, err)
 		return
 	}
 
-	responderJSON(w, http.StatusOK, dto.GradeSemanalResponse{Dias: gradeParaDTO(out.Dias)})
-}
-
-// ListarExcecoes godoc
-//
-//	@Summary		Listar exceções de data do prestador
-//	@Description	Lista as exceções de data (bloqueios e extras) do prestador autenticado
-//	@Tags			availability
-//	@Produce		json
-//	@Success		200	{object}	dto.ListarExcecoesResponse
-//	@Failure		401	{object}	map[string]string
-//	@Failure		403	{object}	map[string]string
-//	@Router			/providers/me/excecoes [get]
-func (h *AvailabilityHandler) ListarExcecoes(w http.ResponseWriter, r *http.Request) {
-	id, ok := h.identidadeDoContexto(r)
-	if !ok {
-		responderErro(w, http.StatusUnauthorized, "não autenticado")
-		return
-	}
-
-	out, err := h.listarExcecoes.Executar(ucavailability.ListarExcecoesInput{ProviderID: id.UserID})
-	if err != nil {
-		responderErro(w, http.StatusInternalServerError, "erro interno")
-		return
-	}
-
-	respostas := make([]dto.ExcecaoResponse, 0, len(out.Excecoes))
-	for _, e := range out.Excecoes {
-		respostas = append(respostas, dto.ExcecaoResponse{
-			ID:     e.ID,
-			Data:   e.Data.Format(layoutData),
-			Tipo:   string(e.Tipo),
-			Blocos: blocosParaDTO(e.Blocos),
+	dias := make([]dto.DiaAgendaDTO, 0, len(out.Dias))
+	for _, d := range out.Dias {
+		dias = append(dias, dto.DiaAgendaDTO{
+			Data:   d.Data.Format(layoutData),
+			Origem: string(d.Origem),
+			Blocos: blocosParaDTO(d.Blocos),
 		})
 	}
 
-	responderJSON(w, http.StatusOK, dto.ListarExcecoesResponse{Excecoes: respostas})
+	responderJSON(w, http.StatusOK, dto.AgendaResponse{
+		AceitaAgendamentos: out.AceitaAgendamentos,
+		Dias:               dias,
+	})
 }
 
-// CriarExcecao godoc
+// DefinirDia godoc
 //
-//	@Summary		Criar exceção de data
-//	@Description	Cria uma exceção de bloqueio ou extra para uma data específica do prestador autenticado
+//	@Summary		Definir um dia específico
+//	@Description	Cria ou substitui a definição própria da data: bloqueio (dia indisponível) ou extra (horários personalizados)
 //	@Tags			availability
 //	@Accept			json
 //	@Produce		json
-//	@Param			body	body		dto.CriarExcecaoRequest	true	"Exceção de data"
-//	@Success		201		{object}	dto.ExcecaoResponse
+//	@Param			data	path		string					true	"Data (YYYY-MM-DD)"
+//	@Param			body	body		dto.DefinirDiaRequest	true	"Definição do dia"
+//	@Success		200		{object}	dto.DiaAgendaDTO
 //	@Failure		400		{object}	map[string]string
 //	@Failure		401		{object}	map[string]string
 //	@Failure		403		{object}	map[string]string
-//	@Failure		409		{object}	map[string]string
-//	@Router			/providers/me/excecoes [post]
-func (h *AvailabilityHandler) CriarExcecao(w http.ResponseWriter, r *http.Request) {
+//	@Router			/providers/me/dias/{data} [put]
+func (h *AvailabilityHandler) DefinirDia(w http.ResponseWriter, r *http.Request) {
 	id, ok := h.identidadeDoContexto(r)
 	if !ok {
 		responderErro(w, http.StatusUnauthorized, "não autenticado")
 		return
 	}
 
-	var req dto.CriarExcecaoRequest
+	data, err := time.Parse(layoutData, chi.URLParam(r, "data"))
+	if err != nil {
+		responderErro(w, http.StatusBadRequest, "data inválida (YYYY-MM-DD)")
+		return
+	}
+
+	var req dto.DefinirDiaRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		responderErro(w, http.StatusBadRequest, "corpo da requisição inválido")
 		return
@@ -201,12 +139,6 @@ func (h *AvailabilityHandler) CriarExcecao(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		responderErro(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	data, err := time.Parse(layoutData, req.Data)
-	if err != nil {
-		responderErro(w, http.StatusBadRequest, "data inválida")
 		return
 	}
 
@@ -215,7 +147,7 @@ func (h *AvailabilityHandler) CriarExcecao(w http.ResponseWriter, r *http.Reques
 		blocos = append(blocos, ucavailability.BlocoInput{InicioMinutos: b.InicioMinutos, FimMinutos: b.FimMinutos})
 	}
 
-	out, err := h.criarExcecao.Executar(ucavailability.CriarExcecaoInput{
+	out, err := h.definirDia.Executar(ucavailability.DefinirDiaInput{
 		ProviderID: id.UserID,
 		Data:       data,
 		Tipo:       availability.TipoExcecao(req.Tipo),
@@ -226,34 +158,38 @@ func (h *AvailabilityHandler) CriarExcecao(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	responderJSON(w, http.StatusCreated, dto.ExcecaoResponse{
-		ID:     out.ID,
+	responderJSON(w, http.StatusOK, dto.DiaAgendaDTO{
 		Data:   out.Data.Format(layoutData),
-		Tipo:   string(out.Tipo),
+		Origem: string(out.Tipo),
 		Blocos: blocosParaDTO(out.Blocos),
 	})
 }
 
-// RemoverExcecao godoc
+// RemoverDia godoc
 //
-//	@Summary		Remover exceção de data
-//	@Description	Remove uma exceção de data do prestador autenticado
+//	@Summary		Remover a definição de um dia
+//	@Description	Remove a definição própria da data; o dia volta ao expediente padrão do prestador
 //	@Tags			availability
 //	@Success		204
+//	@Failure		400	{object}	map[string]string
 //	@Failure		401	{object}	map[string]string
 //	@Failure		403	{object}	map[string]string
 //	@Failure		404	{object}	map[string]string
-//	@Router			/providers/me/excecoes/{id} [delete]
-func (h *AvailabilityHandler) RemoverExcecao(w http.ResponseWriter, r *http.Request) {
+//	@Router			/providers/me/dias/{data} [delete]
+func (h *AvailabilityHandler) RemoverDia(w http.ResponseWriter, r *http.Request) {
 	id, ok := h.identidadeDoContexto(r)
 	if !ok {
 		responderErro(w, http.StatusUnauthorized, "não autenticado")
 		return
 	}
 
-	excecaoID := chi.URLParam(r, "id")
-	err := h.removerExcecao.Executar(ucavailability.RemoverExcecaoInput{ProviderID: id.UserID, ExcecaoID: excecaoID})
+	data, err := time.Parse(layoutData, chi.URLParam(r, "data"))
 	if err != nil {
+		responderErro(w, http.StatusBadRequest, "data inválida (YYYY-MM-DD)")
+		return
+	}
+
+	if err := h.removerDia.Executar(ucavailability.RemoverDiaInput{ProviderID: id.UserID, Data: data}); err != nil {
 		responderErroDisponibilidade(w, err)
 		return
 	}
@@ -270,28 +206,16 @@ func responderErroDisponibilidade(w http.ResponseWriter, err error) {
 		errors.Is(err, availability.ErrTipoInvalido),
 		errors.Is(err, availability.ErrBloqueioComBlocos),
 		errors.Is(err, availability.ErrExtraSemBlocos),
-		errors.Is(err, availability.ErrProviderIDObrigatorio):
+		errors.Is(err, availability.ErrProviderIDObrigatorio),
+		errors.Is(err, ucavailability.ErrPeriodoInvalido):
 		responderErro(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, ucavailability.ErrProviderNaoEncontrado):
 		responderErro(w, http.StatusNotFound, err.Error())
-	case errors.Is(err, ucavailability.ErrExcecaoJaExiste):
-		responderErro(w, http.StatusConflict, err.Error())
-	case errors.Is(err, ucavailability.ErrExcecaoNaoEncontrada):
+	case errors.Is(err, ucavailability.ErrDiaNaoDefinido):
 		responderErro(w, http.StatusNotFound, err.Error())
 	default:
 		responderErro(w, http.StatusInternalServerError, "erro interno")
 	}
-}
-
-func gradeParaDTO(dias map[availability.DiaSemana][]availability.TimeBlock) []dto.DiaGradeDTO {
-	resultado := make([]dto.DiaGradeDTO, 0, len(dias))
-	for dia, blocos := range dias {
-		resultado = append(resultado, dto.DiaGradeDTO{
-			DiaSemana: int(dia),
-			Blocos:    blocosParaDTO(blocos),
-		})
-	}
-	return resultado
 }
 
 func blocosParaDTO(blocos []availability.TimeBlock) []dto.BlocoDTO {

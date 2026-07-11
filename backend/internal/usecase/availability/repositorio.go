@@ -11,22 +11,16 @@ import (
 var (
 	// ErrProviderNaoEncontrado é retornado quando o prestador da sessão não existe mais.
 	ErrProviderNaoEncontrado = errors.New("prestador não encontrado")
-	// ErrExcecaoNaoEncontrada é retornado quando a exceção não existe ou não pertence ao prestador.
-	ErrExcecaoNaoEncontrada = errors.New("exceção não encontrada")
-	// ErrExcecaoJaExiste é retornado quando já existe uma exceção para a data informada.
-	ErrExcecaoJaExiste = errors.New("já existe uma exceção para esta data")
+	// ErrDiaNaoDefinido é retornado ao remover a definição de uma data que não tem definição própria.
+	ErrDiaNaoDefinido = errors.New("não há definição própria para esta data")
+	// ErrPeriodoInvalido é retornado quando o período consultado é vazio ou longo demais.
+	ErrPeriodoInvalido = errors.New("período inválido")
 )
 
-// repositorioWeeklySchedule busca e persiste a grade semanal completa do prestador.
-type repositorioWeeklySchedule interface {
-	Buscar(providerID string) (*availability.WeeklySchedule, error)
-	Salvar(s *availability.WeeklySchedule) error
-}
-
-// repositorioDateException busca, cria, lista e remove exceções de data.
+// repositorioDateException busca, persiste (upsert por data), lista e remove
+// as definições próprias de data do prestador.
 type repositorioDateException interface {
 	BuscarPorData(providerID string, data time.Time) (*availability.DateException, error)
-	BuscarPorID(id string) (*availability.DateException, error)
 	Listar(providerID string) ([]*availability.DateException, error)
 	SalvarExcecao(e *availability.DateException) error
 	Remover(id string) error

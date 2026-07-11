@@ -20,7 +20,7 @@ func novoAmbienteDisponibilidade(t *testing.T, aceitaAgendamentos bool) (*ucavai
 	providerRepo.Salvar(p)
 
 	availRepo := repository.NovoAvailabilityMemoria()
-	uc := ucavailability.NovoConsultarDisponibilidadeUseCase(availRepo, availRepo, providerRepo)
+	uc := ucavailability.NovoConsultarDisponibilidadeUseCase(availRepo, providerRepo)
 	return uc, availRepo
 }
 
@@ -29,13 +29,8 @@ func TestConsultarDisponibilidade(t *testing.T) {
 	segunda := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
 	sabado := time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC)
 
-	t.Run("bloqueio ignora grade semanal configurada para o dia", func(t *testing.T) {
+	t.Run("bloqueio deixa o dia vazio mesmo sendo dia útil", func(t *testing.T) {
 		uc, availRepo := novoAmbienteDisponibilidade(t, true)
-		bloco, _ := availability.NovoTimeBlock(480, 720)
-		s, _ := availability.NovaWeeklySchedule("provider-1", map[availability.DiaSemana][]availability.TimeBlock{
-			availability.Segunda: {bloco},
-		})
-		availRepo.Salvar(s)
 		excecao, _ := availability.NovaDateException("exc-1", "provider-1", segunda, availability.TipoBloqueio, nil)
 		availRepo.SalvarExcecao(excecao)
 
@@ -48,13 +43,8 @@ func TestConsultarDisponibilidade(t *testing.T) {
 		}
 	})
 
-	t.Run("extra ignora grade semanal e devolve os blocos da exceção", func(t *testing.T) {
+	t.Run("extra substitui o expediente padrão pelos blocos da definição", func(t *testing.T) {
 		uc, availRepo := novoAmbienteDisponibilidade(t, true)
-		blocoGrade, _ := availability.NovoTimeBlock(480, 720)
-		s, _ := availability.NovaWeeklySchedule("provider-1", map[availability.DiaSemana][]availability.TimeBlock{
-			availability.Segunda: {blocoGrade},
-		})
-		availRepo.Salvar(s)
 		blocoExtra, _ := availability.NovoTimeBlock(600, 660)
 		excecao, _ := availability.NovaDateException("exc-1", "provider-1", segunda, availability.TipoExtra, []availability.TimeBlock{blocoExtra})
 		availRepo.SalvarExcecao(excecao)
@@ -64,45 +54,11 @@ func TestConsultarDisponibilidade(t *testing.T) {
 			t.Fatalf("esperava sucesso, got: %v", err)
 		}
 		if len(blocos) != 1 || blocos[0].InicioMinutos != 600 {
-			t.Errorf("esperava blocos da exceção extra, got: %v", blocos)
+			t.Errorf("esperava blocos da definição extra, got: %v", blocos)
 		}
 	})
 
-	t.Run("sem exceção, usa a grade semanal configurada", func(t *testing.T) {
-		uc, availRepo := novoAmbienteDisponibilidade(t, true)
-		bloco, _ := availability.NovoTimeBlock(480, 720)
-		s, _ := availability.NovaWeeklySchedule("provider-1", map[availability.DiaSemana][]availability.TimeBlock{
-			availability.Segunda: {bloco},
-		})
-		availRepo.Salvar(s)
-
-		blocos, err := uc.Executar(ucavailability.ConsultarDisponibilidadeInput{ProviderID: "provider-1", Data: segunda})
-		if err != nil {
-			t.Fatalf("esperava sucesso, got: %v", err)
-		}
-		if len(blocos) != 1 || blocos[0].InicioMinutos != 480 {
-			t.Errorf("esperava bloco da grade semanal, got: %v", blocos)
-		}
-	})
-
-	t.Run("grade configurada mas dia específico vazio não cai no default", func(t *testing.T) {
-		uc, availRepo := novoAmbienteDisponibilidade(t, true)
-		bloco, _ := availability.NovoTimeBlock(480, 720)
-		s, _ := availability.NovaWeeklySchedule("provider-1", map[availability.DiaSemana][]availability.TimeBlock{
-			availability.Terca: {bloco}, // segunda fica de fora, de propósito
-		})
-		availRepo.Salvar(s)
-
-		blocos, err := uc.Executar(ucavailability.ConsultarDisponibilidadeInput{ProviderID: "provider-1", Data: segunda})
-		if err != nil {
-			t.Fatalf("esperava sucesso, got: %v", err)
-		}
-		if len(blocos) != 0 {
-			t.Errorf("esperava vazio (dia configurado sem expediente), got: %v", blocos)
-		}
-	})
-
-	t.Run("nunca configurou grade, aceita agendamentos, dia útil: aplica default comercial", func(t *testing.T) {
+	t.Run("dia útil sem definição própria: aplica o expediente padrão sugerido", func(t *testing.T) {
 		uc, _ := novoAmbienteDisponibilidade(t, true)
 
 		blocos, err := uc.Executar(ucavailability.ConsultarDisponibilidadeInput{ProviderID: "provider-1", Data: segunda})
@@ -110,11 +66,31 @@ func TestConsultarDisponibilidade(t *testing.T) {
 			t.Fatalf("esperava sucesso, got: %v", err)
 		}
 		if len(blocos) != 2 || blocos[0].InicioMinutos != 480 || blocos[1].InicioMinutos != 840 {
-			t.Errorf("esperava default comercial (08-12, 14-18), got: %v", blocos)
+			t.Errorf("esperava expediente padrão (08-12, 14-18), got: %v", blocos)
 		}
 	})
 
-	t.Run("nunca configurou grade, fim de semana: sem default", func(t *testing.T) {
+	t.Run("dia útil sem definição própria: aplica o expediente padrão configurado pelo prestador", func(t *testing.T) {
+		providerRepo := repository.NovoProviderMemoria()
+		p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "hash-da-senha")
+		p.AtivarAgenda()
+		bloco, _ := availability.NovoTimeBlock(9*60, 11*60)
+		p.DefinirHorariosPadrao([]availability.TimeBlock{bloco})
+		providerRepo.Salvar(p)
+
+		availRepo := repository.NovoAvailabilityMemoria()
+		uc := ucavailability.NovoConsultarDisponibilidadeUseCase(availRepo, providerRepo)
+
+		blocos, err := uc.Executar(ucavailability.ConsultarDisponibilidadeInput{ProviderID: "provider-1", Data: segunda})
+		if err != nil {
+			t.Fatalf("esperava sucesso, got: %v", err)
+		}
+		if len(blocos) != 1 || blocos[0].InicioMinutos != 9*60 || blocos[0].FimMinutos != 11*60 {
+			t.Errorf("esperava o bloco configurado 09-11, got: %v", blocos)
+		}
+	})
+
+	t.Run("fim de semana sem definição própria: sem expediente padrão", func(t *testing.T) {
 		uc, _ := novoAmbienteDisponibilidade(t, true)
 
 		blocos, err := uc.Executar(ucavailability.ConsultarDisponibilidadeInput{ProviderID: "provider-1", Data: sabado})
@@ -126,7 +102,22 @@ func TestConsultarDisponibilidade(t *testing.T) {
 		}
 	})
 
-	t.Run("nunca configurou grade, AceitaAgendamentos=false: nunca aplica default", func(t *testing.T) {
+	t.Run("extra no fim de semana vale mesmo sem expediente padrão", func(t *testing.T) {
+		uc, availRepo := novoAmbienteDisponibilidade(t, true)
+		bloco, _ := availability.NovoTimeBlock(480, 720)
+		excecao, _ := availability.NovaDateException("exc-1", "provider-1", sabado, availability.TipoExtra, []availability.TimeBlock{bloco})
+		availRepo.SalvarExcecao(excecao)
+
+		blocos, err := uc.Executar(ucavailability.ConsultarDisponibilidadeInput{ProviderID: "provider-1", Data: sabado})
+		if err != nil {
+			t.Fatalf("esperava sucesso, got: %v", err)
+		}
+		if len(blocos) != 1 || blocos[0].InicioMinutos != 480 {
+			t.Errorf("esperava bloco da definição extra, got: %v", blocos)
+		}
+	})
+
+	t.Run("AceitaAgendamentos=false: nunca aplica expediente padrão", func(t *testing.T) {
 		uc, _ := novoAmbienteDisponibilidade(t, false)
 
 		blocos, err := uc.Executar(ucavailability.ConsultarDisponibilidadeInput{ProviderID: "provider-1", Data: segunda})
@@ -141,7 +132,7 @@ func TestConsultarDisponibilidade(t *testing.T) {
 	t.Run("retorna erro quando prestador não existe", func(t *testing.T) {
 		availRepo := repository.NovoAvailabilityMemoria()
 		providerRepo := repository.NovoProviderMemoria()
-		uc := ucavailability.NovoConsultarDisponibilidadeUseCase(availRepo, availRepo, providerRepo)
+		uc := ucavailability.NovoConsultarDisponibilidadeUseCase(availRepo, providerRepo)
 
 		_, err := uc.Executar(ucavailability.ConsultarDisponibilidadeInput{ProviderID: "id-fantasma", Data: segunda})
 		if err != ucavailability.ErrProviderNaoEncontrado {

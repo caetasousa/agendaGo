@@ -144,6 +144,7 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 		Tipo:               perfil.Tipo,
 		AceitaAgendamentos: perfil.AceitaAgendamentos,
 		DescansoMinutos:    perfil.DescansoMinutos,
+		HorariosPadrao:     blocosParaDTO(perfil.HorariosPadrao),
 	})
 }
 

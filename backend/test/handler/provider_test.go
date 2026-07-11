@@ -231,4 +231,54 @@ func TestHandlerAtualizarPreferencias(t *testing.T) {
 			t.Errorf("esperava 401, got: %d", rr.Code)
 		}
 	})
+
+	t.Run("persiste três blocos curtos como expediente padrão", func(t *testing.T) {
+		r, _ := novoRouterPreferencias(t)
+		cookie := loginEObterCookie(t, r, "/auth/provider/login", "joao@email.com", "12345678")
+
+		body, _ := json.Marshal(map[string]any{
+			"aceitaAgendamentos": true,
+			"descansoMinutos":    10,
+			"horariosPadrao": []map[string]int{
+				{"inicioMinutos": 8 * 60, "fimMinutos": 10 * 60},
+				{"inicioMinutos": 11 * 60, "fimMinutos": 13 * 60},
+				{"inicioMinutos": 15 * 60, "fimMinutos": 17 * 60},
+			},
+		})
+		req := httptest.NewRequest(http.MethodPut, "/providers/me/preferencias", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.AddCookie(cookie)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("esperava 200, got: %d, body: %s", rr.Code, rr.Body.String())
+		}
+		var resp map[string]any
+		json.NewDecoder(rr.Body).Decode(&resp)
+		horarios := resp["horariosPadrao"].([]any)
+		if len(horarios) != 3 {
+			t.Errorf("esperava 3 blocos, got: %v", horarios)
+		}
+	})
+
+	t.Run("retorna 400 quando um bloco do expediente padrão é inválido", func(t *testing.T) {
+		r, _ := novoRouterPreferencias(t)
+		cookie := loginEObterCookie(t, r, "/auth/provider/login", "joao@email.com", "12345678")
+
+		body, _ := json.Marshal(map[string]any{
+			"aceitaAgendamentos": true,
+			"descansoMinutos":    0,
+			"horariosPadrao":     []map[string]int{{"inicioMinutos": 605, "fimMinutos": 720}},
+		})
+		req := httptest.NewRequest(http.MethodPut, "/providers/me/preferencias", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.AddCookie(cookie)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("esperava 400, got: %d", rr.Code)
+		}
+	})
 }

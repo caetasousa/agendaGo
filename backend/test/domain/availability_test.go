@@ -68,70 +68,6 @@ func TestNovoTimeBlock(t *testing.T) {
 	})
 }
 
-func TestNovaWeeklySchedule(t *testing.T) {
-	t.Run("retorna erro quando providerID é vazio", func(t *testing.T) {
-		_, err := availability.NovaWeeklySchedule("", nil)
-		if err != availability.ErrProviderIDObrigatorio {
-			t.Errorf("esperava ErrProviderIDObrigatorio, got: %v", err)
-		}
-	})
-
-	t.Run("mescla blocos exatamente adjacentes", func(t *testing.T) {
-		b1, _ := availability.NovoTimeBlock(8*60, 12*60)
-		b2, _ := availability.NovoTimeBlock(12*60, 14*60)
-		s, err := availability.NovaWeeklySchedule("provider-1", map[availability.DiaSemana][]availability.TimeBlock{
-			availability.Segunda: {b1, b2},
-		})
-		if err != nil {
-			t.Fatalf("esperava sucesso, got: %v", err)
-		}
-		blocos := s.BlocosDoDia(availability.Segunda)
-		if len(blocos) != 1 {
-			t.Fatalf("esperava 1 bloco mesclado, got: %d", len(blocos))
-		}
-		if blocos[0].InicioMinutos != 8*60 || blocos[0].FimMinutos != 14*60 {
-			t.Errorf("esperava bloco mesclado 08:00-14:00, got: %d-%d", blocos[0].InicioMinutos, blocos[0].FimMinutos)
-		}
-	})
-
-	t.Run("retorna erro quando blocos se sobrepõem de fato", func(t *testing.T) {
-		b1, _ := availability.NovoTimeBlock(8*60, 13*60)
-		b2, _ := availability.NovoTimeBlock(12*60, 14*60)
-		_, err := availability.NovaWeeklySchedule("provider-1", map[availability.DiaSemana][]availability.TimeBlock{
-			availability.Segunda: {b1, b2},
-		})
-		if err != availability.ErrBlocosSobrepostos {
-			t.Errorf("esperava ErrBlocosSobrepostos, got: %v", err)
-		}
-	})
-
-	t.Run("mantém blocos não relacionados separados e ordenados", func(t *testing.T) {
-		manha, _ := availability.NovoTimeBlock(8*60, 12*60)
-		tarde, _ := availability.NovoTimeBlock(14*60, 18*60)
-		// inseridos fora de ordem
-		s, err := availability.NovaWeeklySchedule("provider-1", map[availability.DiaSemana][]availability.TimeBlock{
-			availability.Segunda: {tarde, manha},
-		})
-		if err != nil {
-			t.Fatalf("esperava sucesso, got: %v", err)
-		}
-		blocos := s.BlocosDoDia(availability.Segunda)
-		if len(blocos) != 2 {
-			t.Fatalf("esperava 2 blocos, got: %d", len(blocos))
-		}
-		if blocos[0].InicioMinutos != 8*60 || blocos[1].InicioMinutos != 14*60 {
-			t.Error("esperava blocos ordenados por início")
-		}
-	})
-
-	t.Run("dia sem blocos configurados devolve vazio", func(t *testing.T) {
-		s, _ := availability.NovaWeeklySchedule("provider-1", map[availability.DiaSemana][]availability.TimeBlock{})
-		if len(s.BlocosDoDia(availability.Domingo)) != 0 {
-			t.Error("esperava vazio para dia não configurado")
-		}
-	})
-}
-
 func TestDiaSemanaDe(t *testing.T) {
 	t.Run("converte time.Time para DiaSemana", func(t *testing.T) {
 		// 2026-07-06 é uma segunda-feira
@@ -201,6 +137,37 @@ func TestNovaDateException(t *testing.T) {
 		_, err := availability.NovaDateException("exc-1", "provider-1", data, availability.TipoExtra, []availability.TimeBlock{b1, b2})
 		if err != availability.ErrBlocosSobrepostos {
 			t.Errorf("esperava ErrBlocosSobrepostos, got: %v", err)
+		}
+	})
+
+	t.Run("mescla blocos extra exatamente adjacentes", func(t *testing.T) {
+		b1, _ := availability.NovoTimeBlock(8*60, 12*60)
+		b2, _ := availability.NovoTimeBlock(12*60, 14*60)
+		e, err := availability.NovaDateException("exc-1", "provider-1", data, availability.TipoExtra, []availability.TimeBlock{b1, b2})
+		if err != nil {
+			t.Fatalf("esperava sucesso, got: %v", err)
+		}
+		if len(e.Blocos) != 1 {
+			t.Fatalf("esperava 1 bloco mesclado, got: %d", len(e.Blocos))
+		}
+		if e.Blocos[0].InicioMinutos != 8*60 || e.Blocos[0].FimMinutos != 14*60 {
+			t.Errorf("esperava bloco mesclado 08:00-14:00, got: %d-%d", e.Blocos[0].InicioMinutos, e.Blocos[0].FimMinutos)
+		}
+	})
+
+	t.Run("mantém blocos extra não relacionados separados e ordenados", func(t *testing.T) {
+		manha, _ := availability.NovoTimeBlock(8*60, 12*60)
+		tarde, _ := availability.NovoTimeBlock(14*60, 18*60)
+		// inseridos fora de ordem
+		e, err := availability.NovaDateException("exc-1", "provider-1", data, availability.TipoExtra, []availability.TimeBlock{tarde, manha})
+		if err != nil {
+			t.Fatalf("esperava sucesso, got: %v", err)
+		}
+		if len(e.Blocos) != 2 {
+			t.Fatalf("esperava 2 blocos, got: %d", len(e.Blocos))
+		}
+		if e.Blocos[0].InicioMinutos != 8*60 || e.Blocos[1].InicioMinutos != 14*60 {
+			t.Error("esperava blocos ordenados por início")
 		}
 	})
 }

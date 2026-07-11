@@ -1,9 +1,13 @@
 package auth
 
-import "agendago/internal/domain/session"
+import (
+	"agendago/internal/domain/availability"
+	"agendago/internal/domain/session"
+)
 
-// PerfilOutput contém os dados do usuário autenticado. AceitaAgendamentos e
-// DescansoMinutos só são preenchidos para prestadores — ficam nil para clientes.
+// PerfilOutput contém os dados do usuário autenticado. AceitaAgendamentos,
+// DescansoMinutos e HorariosPadrao só são preenchidos para prestadores —
+// ficam nil/vazios para clientes.
 type PerfilOutput struct {
 	ID                 string
 	Nome               string
@@ -11,6 +15,7 @@ type PerfilOutput struct {
 	Tipo               string
 	AceitaAgendamentos *bool
 	DescansoMinutos    *int
+	HorariosPadrao     []availability.TimeBlock
 }
 
 // PerfilUseCase consulta os dados do usuário autenticado a partir da sua identidade de sessão.
@@ -42,6 +47,7 @@ func (uc *PerfilUseCase) Executar(id Identidade) (*PerfilOutput, error) {
 			Tipo:               string(session.TipoProvider),
 			AceitaAgendamentos: &p.AceitaAgendamentos,
 			DescansoMinutos:    &p.DescansoMinutos,
+			HorariosPadrao:     p.HorariosPadrao,
 		}, nil
 
 	case session.TipoClient:

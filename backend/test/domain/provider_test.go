@@ -3,6 +3,7 @@ package domain_test
 import (
 	"testing"
 
+	"agendago/internal/domain/availability"
 	"agendago/internal/domain/provider"
 )
 
@@ -20,6 +21,16 @@ func TestNovo(t *testing.T) {
 		}
 		if p.DescansoMinutos != 0 {
 			t.Errorf("descanso deve iniciar em 0, got: %d", p.DescansoMinutos)
+		}
+	})
+
+	t.Run("inicia com o expediente comercial sugerido (08-12, 14-18)", func(t *testing.T) {
+		p, _ := provider.Novo("1", "João Silva", "joao@email.com", "12345678")
+		if len(p.HorariosPadrao) != 2 {
+			t.Fatalf("esperava 2 blocos padrão, got: %d", len(p.HorariosPadrao))
+		}
+		if p.HorariosPadrao[0].InicioMinutos != 8*60 || p.HorariosPadrao[1].InicioMinutos != 14*60 {
+			t.Errorf("esperava blocos 08-12 e 14-18, got: %v", p.HorariosPadrao)
 		}
 	})
 
@@ -79,6 +90,49 @@ func TestDefinirDescanso(t *testing.T) {
 		p, _ := provider.Novo("1", "João Silva", "joao@email.com", "12345678")
 		if err := p.DefinirDescanso(-1); err != provider.ErrDescansoInvalido {
 			t.Errorf("esperava ErrDescansoInvalido, got: %v", err)
+		}
+	})
+}
+
+func TestDefinirHorariosPadrao(t *testing.T) {
+	t.Run("substitui o expediente padrão do prestador", func(t *testing.T) {
+		p, _ := provider.Novo("1", "João Silva", "joao@email.com", "12345678")
+		bloco, _ := availability.NovoTimeBlock(9*60, 12*60)
+
+		if err := p.DefinirHorariosPadrao([]availability.TimeBlock{bloco}); err != nil {
+			t.Fatalf("esperava sucesso, got: %v", err)
+		}
+		if len(p.HorariosPadrao) != 1 || p.HorariosPadrao[0].InicioMinutos != 9*60 {
+			t.Errorf("esperava 1 bloco 09-12, got: %v", p.HorariosPadrao)
+		}
+	})
+
+	t.Run("aceita lista vazia (nenhum horário padrão)", func(t *testing.T) {
+		p, _ := provider.Novo("1", "João Silva", "joao@email.com", "12345678")
+
+		if err := p.DefinirHorariosPadrao(nil); err != nil {
+			t.Fatalf("esperava sucesso, got: %v", err)
+		}
+		if len(p.HorariosPadrao) != 0 {
+			t.Errorf("esperava nenhum bloco, got: %v", p.HorariosPadrao)
+		}
+	})
+
+	t.Run("mescla blocos adjacentes e retorna erro para sobreposição real", func(t *testing.T) {
+		p, _ := provider.Novo("1", "João Silva", "joao@email.com", "12345678")
+		manha, _ := availability.NovoTimeBlock(8*60, 12*60)
+		tarde, _ := availability.NovoTimeBlock(12*60, 18*60)
+
+		if err := p.DefinirHorariosPadrao([]availability.TimeBlock{tarde, manha}); err != nil {
+			t.Fatalf("esperava sucesso, got: %v", err)
+		}
+		if len(p.HorariosPadrao) != 1 || p.HorariosPadrao[0].FimMinutos != 18*60 {
+			t.Errorf("esperava blocos adjacentes mesclados em 08-18, got: %v", p.HorariosPadrao)
+		}
+
+		sobreposto, _ := availability.NovoTimeBlock(10*60, 14*60)
+		if err := p.DefinirHorariosPadrao([]availability.TimeBlock{manha, sobreposto}); err != availability.ErrBlocosSobrepostos {
+			t.Errorf("esperava ErrBlocosSobrepostos, got: %v", err)
 		}
 	})
 }

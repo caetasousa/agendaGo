@@ -5,40 +5,27 @@ type BlocoDTO struct {
 	FimMinutos    int `json:"fimMinutos"    validate:"min=0,max=1440"`
 }
 
-type DiaGradeDTO struct {
-	DiaSemana int        `json:"diaSemana" validate:"min=0,max=6"`
-	Blocos    []BlocoDTO `json:"blocos"    validate:"dive"`
-}
-
-type DefinirGradeSemanalRequest struct {
-	Dias []DiaGradeDTO `json:"dias" validate:"dive"`
-}
-
-func (r DefinirGradeSemanalRequest) Validar() error {
-	return validate.Struct(r)
-}
-
-type GradeSemanalResponse struct {
-	Dias []DiaGradeDTO `json:"dias"`
-}
-
-type CriarExcecaoRequest struct {
-	Data   string     `json:"data" validate:"required,datetime=2006-01-02"`
+// DefinirDiaRequest define uma data específica: "bloqueio" deixa o dia
+// indisponível (sem blocos); "extra" substitui o expediente padrão pelos
+// blocos informados.
+type DefinirDiaRequest struct {
 	Tipo   string     `json:"tipo" validate:"required,oneof=bloqueio extra"`
 	Blocos []BlocoDTO `json:"blocos" validate:"dive"`
 }
 
-func (r CriarExcecaoRequest) Validar() error {
+func (r DefinirDiaRequest) Validar() error {
 	return validate.Struct(r)
 }
 
-type ExcecaoResponse struct {
-	ID     string     `json:"id"`
+// DiaAgendaDTO é a disponibilidade resolvida de uma data: origem "padrao",
+// "bloqueio" ou "extra", com os blocos efetivos do dia.
+type DiaAgendaDTO struct {
 	Data   string     `json:"data"`
-	Tipo   string     `json:"tipo"`
+	Origem string     `json:"origem"`
 	Blocos []BlocoDTO `json:"blocos"`
 }
 
-type ListarExcecoesResponse struct {
-	Excecoes []ExcecaoResponse `json:"excecoes"`
+type AgendaResponse struct {
+	AceitaAgendamentos bool           `json:"aceitaAgendamentos"`
+	Dias               []DiaAgendaDTO `json:"dias"`
 }

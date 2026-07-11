@@ -16,10 +16,11 @@ type LoginResponse struct {
 }
 
 type MeResponse struct {
-	ID                 string `json:"id"`
-	Nome               string `json:"nome"`
-	Email              string `json:"email"`
-	Tipo               string `json:"tipo"`
-	AceitaAgendamentos *bool  `json:"aceitaAgendamentos,omitempty"`
-	DescansoMinutos    *int   `json:"descansoMinutos,omitempty"`
+	ID                 string     `json:"id"`
+	Nome               string     `json:"nome"`
+	Email              string     `json:"email"`
+	Tipo               string     `json:"tipo"`
+	AceitaAgendamentos *bool      `json:"aceitaAgendamentos,omitempty"`
+	DescansoMinutos    *int       `json:"descansoMinutos,omitempty"`
+	HorariosPadrao     []BlocoDTO `json:"horariosPadrao,omitempty"`
 }

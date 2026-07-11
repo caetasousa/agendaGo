@@ -5,14 +5,14 @@ import (
 	"time"
 )
 
-// TipoExcecao identifica se uma exceção de data bloqueia o dia inteiro ou
-// libera horário extra fora da grade semanal.
+// TipoExcecao identifica se uma exceção de data deixa o dia inteiro
+// indisponível ou substitui o expediente padrão por horários personalizados.
 type TipoExcecao string
 
 const (
-	// TipoBloqueio marca uma data normalmente trabalhada como indisponível o dia inteiro.
+	// TipoBloqueio marca a data como indisponível o dia inteiro.
 	TipoBloqueio TipoExcecao = "bloqueio"
-	// TipoExtra registra disponibilidade extra numa data que a grade semanal não cobriria.
+	// TipoExtra substitui o expediente padrão da data por horários personalizados.
 	TipoExtra TipoExcecao = "extra"
 )
 
@@ -25,10 +25,10 @@ var (
 	ErrExtraSemBlocos = errors.New("exceção extra exige ao menos um bloco de horário")
 )
 
-// DateException representa uma exceção pontual à grade semanal em uma data
-// específica. BLOQUEIO nunca carrega Blocos (dia inteiro indisponível);
-// EXTRA sempre carrega ao menos um bloco, validado com as mesmas regras da
-// grade semanal (sem overlap, granularidade, merge de adjacentes).
+// DateException representa a definição própria de uma data, sobrepondo o
+// expediente padrão do prestador. BLOQUEIO nunca carrega Blocos (dia inteiro
+// indisponível); EXTRA sempre carrega ao menos um bloco, validado com as
+// regras usuais (sem overlap, granularidade, merge de adjacentes).
 type DateException struct {
 	ID         string
 	ProviderID string

@@ -4,14 +4,22 @@ import (
 	"time"
 
 	"agendago/internal/domain/availability"
+	"agendago/internal/domain/provider"
 )
 
-// blocosComerciaisPadrao é o default de "dia comercial" quando o prestador
-// aceita agendamentos mas nunca configurou a grade semanal: 08:00–12:00 e
-// 14:00–18:00, de segunda a sexta.
-var blocosComerciaisPadrao = []availability.TimeBlock{
-	{InicioMinutos: 8 * 60, FimMinutos: 12 * 60},
-	{InicioMinutos: 14 * 60, FimMinutos: 18 * 60},
+// blocosPadrao resolve o expediente default de uma data sem definição própria:
+// o expediente configurado em HorariosPadrao, aplicado em dias úteis quando o
+// prestador aceita agendamentos; vazio em fins de semana ou com a agenda
+// desativada.
+func blocosPadrao(p *provider.Provider, data time.Time) []availability.TimeBlock {
+	if !p.AceitaAgendamentos {
+		return nil
+	}
+	dia := availability.DiaSemanaDe(data)
+	if dia == availability.Domingo || dia == availability.Sabado {
+		return nil
+	}
+	return p.HorariosPadrao
 }
 
 // ConsultarDisponibilidadeInput define o prestador e a data (já no fuso
@@ -25,24 +33,22 @@ type ConsultarDisponibilidadeInput struct {
 // disponíveis de um prestador em uma data — reutilizável pelo futuro domínio
 // de Slots. Não conhece HTTP nem cálculo de slot.
 type ConsultarDisponibilidadeUseCase struct {
-	scheduleRepo repositorioWeeklySchedule
 	excecaoRepo  repositorioDateException
 	providerRepo repositorioProvider
 }
 
 // NovoConsultarDisponibilidadeUseCase cria uma instância de ConsultarDisponibilidadeUseCase com os repositórios injetados.
 func NovoConsultarDisponibilidadeUseCase(
-	scheduleRepo repositorioWeeklySchedule,
 	excecaoRepo repositorioDateException,
 	providerRepo repositorioProvider,
 ) *ConsultarDisponibilidadeUseCase {
-	return &ConsultarDisponibilidadeUseCase{scheduleRepo: scheduleRepo, excecaoRepo: excecaoRepo, providerRepo: providerRepo}
+	return &ConsultarDisponibilidadeUseCase{excecaoRepo: excecaoRepo, providerRepo: providerRepo}
 }
 
 // Executar resolve os blocos efetivos de ProviderID em Data seguindo a ordem:
-// exceção da data → padrão semanal → (se AceitaAgendamentos e nada
-// configurado) default comercial. Retorna slice vazia (nunca nil-erro) quando
-// o prestador não atende no dia.
+// definição própria da data → expediente padrão (dia comercial em dias úteis,
+// se AceitaAgendamentos). Retorna slice vazia (nunca nil-erro) quando o
+// prestador não atende no dia.
 func (uc *ConsultarDisponibilidadeUseCase) Executar(in ConsultarDisponibilidadeInput) ([]availability.TimeBlock, error) {
 	p, err := uc.providerRepo.BuscarPorID(in.ProviderID)
 	if err != nil {
@@ -63,22 +69,5 @@ func (uc *ConsultarDisponibilidadeUseCase) Executar(in ConsultarDisponibilidadeI
 		return excecao.Blocos, nil
 	}
 
-	schedule, err := uc.scheduleRepo.Buscar(in.ProviderID)
-	if err != nil {
-		return nil, err
-	}
-	if schedule != nil {
-		// A grade existe (o prestador já configurou ao menos uma vez): o dia
-		// específico pode estar vazio de propósito — não cai no default.
-		return schedule.BlocosDoDia(availability.DiaSemanaDe(in.Data)), nil
-	}
-
-	if !p.AceitaAgendamentos {
-		return nil, nil
-	}
-	dia := availability.DiaSemanaDe(in.Data)
-	if dia == availability.Domingo || dia == availability.Sabado {
-		return nil, nil
-	}
-	return blocosComerciaisPadrao, nil
+	return blocosPadrao(p, in.Data), nil
 }

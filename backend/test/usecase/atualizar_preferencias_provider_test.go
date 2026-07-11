@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"agendago/internal/adapter/repository"
+	"agendago/internal/domain/availability"
 	"agendago/internal/domain/provider"
 	ucprovider "agendago/internal/usecase/provider"
 )
@@ -86,6 +87,88 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 		})
 		if err != ucprovider.ErrProviderNaoEncontrado {
 			t.Errorf("esperava ErrProviderNaoEncontrado, got: %v", err)
+		}
+	})
+
+	t.Run("define o expediente padrão com três blocos curtos", func(t *testing.T) {
+		repo := repository.NovoProviderMemoria()
+		novoProviderComPreferencias(repo)
+		uc := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
+
+		out, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
+			ProviderID:         "provider-1",
+			AceitaAgendamentos: true,
+			DescansoMinutos:    15,
+			HorariosPadrao: []ucprovider.BlocoInput{
+				{InicioMinutos: 8 * 60, FimMinutos: 10 * 60},
+				{InicioMinutos: 11 * 60, FimMinutos: 13 * 60},
+				{InicioMinutos: 15 * 60, FimMinutos: 17 * 60},
+			},
+		})
+		if err != nil {
+			t.Fatalf("esperava sucesso, got: %v", err)
+		}
+		if len(out.HorariosPadrao) != 3 {
+			t.Fatalf("esperava 3 blocos, got: %d", len(out.HorariosPadrao))
+		}
+
+		persistido, _ := repo.BuscarPorID("provider-1")
+		if len(persistido.HorariosPadrao) != 3 {
+			t.Error("esperava que o expediente padrão fosse persistido")
+		}
+	})
+
+	t.Run("aceita expediente padrão vazio (nenhum horário)", func(t *testing.T) {
+		repo := repository.NovoProviderMemoria()
+		novoProviderComPreferencias(repo)
+		uc := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
+
+		out, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
+			ProviderID:         "provider-1",
+			AceitaAgendamentos: false,
+			DescansoMinutos:    0,
+			HorariosPadrao:     nil,
+		})
+		if err != nil {
+			t.Fatalf("esperava sucesso, got: %v", err)
+		}
+		if len(out.HorariosPadrao) != 0 {
+			t.Errorf("esperava nenhum bloco, got: %v", out.HorariosPadrao)
+		}
+	})
+
+	t.Run("retorna erro quando um bloco do expediente padrão é inválido", func(t *testing.T) {
+		repo := repository.NovoProviderMemoria()
+		novoProviderComPreferencias(repo)
+		uc := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
+
+		_, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
+			ProviderID:         "provider-1",
+			AceitaAgendamentos: true,
+			DescansoMinutos:    0,
+			HorariosPadrao:     []ucprovider.BlocoInput{{InicioMinutos: 12 * 60, FimMinutos: 8 * 60}},
+		})
+		if err != availability.ErrFimAntesDoInicio {
+			t.Errorf("esperava ErrFimAntesDoInicio, got: %v", err)
+		}
+	})
+
+	t.Run("retorna erro quando blocos do expediente padrão se sobrepõem", func(t *testing.T) {
+		repo := repository.NovoProviderMemoria()
+		novoProviderComPreferencias(repo)
+		uc := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
+
+		_, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
+			ProviderID:         "provider-1",
+			AceitaAgendamentos: true,
+			DescansoMinutos:    0,
+			HorariosPadrao: []ucprovider.BlocoInput{
+				{InicioMinutos: 8 * 60, FimMinutos: 13 * 60},
+				{InicioMinutos: 12 * 60, FimMinutos: 14 * 60},
+			},
+		})
+		if err != availability.ErrBlocosSobrepostos {
+			t.Errorf("esperava ErrBlocosSobrepostos, got: %v", err)
 		}
 	})
 }

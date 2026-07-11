@@ -3,6 +3,8 @@ package provider
 import (
 	"errors"
 	"time"
+
+	"agendago/internal/domain/availability"
 )
 
 // Provider representa um prestador de serviço no sistema de agendamento.
@@ -13,6 +15,7 @@ type Provider struct {
 	SenhaHash          string
 	AceitaAgendamentos bool
 	DescansoMinutos    int
+	HorariosPadrao     []availability.TimeBlock
 	CriadoEm           time.Time
 	AtualizadoEm       time.Time
 }
@@ -50,9 +53,31 @@ func Novo(id, nome, email, senhaHash string) (*Provider, error) {
 		SenhaHash:          senhaHash,
 		AceitaAgendamentos: false,
 		DescansoMinutos:    0,
+		HorariosPadrao:     horariosComerciaisPadrao,
 		CriadoEm:           agora,
 		AtualizadoEm:       agora,
 	}, nil
+}
+
+// horariosComerciaisPadrao é o expediente sugerido a um prestador recém-criado
+// — 08:00–12:00 e 14:00–18:00 — editável a qualquer momento em Preferências.
+var horariosComerciaisPadrao = []availability.TimeBlock{
+	{InicioMinutos: 8 * 60, FimMinutos: 12 * 60},
+	{InicioMinutos: 14 * 60, FimMinutos: 18 * 60},
+}
+
+// DefinirHorariosPadrao substitui o expediente padrão do prestador (usado em
+// dias úteis sem definição própria). Aceita lista vazia (nenhum horário
+// padrão) e normaliza os blocos (ordena e mescla adjacentes) com as mesmas
+// regras de TimeBlock.
+func (p *Provider) DefinirHorariosPadrao(blocos []availability.TimeBlock) error {
+	normalizados, err := availability.NormalizarBlocos(blocos)
+	if err != nil {
+		return err
+	}
+	p.HorariosPadrao = normalizados
+	p.AtualizadoEm = time.Now()
+	return nil
 }
 
 // AtivarAgenda habilita o prestador a receber agendamentos.

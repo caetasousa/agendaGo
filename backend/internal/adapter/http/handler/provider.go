@@ -8,6 +8,7 @@ import (
 	"reflect"
 
 	"agendago/internal/adapter/http/dto"
+	"agendago/internal/domain/availability"
 	"agendago/internal/domain/provider"
 	ucauth "agendago/internal/usecase/auth"
 	ucprovider "agendago/internal/usecase/provider"
@@ -125,14 +126,24 @@ func (h *ProviderHandler) AtualizarPreferencias(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	horarios := make([]ucprovider.BlocoInput, 0, len(req.HorariosPadrao))
+	for _, b := range req.HorariosPadrao {
+		horarios = append(horarios, ucprovider.BlocoInput{InicioMinutos: b.InicioMinutos, FimMinutos: b.FimMinutos})
+	}
+
 	output, err := h.atualizarPreferencias.Executar(ucprovider.AtualizarPreferenciasInput{
 		ProviderID:         id.UserID,
 		AceitaAgendamentos: req.AceitaAgendamentos,
 		DescansoMinutos:    req.DescansoMinutos,
+		HorariosPadrao:     horarios,
 	})
 	if err != nil {
 		switch {
-		case errors.Is(err, provider.ErrDescansoInvalido):
+		case errors.Is(err, provider.ErrDescansoInvalido),
+			errors.Is(err, availability.ErrFimAntesDoInicio),
+			errors.Is(err, availability.ErrForaDoDia),
+			errors.Is(err, availability.ErrGranularidadeInvalida),
+			errors.Is(err, availability.ErrBlocosSobrepostos):
 			responderErro(w, http.StatusBadRequest, err.Error())
 		case errors.Is(err, ucprovider.ErrProviderNaoEncontrado):
 			responderErro(w, http.StatusNotFound, err.Error())
@@ -145,6 +156,7 @@ func (h *ProviderHandler) AtualizarPreferencias(w http.ResponseWriter, r *http.R
 	responderJSON(w, http.StatusOK, dto.AtualizarPreferenciasResponse{
 		AceitaAgendamentos: output.AceitaAgendamentos,
 		DescansoMinutos:    output.DescansoMinutos,
+		HorariosPadrao:     blocosParaDTO(output.HorariosPadrao),
 	})
 }
 

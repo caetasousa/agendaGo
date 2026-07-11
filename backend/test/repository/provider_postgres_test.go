@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"agendago/internal/adapter/repository"
+	"agendago/internal/domain/availability"
 	"agendago/internal/domain/provider"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -102,6 +103,9 @@ func TestProviderPostgres(t *testing.T) {
 		if encontrado.CriadoEm.IsZero() {
 			t.Error("criado_em deveria vir preenchido pelo banco")
 		}
+		if len(encontrado.HorariosPadrao) != 2 {
+			t.Errorf("esperava 2 blocos do expediente sugerido, got: %v", encontrado.HorariosPadrao)
+		}
 	})
 
 	t.Run("retorna (nil, nil) quando email não existe", func(t *testing.T) {
@@ -180,6 +184,46 @@ func TestProviderPostgres(t *testing.T) {
 		}
 		if !encontrado.AtualizadoEm.After(encontrado.CriadoEm) {
 			t.Error("esperava AtualizadoEm posterior a CriadoEm após Atualizar")
+		}
+	})
+
+	t.Run("Atualizar substitui o expediente padrão (delete-all + insert)", func(t *testing.T) {
+		p, _ := provider.Novo("55555555-5555-5555-5555-555555555555", "Eva Souza", "eva@email.com", "12345678")
+		if err := repo.Salvar(p); err != nil {
+			t.Fatalf("esperava sucesso ao salvar, got: %v", err)
+		}
+
+		bloco1, _ := availability.NovoTimeBlock(9*60, 11*60)
+		bloco2, _ := availability.NovoTimeBlock(13*60, 15*60)
+		bloco3, _ := availability.NovoTimeBlock(16*60, 18*60)
+		if err := p.DefinirHorariosPadrao([]availability.TimeBlock{bloco1, bloco2, bloco3}); err != nil {
+			t.Fatalf("esperava sucesso ao definir horários, got: %v", err)
+		}
+		if err := repo.Atualizar(p); err != nil {
+			t.Fatalf("esperava sucesso ao atualizar, got: %v", err)
+		}
+
+		encontrado, err := repo.BuscarPorID(p.ID)
+		if err != nil {
+			t.Fatalf("esperava sucesso na busca, got: %v", err)
+		}
+		if len(encontrado.HorariosPadrao) != 3 {
+			t.Fatalf("esperava 3 blocos, got: %d", len(encontrado.HorariosPadrao))
+		}
+		if encontrado.HorariosPadrao[0].InicioMinutos != 9*60 {
+			t.Errorf("esperava blocos ordenados por início, got: %v", encontrado.HorariosPadrao)
+		}
+
+		// atualizar de novo com lista vazia deve remover os blocos anteriores
+		if err := encontrado.DefinirHorariosPadrao(nil); err != nil {
+			t.Fatalf("esperava sucesso ao limpar horários, got: %v", err)
+		}
+		if err := repo.Atualizar(encontrado); err != nil {
+			t.Fatalf("esperava sucesso ao atualizar, got: %v", err)
+		}
+		semHorarios, _ := repo.BuscarPorID(p.ID)
+		if len(semHorarios.HorariosPadrao) != 0 {
+			t.Errorf("esperava nenhum bloco após limpar, got: %v", semHorarios.HorariosPadrao)
 		}
 	})
 }

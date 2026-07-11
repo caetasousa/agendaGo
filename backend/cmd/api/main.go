@@ -53,11 +53,9 @@ func main() {
 	logout := ucauth.NovoLogoutUseCase(sessionRepo)
 	validarSessao := ucauth.NovoValidarSessaoUseCase(sessionRepo)
 	perfil := ucauth.NovoPerfilUseCase(providerRepo, clientRepo)
-	definirGradeSemanal := ucavailability.NovoDefinirGradeSemanalUseCase(availabilityRepo)
-	consultarGradeSemanal := ucavailability.NovoConsultarGradeSemanalUseCase(availabilityRepo)
-	criarExcecao := ucavailability.NovoCriarExcecaoUseCase(availabilityRepo)
-	removerExcecao := ucavailability.NovoRemoverExcecaoUseCase(availabilityRepo)
-	listarExcecoes := ucavailability.NovoListarExcecoesUseCase(availabilityRepo)
+	consultarAgenda := ucavailability.NovoConsultarAgendaUseCase(availabilityRepo, providerRepo)
+	definirDia := ucavailability.NovoDefinirDiaUseCase(availabilityRepo)
+	removerDia := ucavailability.NovoRemoverDiaUseCase(availabilityRepo)
 
 	// handlers
 	identidadeDoContexto := func(r *http.Request) (ucauth.Identidade, bool) {
@@ -66,10 +64,7 @@ func main() {
 	providerHandler := handler.NovoProviderHandler(cadastrarProvider, atualizarPreferencias, identidadeDoContexto)
 	clientHandler := handler.NovoClientHandler(cadastrarClient)
 	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, logout, perfil, config.CookieSeguro(), identidadeDoContexto)
-	availabilityHandler := handler.NovoAvailabilityHandler(
-		definirGradeSemanal, consultarGradeSemanal, criarExcecao, removerExcecao, listarExcecoes,
-		identidadeDoContexto,
-	)
+	availabilityHandler := handler.NovoAvailabilityHandler(consultarAgenda, definirDia, removerDia, identidadeDoContexto)
 
 	// middlewares
 	authMw := middleware.NovoAuth(validarSessao)
@@ -90,11 +85,9 @@ func main() {
 		r.Use(authMw.Autenticar)
 		r.Use(middleware.ExigirProvider)
 		r.Put("/providers/me/preferencias", providerHandler.AtualizarPreferencias)
-		r.Get("/providers/me/disponibilidade", availabilityHandler.ConsultarGradeSemanal)
-		r.Put("/providers/me/disponibilidade", availabilityHandler.DefinirGradeSemanal)
-		r.Get("/providers/me/excecoes", availabilityHandler.ListarExcecoes)
-		r.Post("/providers/me/excecoes", availabilityHandler.CriarExcecao)
-		r.Delete("/providers/me/excecoes/{id}", availabilityHandler.RemoverExcecao)
+		r.Get("/providers/me/agenda", availabilityHandler.ConsultarAgenda)
+		r.Put("/providers/me/dias/{data}", availabilityHandler.DefinirDia)
+		r.Delete("/providers/me/dias/{data}", availabilityHandler.RemoverDia)
 	})
 
 	// servidor

@@ -21,8 +21,9 @@ type CadastrarProviderResponse struct {
 }
 
 type AtualizarPreferenciasRequest struct {
-	AceitaAgendamentos bool `json:"aceitaAgendamentos"`
-	DescansoMinutos    int  `json:"descansoMinutos" validate:"min=0"`
+	AceitaAgendamentos bool       `json:"aceitaAgendamentos"`
+	DescansoMinutos    int        `json:"descansoMinutos" validate:"min=0"`
+	HorariosPadrao     []BlocoDTO `json:"horariosPadrao"  validate:"dive"`
 }
 
 func (r AtualizarPreferenciasRequest) Validar() error {
@@ -30,6 +31,7 @@ func (r AtualizarPreferenciasRequest) Validar() error {
 }
 
 type AtualizarPreferenciasResponse struct {
-	AceitaAgendamentos bool `json:"aceitaAgendamentos"`
-	DescansoMinutos    int  `json:"descansoMinutos"`
+	AceitaAgendamentos bool       `json:"aceitaAgendamentos"`
+	DescansoMinutos    int        `json:"descansoMinutos"`
+	HorariosPadrao     []BlocoDTO `json:"horariosPadrao"`
 }
