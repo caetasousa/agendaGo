@@ -10,3 +10,8 @@ Thumbs.db
 
 # Docs geradas pelo swag (regeneradas pelo container)
 /backend/docs/
+
+# Variáveis de ambiente
+.env
+.env.*
+!.env.example
