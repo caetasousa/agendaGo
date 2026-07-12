@@ -51,11 +51,30 @@ services:
       # Rate limiting por IP (0 desliga; padrão 10/min quando ausente)
       RATE_LIMIT_LOGIN_POR_MINUTO: ${RATE_LIMIT_LOGIN_POR_MINUTO:-10}
       RATE_LIMIT_CONVIDADO_POR_MINUTO: ${RATE_LIMIT_CONVIDADO_POR_MINUTO:-10}
+      # Envio de email: em dev aponta para o Mailpit (sem TLS/auth), que
+      # captura os emails em vez de enviar de verdade. Em produção, troque
+      # pelas credenciais SMTP do provedor (ex.: Brevo).
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-false}
+      EMAIL_REMETENTE: ${EMAIL_REMETENTE:-nao-responda@agendago.dev}
+      EMAIL_REMETENTE_NOME: ${EMAIL_REMETENTE_NOME:-agendaGo}
     volumes:
       - ./backend:/app
     depends_on:
       flyway:
         condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+
+  mailpit:
+    image: axllent/mailpit
+    container_name: agendago_mailpit
+    ports:
+      - "8025:8025" # UI web: veja os emails capturados em http://localhost:8025
+      - "1025:1025" # SMTP: alvo dos emails enviados pela API em dev
 
   web:
     image: node:22-alpine
