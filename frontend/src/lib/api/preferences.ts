@@ -7,12 +7,14 @@ import type { Bloco } from './availability';
 export interface AtualizarPreferenciasRequest {
 	aceitaAgendamentos: boolean;
 	descansoMinutos: number;
+	duracaoAtendimentoMinutos: number;
 	horariosPadrao: Bloco[];
 }
 
 export interface AtualizarPreferenciasResponse {
 	aceitaAgendamentos: boolean;
 	descansoMinutos: number;
+	duracaoAtendimentoMinutos: number;
 	horariosPadrao: Bloco[];
 }
 

@@ -22,6 +22,7 @@ export interface MeResponse {
 	tipo: string;
 	aceitaAgendamentos?: boolean;
 	descansoMinutos?: number;
+	duracaoAtendimentoMinutos?: number;
 	horariosPadrao?: Bloco[];
 }
 
@@ -33,18 +34,29 @@ export function loginClient(dados: LoginRequest): Promise<LoginResponse> {
 	return apiPost<LoginRequest, LoginResponse>('/auth/client/login', dados);
 }
 
-// login tenta autenticar como prestador; se as credenciais não corresponderem
-// a um prestador (401), tenta como cliente. O backend expõe rotas de login
-// separadas por tipo de usuário — esta função abstrai essa escolha do usuário.
+export function loginAdmin(dados: LoginRequest): Promise<LoginResponse> {
+	return apiPost<LoginRequest, LoginResponse>('/auth/admin/login', dados);
+}
+
+// login tenta cada tipo de conta em sequência (prestador → cliente → admin). O
+// backend expõe rotas separadas por tipo; esta função abstrai isso do usuário.
+// Só o 401 (credenciais não conferem para aquele tipo) faz cair para o próximo:
+// um 403 (usuário banido) é credencial válida e propaga o erro de imediato.
 export async function login(dados: LoginRequest): Promise<LoginResponse> {
-	try {
-		return await loginProvider(dados);
-	} catch (e) {
-		if (e instanceof ApiError && e.status === 401) {
-			return loginClient(dados);
+	const tentativas = [loginProvider, loginClient, loginAdmin];
+	for (let i = 0; i < tentativas.length; i++) {
+		try {
+			return await tentativas[i](dados);
+		} catch (e) {
+			const ehUltima = i === tentativas.length - 1;
+			if (!ehUltima && e instanceof ApiError && e.status === 401) {
+				continue;
+			}
+			throw e;
 		}
-		throw e;
 	}
+	// inalcançável: o loop sempre retorna ou lança na última tentativa
+	throw new Error('login: nenhuma tentativa retornou');
 }
 
 export function logout(): Promise<void> {

@@ -1,13 +1,27 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { ApiError } from '$lib/api/client';
 	import { cadastrarProvider } from '$lib/api/provider';
 	import { cadastrarClient } from '$lib/api/customer';
-	import { login } from '$lib/api/auth';
+	import { login, me } from '$lib/api/auth';
+	import { sessao } from '$lib/stores/session.svelte';
+
+	// destinoAposCadastro honra ?voltar= (ex: link público de agendamento), mas
+	// só para caminhos internos — nunca URLs absolutas, para evitar open redirect.
+	function destinoAposCadastro(): string {
+		const voltar = page.url.searchParams.get('voltar');
+		return voltar && voltar.startsWith('/') && !voltar.startsWith('//') ? voltar : '/painel';
+	}
 
 	type TipoConta = 'provider' | 'client';
 
-	let tipo = $state<TipoConta>('provider');
+	// Quem chega pelo link público de agendamento veio para agendar: a conta
+	// certa é a de cliente.
+	// svelte-ignore state_referenced_locally
+	let tipo = $state<TipoConta>(
+		page.url.searchParams.get('voltar')?.startsWith('/agendar') ? 'client' : 'provider'
+	);
 	let nome = $state('');
 	let email = $state('');
 	let senha = $state('');
@@ -37,7 +51,10 @@
 			}
 
 			await login({ email, senha });
-			goto('/painel');
+			// popula a sessão antes de navegar: o destino pode ser uma página
+			// pública (ex: link de agendamento) que não tem guard para fazê-lo
+			sessao.definir(await me());
+			goto(destinoAposCadastro());
 		} catch (e) {
 			// A API é a fonte da verdade da validação: mostramos a mensagem que ela devolve
 			// (400 = dado inválido, 409 = e-mail já cadastrado).

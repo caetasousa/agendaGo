@@ -37,7 +37,12 @@
 				<!-- espaço neutro: evita mostrar "Entrar" antes de saber se há sessão -->
 			{:else if sessao.usuario}
 				<span class="text-sm text-body">{sessao.usuario.nome}</span>
-				<a href="/painel" class="text-sm text-mute transition hover:text-ink">Painel</a>
+				<a
+					href={sessao.usuario.tipo === 'admin' ? '/admin' : '/painel'}
+					class="text-sm text-mute transition hover:text-ink"
+				>
+					{sessao.usuario.tipo === 'admin' ? 'Moderação' : 'Painel'}
+				</a>
 				<button
 					type="button"
 					onclick={sair}

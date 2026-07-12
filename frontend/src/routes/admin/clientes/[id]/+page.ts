@@ -1,19 +1,15 @@
-import { redirect } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { ApiError } from '$lib/api/client';
 import { me } from '$lib/api/auth';
-import type { Bloco } from '$lib/api/availability';
+import { detalharCliente, type DetalheCliente } from '$lib/api/admin';
 import { sessao } from '$lib/stores/session.svelte';
+import type { PageLoad } from './$types';
 
 // O cookie de sessão é HttpOnly e a API vive em outra origem, então o SSR
 // nunca teria acesso a ele — a checagem de autenticação só pode rodar no browser.
 export const ssr = false;
 
-export async function load(): Promise<{
-	aceitaAgendamentos: boolean;
-	descansoMinutos: number;
-	duracaoAtendimentoMinutos: number;
-	horariosPadrao: Bloco[];
-}> {
+export const load: PageLoad = async ({ params }): Promise<{ cliente: DetalheCliente }> => {
 	let usuario;
 	try {
 		usuario = await me();
@@ -27,14 +23,17 @@ export async function load(): Promise<{
 
 	sessao.definir(usuario);
 
-	if (usuario.tipo !== 'provider') {
+	if (usuario.tipo !== 'admin') {
 		throw redirect(302, '/painel');
 	}
 
-	return {
-		aceitaAgendamentos: usuario.aceitaAgendamentos ?? false,
-		descansoMinutos: usuario.descansoMinutos ?? 0,
-		duracaoAtendimentoMinutos: usuario.duracaoAtendimentoMinutos ?? 60,
-		horariosPadrao: usuario.horariosPadrao ?? []
-	};
-}
+	try {
+		const cliente = await detalharCliente(params.id);
+		return { cliente };
+	} catch (e) {
+		if (e instanceof ApiError && e.status === 404) {
+			throw error(404, 'Cliente não encontrado');
+		}
+		throw e;
+	}
+};

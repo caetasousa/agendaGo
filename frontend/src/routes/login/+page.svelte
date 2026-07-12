@@ -1,7 +1,19 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { ApiError } from '$lib/api/client';
-	import { login } from '$lib/api/auth';
+	import { login, me } from '$lib/api/auth';
+	import { sessao } from '$lib/stores/session.svelte';
+
+	// destinoAposLogin honra ?voltar= (ex: link público de agendamento), mas só
+	// para caminhos internos — nunca URLs absolutas, para evitar open redirect.
+	// Admin vai sempre ao seu painel de moderação, ignorando o ?voltar= (que é
+	// do fluxo de agendamento de cliente).
+	function destinoAposLogin(tipo: string): string {
+		if (tipo === 'admin') return '/admin';
+		const voltar = page.url.searchParams.get('voltar');
+		return voltar && voltar.startsWith('/') && !voltar.startsWith('//') ? voltar : '/painel';
+	}
 
 	let email = $state('');
 	let senha = $state('');
@@ -15,8 +27,11 @@
 		enviando = true;
 
 		try {
-			await login({ email, senha });
-			goto('/painel');
+			const usuario = await login({ email, senha });
+			// popula a sessão antes de navegar: o destino pode ser uma página
+			// pública (ex: link de agendamento) que não tem guard para fazê-lo
+			sessao.definir(await me());
+			goto(destinoAposLogin(usuario.tipo));
 		} catch (e) {
 			erro = e instanceof ApiError ? e.message : 'Não foi possível entrar.';
 		} finally {
@@ -80,7 +95,10 @@
 
 		<p class="mt-6 text-sm text-body">
 			Ainda não tem conta?
-			<a href="/cadastro" class="font-medium text-ink underline">Cadastre-se</a>
+			<a
+				href="/cadastro{page.url.searchParams.get('voltar') ? `?voltar=${encodeURIComponent(page.url.searchParams.get('voltar') ?? '')}` : ''}"
+				class="font-medium text-ink underline">Cadastre-se</a
+			>
 		</p>
 	</div>
 </div>
