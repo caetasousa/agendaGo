@@ -23,9 +23,9 @@ async function cadastrarPrestador(page: Page, prefixo: string) {
 // ativar em Preferências.
 async function ativarAgenda(page: Page) {
 	await page.goto('/painel/preferencias');
-	await page.check('#aceita-agendamentos');
-	await page.click('button:has-text("Salvar")');
-	await expect(page.getByText('Preferências salvas.')).toBeVisible();
+	await page.click('label[for="aceita-agendamentos"]');
+	await page.click('button:has-text("Salvar alterações")');
+	await expect(page.getByText('Salvo', { exact: true })).toBeVisible();
 }
 
 async function irParaDisponibilidade(page: Page) {

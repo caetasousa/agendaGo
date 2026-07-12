@@ -13,11 +13,11 @@ test('prestador acessa preferências, salva e vê o banner de sucesso', async ({
 	await page.click('a:has-text("Preferências")');
 	await page.waitForURL('/painel/preferencias');
 
-	await page.check('#aceita-agendamentos');
+	await page.click('label[for="aceita-agendamentos"]');
 	await page.fill('#descanso-minutos', '15');
 	await page.click('button[type="submit"]');
 
-	await expect(page.getByText('Preferências salvas.')).toBeVisible();
+	await expect(page.getByText('Salvo', { exact: true })).toBeVisible();
 	await expect(page.locator('#aceita-agendamentos')).toBeChecked();
 	await expect(page.locator('#descanso-minutos')).toHaveValue('15');
 });
@@ -41,7 +41,7 @@ test('prestador começa com o expediente comercial sugerido e pode editá-lo', a
 	await expect(seletoresHorario).toHaveCount(2);
 
 	await page.click('button[type="submit"]');
-	await expect(page.getByText('Preferências salvas.')).toBeVisible();
+	await expect(page.getByText('Salvo', { exact: true })).toBeVisible();
 
 	await page.reload({ waitUntil: 'networkidle' });
 	await expect(page.locator('select')).toHaveCount(2);
@@ -76,7 +76,7 @@ test('prestador define três períodos curtos no expediente padrão', async ({ p
 	}
 
 	await page.click('button[type="submit"]');
-	await expect(page.getByText('Preferências salvas.')).toBeVisible();
+	await expect(page.getByText('Salvo', { exact: true })).toBeVisible();
 	await expect(page.locator('select')).toHaveCount(6);
 
 	await page.reload({ waitUntil: 'networkidle' });
@@ -97,14 +97,14 @@ test('expediente padrão configurado aparece no calendário de disponibilidade',
 	await page.waitForURL('/painel');
 
 	await page.goto('/painel/preferencias');
-	await page.check('#aceita-agendamentos');
+	await page.click('label[for="aceita-agendamentos"]');
 	// mantém só a manhã, editada para 09:00-11:00
 	await page.locator('button:has-text("Remover")').last().click();
 	const seletoresHorario = page.locator('select');
 	await seletoresHorario.first().selectOption('09:00');
 	await seletoresHorario.last().selectOption('11:00');
 	await page.click('button[type="submit"]');
-	await expect(page.getByText('Preferências salvas.')).toBeVisible();
+	await expect(page.getByText('Salvo', { exact: true })).toBeVisible();
 
 	await page.goto('/painel/disponibilidade');
 	await page.waitForSelector('button[data-data]');

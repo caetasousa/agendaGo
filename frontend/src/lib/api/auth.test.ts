@@ -36,8 +36,22 @@ describe('login (unificado)', () => {
 		expect(fn.mock.calls[1][0]).toContain('/auth/client/login');
 	});
 
-	it('propaga o erro quando nem prestador nem cliente autenticam', async () => {
+	it('cai para admin quando prestador e cliente retornam 401', async () => {
+		const fn = mockFetchSequence(
+			new Response(JSON.stringify({ erro: 'credenciais inválidas' }), { status: 401 }),
+			new Response(JSON.stringify({ erro: 'credenciais inválidas' }), { status: 401 }),
+			new Response(JSON.stringify({ id: '3', nome: 'Admin', tipo: 'admin' }), { status: 200 })
+		);
+		const resultado = await login({ email: 'admin@agendago.dev', senha: '12345678' });
+
+		expect(resultado.tipo).toBe('admin');
+		expect(fn).toHaveBeenCalledTimes(3);
+		expect(fn.mock.calls[2][0]).toContain('/auth/admin/login');
+	});
+
+	it('propaga o 401 quando nenhum dos três tipos autentica', async () => {
 		mockFetchSequence(
+			new Response(JSON.stringify({ erro: 'credenciais inválidas' }), { status: 401 }),
 			new Response(JSON.stringify({ erro: 'credenciais inválidas' }), { status: 401 }),
 			new Response(JSON.stringify({ erro: 'credenciais inválidas' }), { status: 401 })
 		);
@@ -47,7 +61,18 @@ describe('login (unificado)', () => {
 		});
 	});
 
-	it('não tenta login de cliente quando o erro do prestador não é 401', async () => {
+	it('para no 403 (usuário banido) sem tentar os próximos tipos', async () => {
+		const fn = mockFetchSequence(
+			new Response(JSON.stringify({ erro: 'usuário desativado' }), { status: 403 })
+		);
+
+		await expect(login({ email: 'banido@email.com', senha: '12345678' })).rejects.toMatchObject({
+			status: 403
+		});
+		expect(fn).toHaveBeenCalledTimes(1);
+	});
+
+	it('não tenta os próximos quando o erro do prestador não é 401', async () => {
 		const fn = mockFetchSequence(
 			new Response(JSON.stringify({ erro: 'erro interno' }), { status: 500 })
 		);
