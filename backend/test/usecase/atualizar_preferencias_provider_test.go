@@ -22,7 +22,8 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 		uc := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
 
 		out, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
-			ProviderID:         "provider-1",
+			ProviderID:                "provider-1",
+			DuracaoAtendimentoMinutos: 60,
 			AceitaAgendamentos: true,
 			DescansoMinutos:    15,
 		})
@@ -49,7 +50,8 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 		uc := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
 
 		out, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
-			ProviderID:         "provider-1",
+			ProviderID:                "provider-1",
+			DuracaoAtendimentoMinutos: 60,
 			AceitaAgendamentos: false,
 			DescansoMinutos:    0,
 		})
@@ -67,7 +69,8 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 		uc := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
 
 		_, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
-			ProviderID:         "provider-1",
+			ProviderID:                "provider-1",
+			DuracaoAtendimentoMinutos: 60,
 			AceitaAgendamentos: true,
 			DescansoMinutos:    -1,
 		})
@@ -81,7 +84,8 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 		uc := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
 
 		_, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
-			ProviderID:         "id-inexistente",
+			ProviderID:                "id-inexistente",
+			DuracaoAtendimentoMinutos: 60,
 			AceitaAgendamentos: true,
 			DescansoMinutos:    0,
 		})
@@ -96,7 +100,8 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 		uc := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
 
 		out, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
-			ProviderID:         "provider-1",
+			ProviderID:                "provider-1",
+			DuracaoAtendimentoMinutos: 60,
 			AceitaAgendamentos: true,
 			DescansoMinutos:    15,
 			HorariosPadrao: []ucprovider.BlocoInput{
@@ -124,7 +129,8 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 		uc := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
 
 		out, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
-			ProviderID:         "provider-1",
+			ProviderID:                "provider-1",
+			DuracaoAtendimentoMinutos: 60,
 			AceitaAgendamentos: false,
 			DescansoMinutos:    0,
 			HorariosPadrao:     nil,
@@ -143,7 +149,8 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 		uc := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
 
 		_, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
-			ProviderID:         "provider-1",
+			ProviderID:                "provider-1",
+			DuracaoAtendimentoMinutos: 60,
 			AceitaAgendamentos: true,
 			DescansoMinutos:    0,
 			HorariosPadrao:     []ucprovider.BlocoInput{{InicioMinutos: 12 * 60, FimMinutos: 8 * 60}},
@@ -159,7 +166,8 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 		uc := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
 
 		_, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
-			ProviderID:         "provider-1",
+			ProviderID:                "provider-1",
+			DuracaoAtendimentoMinutos: 60,
 			AceitaAgendamentos: true,
 			DescansoMinutos:    0,
 			HorariosPadrao: []ucprovider.BlocoInput{

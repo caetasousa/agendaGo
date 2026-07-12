@@ -52,7 +52,7 @@ func novoRouterAvailability(t *testing.T) *chi.Mux {
 	removerDia := ucavailability.NovoRemoverDiaUseCase(availabilityRepo)
 
 	availabilityHandler := handler.NovoAvailabilityHandler(consultarAgenda, definirDia, removerDia, identidadeDoContexto)
-	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, nil, nil, false, identidadeDoContexto)
+	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, nil, nil, nil, false, identidadeDoContexto)
 	authMw := middleware.NovoAuth(validarSessao)
 
 	router := chi.NewRouter()

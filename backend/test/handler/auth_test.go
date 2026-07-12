@@ -40,12 +40,12 @@ func novoRouterAuth(t *testing.T) (*chi.Mux, *provider.Provider, *client.Client)
 	loginClient := ucauth.NovoLoginClientUseCase(clientRepo, sessionRepo, hasher)
 	logout := ucauth.NovoLogoutUseCase(sessionRepo)
 	validarSessao := ucauth.NovoValidarSessaoUseCase(sessionRepo)
-	perfil := ucauth.NovoPerfilUseCase(providerRepo, clientRepo)
+	perfil := ucauth.NovoPerfilUseCase(providerRepo, clientRepo, repository.NovoAdminMemoria())
 
 	identidadeDoContexto := func(r *http.Request) (ucauth.Identidade, bool) {
 		return middleware.IdentidadeDoContexto(r.Context())
 	}
-	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, logout, perfil, false, identidadeDoContexto)
+	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, nil, logout, perfil, false, identidadeDoContexto)
 	authMw := middleware.NovoAuth(validarSessao)
 
 	r := chi.NewRouter()

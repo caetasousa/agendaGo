@@ -69,7 +69,7 @@ func TestLoginClient(t *testing.T) {
 	hasher := security.NovoHasherArgon2id()
 	senhaHash, _ := hasher.Gerar("12345678")
 	comConta, _ := client.NovoComConta("client-1", "Maria Silva", "maria@email.com", senhaHash)
-	convidado, _ := client.NovoConvidado("client-2", "Convidado", "convidado@email.com")
+	convidado, _ := client.NovoConvidado("client-2", "Convidado", "convidado@email.com", "11999998888")
 
 	novoAmbiente := func() *ucauth.LoginClientUseCase {
 		clients := repository.NovoClientMemoria()
@@ -156,7 +156,7 @@ func TestPerfil(t *testing.T) {
 		providers.Salvar(p)
 		clients := repository.NovoClientMemoria()
 		clients.Salvar(c)
-		return ucauth.NovoPerfilUseCase(providers, clients)
+		return ucauth.NovoPerfilUseCase(providers, clients, repository.NovoAdminMemoria())
 	}
 
 	t.Run("devolve perfil do prestador", func(t *testing.T) {

@@ -136,3 +136,43 @@ func TestDefinirHorariosPadrao(t *testing.T) {
 		}
 	})
 }
+
+func TestDefinirDuracaoAtendimento(t *testing.T) {
+	t.Run("inicia com 60 minutos e aceita nova duração válida", func(t *testing.T) {
+		p, _ := provider.Novo("1", "João Silva", "joao@email.com", "12345678")
+		if p.DuracaoAtendimentoMinutos != 60 {
+			t.Errorf("esperava duração inicial de 60, got: %d", p.DuracaoAtendimentoMinutos)
+		}
+		if err := p.DefinirDuracaoAtendimento(45); err != nil {
+			t.Fatalf("esperava sucesso, got: %v", err)
+		}
+		if p.DuracaoAtendimentoMinutos != 45 {
+			t.Errorf("esperava 45, got: %d", p.DuracaoAtendimentoMinutos)
+		}
+	})
+
+	t.Run("rejeita duração fora de [15, 1440]", func(t *testing.T) {
+		p, _ := provider.Novo("1", "João Silva", "joao@email.com", "12345678")
+		if err := p.DefinirDuracaoAtendimento(10); err != provider.ErrDuracaoInvalida {
+			t.Errorf("esperava ErrDuracaoInvalida, got: %v", err)
+		}
+		if err := p.DefinirDuracaoAtendimento(1500); err != provider.ErrDuracaoInvalida {
+			t.Errorf("esperava ErrDuracaoInvalida, got: %v", err)
+		}
+	})
+}
+
+func TestBanirReativarProvider(t *testing.T) {
+	p, _ := provider.Novo("1", "João Silva", "joao@email.com", "12345678")
+	if !p.Ativo {
+		t.Fatal("prestador deve nascer ativo")
+	}
+	p.Banir()
+	if p.Ativo {
+		t.Error("esperava prestador inativo após banir")
+	}
+	p.Reativar()
+	if !p.Ativo {
+		t.Error("esperava prestador ativo após reativar")
+	}
+}

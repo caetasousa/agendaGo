@@ -34,7 +34,7 @@ func TestClientPostgres(t *testing.T) {
 	})
 
 	t.Run("salva e busca client convidado com senha_hash NULL", func(t *testing.T) {
-		c, _ := client.NovoConvidado("55555555-5555-5555-5555-555555555555", "Convidado", "convidado@email.com")
+		c, _ := client.NovoConvidado("55555555-5555-5555-5555-555555555555", "Convidado", "convidado@email.com", "11999998888")
 		if err := repo.Salvar(c); err != nil {
 			t.Fatalf("esperava sucesso ao salvar, got: %v", err)
 		}
@@ -52,6 +52,9 @@ func TestClientPostgres(t *testing.T) {
 		if encontrado.SenhaHash != "" {
 			t.Errorf("esperava SenhaHash vazio, got: %s", encontrado.SenhaHash)
 		}
+		if encontrado.Telefone != "11999998888" {
+			t.Errorf("esperava o telefone do convidado persistido, got: %s", encontrado.Telefone)
+		}
 	})
 
 	t.Run("retorna (nil, nil) quando email não existe", func(t *testing.T) {
@@ -65,8 +68,8 @@ func TestClientPostgres(t *testing.T) {
 	})
 
 	t.Run("falha ao salvar email duplicado (constraint UNIQUE)", func(t *testing.T) {
-		c1, _ := client.NovoConvidado("66666666-6666-6666-6666-666666666666", "Ana", "ana-client@email.com")
-		c2, _ := client.NovoConvidado("77777777-7777-7777-7777-777777777777", "Ana Duplicada", "ana-client@email.com")
+		c1, _ := client.NovoConvidado("66666666-6666-6666-6666-666666666666", "Ana", "ana-client@email.com", "11999998888")
+		c2, _ := client.NovoConvidado("77777777-7777-7777-7777-777777777777", "Ana Duplicada", "ana-client@email.com", "11999998888")
 
 		if err := repo.Salvar(c1); err != nil {
 			t.Fatalf("esperava sucesso no primeiro salvar, got: %v", err)
