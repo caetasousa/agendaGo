@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="pt-BR">
+<body style="font-family: sans-serif; color: #222;">
+  <p>Olá, {{.NomePrestador}}.</p>
+  <p><strong>{{.NomeCliente}}</strong> solicitou um horário com você:</p>
+  <p><strong>{{.Data}} às {{.Horario}}</strong></p>
+  <p>Você tem até {{.ExpiraEm}} para confirmar ou recusar, ou a solicitação expira automaticamente.</p>
+  <p>
+    <a href="{{.Link}}" style="background: #2563eb; color: #fff; padding: 10px 18px; border-radius: 6px; text-decoration: none;">
+      Ver solicitação
+    </a>
+  </p>
+</body>
+</html>

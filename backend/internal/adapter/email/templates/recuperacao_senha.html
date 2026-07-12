@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="pt-BR">
+<body style="font-family: sans-serif; color: #222;">
+  <p>Olá, {{.Nome}}.</p>
+  <p>Recebemos um pedido para redefinir a senha da sua conta no agendaGo.</p>
+  <p>
+    <a href="{{.Link}}" style="background: #2563eb; color: #fff; padding: 10px 18px; border-radius: 6px; text-decoration: none;">
+      Redefinir senha
+    </a>
+  </p>
+  <p>Este link expira em {{.ExpiraEmMinutos}} minutos e só pode ser usado uma vez.</p>
+  <p>Se você não pediu essa redefinição, pode ignorar este email — sua senha continua a mesma.</p>
+</body>
+</html>
