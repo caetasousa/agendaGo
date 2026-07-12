@@ -37,6 +37,9 @@ func (uc *LoginProviderUseCase) Executar(input LoginInput) (*LoginOutput, error)
 	if !ok {
 		return nil, ErrCredenciaisInvalidas
 	}
+	if !p.Ativo {
+		return nil, ErrUsuarioInativo
+	}
 
 	t, err := token.Gerar()
 	if err != nil {

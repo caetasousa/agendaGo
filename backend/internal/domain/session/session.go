@@ -10,6 +10,8 @@ const (
 	TipoProvider TipoUsuario = "provider"
 	// TipoClient identifica uma sessão de cliente.
 	TipoClient TipoUsuario = "client"
+	// TipoAdmin identifica uma sessão de administrador (moderação).
+	TipoAdmin TipoUsuario = "admin"
 )
 
 // Session representa uma sessão autenticada. Guarda apenas o hash do token —

@@ -18,6 +18,7 @@ import (
 type AuthHandler struct {
 	loginProvider        *ucauth.LoginProviderUseCase
 	loginClient          *ucauth.LoginClientUseCase
+	loginAdmin           *ucauth.LoginAdminUseCase
 	logout               *ucauth.LogoutUseCase
 	perfil               *ucauth.PerfilUseCase
 	cookieSeguro         bool
@@ -29,6 +30,7 @@ type AuthHandler struct {
 func NovoAuthHandler(
 	loginProvider *ucauth.LoginProviderUseCase,
 	loginClient *ucauth.LoginClientUseCase,
+	loginAdmin *ucauth.LoginAdminUseCase,
 	logout *ucauth.LogoutUseCase,
 	perfil *ucauth.PerfilUseCase,
 	cookieSeguro bool,
@@ -37,6 +39,7 @@ func NovoAuthHandler(
 	return &AuthHandler{
 		loginProvider:        loginProvider,
 		loginClient:          loginClient,
+		loginAdmin:           loginAdmin,
 		logout:               logout,
 		perfil:               perfil,
 		cookieSeguro:         cookieSeguro,
@@ -100,6 +103,34 @@ func (h *AuthHandler) LoginClient(w http.ResponseWriter, r *http.Request) {
 	responderJSON(w, http.StatusOK, dto.LoginResponse{ID: out.UserID, Nome: out.Nome, Tipo: "client"})
 }
 
+// LoginAdmin godoc
+//
+//	@Summary		Login do administrador
+//	@Description	Autentica um administrador e inicia uma sessão
+//	@Tags			auth
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		dto.LoginRequest	true	"Credenciais"
+//	@Success		200		{object}	dto.LoginResponse
+//	@Failure		400		{object}	map[string]string
+//	@Failure		401		{object}	map[string]string
+//	@Router			/auth/admin/login [post]
+func (h *AuthHandler) LoginAdmin(w http.ResponseWriter, r *http.Request) {
+	req, ok := decodificarLogin(w, r)
+	if !ok {
+		return
+	}
+
+	out, err := h.loginAdmin.Executar(ucauth.LoginInput{Email: req.Email, Senha: req.Senha})
+	if err != nil {
+		responderErroLogin(w, err)
+		return
+	}
+
+	http.SetCookie(w, novoCookieSessao(out.Token, out.ExpiraEm, h.cookieSeguro))
+	responderJSON(w, http.StatusOK, dto.LoginResponse{ID: out.UserID, Nome: out.Nome, Tipo: "admin"})
+}
+
 // Logout godoc
 //
 //	@Summary		Logout
@@ -138,13 +169,14 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	}
 
 	responderJSON(w, http.StatusOK, dto.MeResponse{
-		ID:                 perfil.ID,
-		Nome:               perfil.Nome,
-		Email:              perfil.Email,
-		Tipo:               perfil.Tipo,
-		AceitaAgendamentos: perfil.AceitaAgendamentos,
-		DescansoMinutos:    perfil.DescansoMinutos,
-		HorariosPadrao:     blocosParaDTO(perfil.HorariosPadrao),
+		ID:                        perfil.ID,
+		Nome:                      perfil.Nome,
+		Email:                     perfil.Email,
+		Tipo:                      perfil.Tipo,
+		AceitaAgendamentos:        perfil.AceitaAgendamentos,
+		DescansoMinutos:           perfil.DescansoMinutos,
+		DuracaoAtendimentoMinutos: perfil.DuracaoAtendimentoMinutos,
+		HorariosPadrao:            blocosParaDTO(perfil.HorariosPadrao),
 	})
 }
 
@@ -172,6 +204,8 @@ func responderErroLogin(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ucauth.ErrCredenciaisInvalidas):
 		responderErro(w, http.StatusUnauthorized, err.Error())
+	case errors.Is(err, ucauth.ErrUsuarioInativo):
+		responderErro(w, http.StatusForbidden, err.Error())
 	default:
 		responderErro(w, http.StatusInternalServerError, "erro interno")
 	}

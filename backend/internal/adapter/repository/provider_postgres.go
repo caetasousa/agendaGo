@@ -32,9 +32,9 @@ func (r *ProviderPostgres) Salvar(p *provider.Provider) error {
 	defer tx.Rollback(ctx)
 
 	_, err = tx.Exec(ctx,
-		`INSERT INTO providers (id, nome, email, senha_hash, aceita_agendamentos, descanso_minutos)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		p.ID, p.Nome, p.Email, p.SenhaHash, p.AceitaAgendamentos, p.DescansoMinutos,
+		`INSERT INTO providers (id, nome, email, senha_hash, ativo, aceita_agendamentos, descanso_minutos, duracao_atendimento_minutos)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		p.ID, p.Nome, p.Email, p.SenhaHash, p.Ativo, p.AceitaAgendamentos, p.DescansoMinutos, p.DuracaoAtendimentoMinutos,
 	)
 	if err != nil {
 		return err
@@ -53,11 +53,11 @@ func (r *ProviderPostgres) BuscarPorEmail(email string) (*provider.Provider, err
 	ctx := context.Background()
 	var p provider.Provider
 	err := r.pool.QueryRow(ctx,
-		`SELECT id, nome, email, senha_hash, aceita_agendamentos, descanso_minutos, criado_em, atualizado_em
+		`SELECT id, nome, email, senha_hash, ativo, aceita_agendamentos, descanso_minutos, duracao_atendimento_minutos, criado_em, atualizado_em
 		 FROM providers WHERE email = $1`, email,
 	).Scan(
-		&p.ID, &p.Nome, &p.Email, &p.SenhaHash, &p.AceitaAgendamentos,
-		&p.DescansoMinutos, &p.CriadoEm, &p.AtualizadoEm,
+		&p.ID, &p.Nome, &p.Email, &p.SenhaHash, &p.Ativo, &p.AceitaAgendamentos,
+		&p.DescansoMinutos, &p.DuracaoAtendimentoMinutos, &p.CriadoEm, &p.AtualizadoEm,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -83,9 +83,9 @@ func (r *ProviderPostgres) Atualizar(p *provider.Provider) error {
 
 	_, err = tx.Exec(ctx,
 		`UPDATE providers
-		 SET aceita_agendamentos = $2, descanso_minutos = $3, atualizado_em = $4
+		 SET ativo = $2, aceita_agendamentos = $3, descanso_minutos = $4, duracao_atendimento_minutos = $5, atualizado_em = $6
 		 WHERE id = $1`,
-		p.ID, p.AceitaAgendamentos, p.DescansoMinutos, p.AtualizadoEm,
+		p.ID, p.Ativo, p.AceitaAgendamentos, p.DescansoMinutos, p.DuracaoAtendimentoMinutos, p.AtualizadoEm,
 	)
 	if err != nil {
 		return err
@@ -107,11 +107,11 @@ func (r *ProviderPostgres) BuscarPorID(id string) (*provider.Provider, error) {
 	ctx := context.Background()
 	var p provider.Provider
 	err := r.pool.QueryRow(ctx,
-		`SELECT id, nome, email, senha_hash, aceita_agendamentos, descanso_minutos, criado_em, atualizado_em
+		`SELECT id, nome, email, senha_hash, ativo, aceita_agendamentos, descanso_minutos, duracao_atendimento_minutos, criado_em, atualizado_em
 		 FROM providers WHERE id = $1`, id,
 	).Scan(
-		&p.ID, &p.Nome, &p.Email, &p.SenhaHash, &p.AceitaAgendamentos,
-		&p.DescansoMinutos, &p.CriadoEm, &p.AtualizadoEm,
+		&p.ID, &p.Nome, &p.Email, &p.SenhaHash, &p.Ativo, &p.AceitaAgendamentos,
+		&p.DescansoMinutos, &p.DuracaoAtendimentoMinutos, &p.CriadoEm, &p.AtualizadoEm,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -158,4 +158,30 @@ func salvarHorariosPadrao(ctx context.Context, tx pgx.Tx, providerID string, blo
 		}
 	}
 	return nil
+}
+
+// Listar devolve todos os prestadores, ordenados por nome, para a vitrine de
+// agendamento. HorariosPadrao não é carregado — a listagem só precisa de
+// identificação.
+func (r *ProviderPostgres) Listar() ([]*provider.Provider, error) {
+	rows, err := r.pool.Query(context.Background(),
+		`SELECT id, nome, email, senha_hash, ativo, aceita_agendamentos, descanso_minutos, duracao_atendimento_minutos, criado_em, atualizado_em
+		 FROM providers ORDER BY nome`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var todos []*provider.Provider
+	for rows.Next() {
+		var p provider.Provider
+		if err := rows.Scan(
+			&p.ID, &p.Nome, &p.Email, &p.SenhaHash, &p.Ativo, &p.AceitaAgendamentos,
+			&p.DescansoMinutos, &p.DuracaoAtendimentoMinutos, &p.CriadoEm, &p.AtualizadoEm,
+		); err != nil {
+			return nil, err
+		}
+		todos = append(todos, &p)
+	}
+	return todos, rows.Err()
 }

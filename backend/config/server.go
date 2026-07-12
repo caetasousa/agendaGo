@@ -24,6 +24,11 @@ func CookieSeguro() bool {
 	return os.Getenv("APP_ENV") == "production"
 }
 
+// AdminEmail e AdminSenha são as credenciais do administrador semeado no boot.
+// Vazias significam "sem admin" — nenhuma conta de moderação é criada.
+func AdminEmail() string { return os.Getenv("ADMIN_EMAIL") }
+func AdminSenha() string { return os.Getenv("ADMIN_SENHA") }
+
 // Servidor encapsula o http.Server com as configurações do projeto.
 type Servidor struct {
 	http.Server

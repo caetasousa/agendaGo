@@ -1,0 +1,63 @@
+package appointment
+
+import (
+	"time"
+
+	"agendago/internal/domain/client"
+
+	"github.com/google/uuid"
+)
+
+// SolicitarConvidadoInput contém os dados do agendamento feito sem cadastro:
+// além do slot, o nome/email/telefone de contato do convidado.
+type SolicitarConvidadoInput struct {
+	ProviderID    string
+	Data          time.Time
+	InicioMinutos int
+	Nome          string
+	Email         string
+	Telefone      string
+	Agora         time.Time
+}
+
+// SolicitarConvidadoUseCase cria (ou reusa) um cliente convidado a partir dos
+// dados informados e solicita o agendamento. Reaproveita a barreira
+// anti-overbooking de SolicitarUseCase.
+type SolicitarConvidadoUseCase struct {
+	solicitar  *SolicitarUseCase
+	clientRepo repositorioClient
+}
+
+// NovoSolicitarConvidadoUseCase cria uma instância de SolicitarConvidadoUseCase com as dependências injetadas.
+func NovoSolicitarConvidadoUseCase(solicitar *SolicitarUseCase, clientRepo repositorioClient) *SolicitarConvidadoUseCase {
+	return &SolicitarConvidadoUseCase{solicitar: solicitar, clientRepo: clientRepo}
+}
+
+// Executar resolve o cliente do agendamento e reserva o slot. Se já existe um
+// cliente com o email informado (convidado anterior ou conta), reusa esse
+// cliente — banido não pode agendar. Caso contrário cria um convidado novo.
+func (uc *SolicitarConvidadoUseCase) Executar(in SolicitarConvidadoInput) (*SolicitarOutput, error) {
+	existente, err := uc.clientRepo.BuscarPorEmail(in.Email)
+	if err != nil {
+		return nil, err
+	}
+
+	var clientID string
+	if existente != nil {
+		if !existente.Ativo {
+			return nil, ErrClientInativo
+		}
+		clientID = existente.ID
+	} else {
+		convidado, err := client.NovoConvidado(uuid.NewString(), in.Nome, in.Email, in.Telefone)
+		if err != nil {
+			return nil, err
+		}
+		if err := uc.clientRepo.Salvar(convidado); err != nil {
+			return nil, err
+		}
+		clientID = convidado.ID
+	}
+
+	return uc.solicitar.reservar(in.ProviderID, clientID, in.Data, in.InicioMinutos, in.Agora)
+}

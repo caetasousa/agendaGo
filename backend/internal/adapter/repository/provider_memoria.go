@@ -55,3 +55,14 @@ func (r *ProviderMemoria) Atualizar(p *provider.Provider) error {
 	r.dados[p.ID] = p
 	return nil
 }
+
+// Listar devolve todos os prestadores, para a vitrine de agendamento.
+func (r *ProviderMemoria) Listar() ([]*provider.Provider, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var todos []*provider.Provider
+	for _, p := range r.dados {
+		todos = append(todos, p)
+	}
+	return todos, nil
+}

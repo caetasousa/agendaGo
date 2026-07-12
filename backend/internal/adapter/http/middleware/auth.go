@@ -57,6 +57,12 @@ func ExigirClient(next http.Handler) http.Handler {
 	return exigirTipo(session.TipoClient, next)
 }
 
+// ExigirAdmin responde 403 se o usuário autenticado não for administrador.
+// Deve ser encadeado depois de Autenticar.
+func ExigirAdmin(next http.Handler) http.Handler {
+	return exigirTipo(session.TipoAdmin, next)
+}
+
 func exigirTipo(tipo session.TipoUsuario, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id, ok := IdentidadeDoContexto(r.Context())

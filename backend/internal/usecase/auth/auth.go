@@ -14,6 +14,9 @@ import (
 // emails estão cadastrados.
 var ErrCredenciaisInvalidas = errors.New("credenciais inválidas")
 
+// ErrUsuarioInativo é retornado quando um usuário banido pelo admin tenta logar.
+var ErrUsuarioInativo = errors.New("usuário desativado")
+
 // ErrSessaoInvalida é retornado quando o token não corresponde a nenhuma
 // sessão ativa ou a sessão já expirou.
 var ErrSessaoInvalida = errors.New("sessão inválida")

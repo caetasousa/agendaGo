@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"agendago/internal/domain/admin"
 	"agendago/internal/domain/client"
 	"agendago/internal/domain/provider"
 	"agendago/internal/domain/session"
@@ -21,6 +22,11 @@ type buscadorProvider interface {
 type buscadorClient interface {
 	BuscarPorEmail(email string) (*client.Client, error)
 	BuscarPorID(id string) (*client.Client, error)
+}
+
+type buscadorAdmin interface {
+	BuscarPorEmail(email string) (*admin.Admin, error)
+	BuscarPorID(id string) (*admin.Admin, error)
 }
 
 // hasherSenha gera e verifica hashes de senha.

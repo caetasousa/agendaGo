@@ -13,6 +13,7 @@ import (
 	ucauth "agendago/internal/usecase/auth"
 	ucprovider "agendago/internal/usecase/provider"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 )
 
@@ -23,17 +24,23 @@ import (
 type ProviderHandler struct {
 	cadastrar             *ucprovider.CadastrarUseCase
 	atualizarPreferencias *ucprovider.AtualizarPreferenciasUseCase
+	listar                *ucprovider.ListarUseCase
+	buscarResumo          *ucprovider.BuscarResumoUseCase
 	identidadeDoContexto  func(r *http.Request) (ucauth.Identidade, bool)
 }
 
 func NovoProviderHandler(
 	cadastrar *ucprovider.CadastrarUseCase,
 	atualizarPreferencias *ucprovider.AtualizarPreferenciasUseCase,
+	listar *ucprovider.ListarUseCase,
+	buscarResumo *ucprovider.BuscarResumoUseCase,
 	identidadeDoContexto func(r *http.Request) (ucauth.Identidade, bool),
 ) *ProviderHandler {
 	return &ProviderHandler{
 		cadastrar:             cadastrar,
 		atualizarPreferencias: atualizarPreferencias,
+		listar:                listar,
+		buscarResumo:          buscarResumo,
 		identidadeDoContexto:  identidadeDoContexto,
 	}
 }
@@ -132,14 +139,16 @@ func (h *ProviderHandler) AtualizarPreferencias(w http.ResponseWriter, r *http.R
 	}
 
 	output, err := h.atualizarPreferencias.Executar(ucprovider.AtualizarPreferenciasInput{
-		ProviderID:         id.UserID,
-		AceitaAgendamentos: req.AceitaAgendamentos,
-		DescansoMinutos:    req.DescansoMinutos,
-		HorariosPadrao:     horarios,
+		ProviderID:                id.UserID,
+		AceitaAgendamentos:        req.AceitaAgendamentos,
+		DescansoMinutos:           req.DescansoMinutos,
+		DuracaoAtendimentoMinutos: req.DuracaoAtendimentoMinutos,
+		HorariosPadrao:            horarios,
 	})
 	if err != nil {
 		switch {
 		case errors.Is(err, provider.ErrDescansoInvalido),
+			errors.Is(err, provider.ErrDuracaoInvalida),
 			errors.Is(err, availability.ErrFimAntesDoInicio),
 			errors.Is(err, availability.ErrForaDoDia),
 			errors.Is(err, availability.ErrGranularidadeInvalida),
@@ -154,9 +163,10 @@ func (h *ProviderHandler) AtualizarPreferencias(w http.ResponseWriter, r *http.R
 	}
 
 	responderJSON(w, http.StatusOK, dto.AtualizarPreferenciasResponse{
-		AceitaAgendamentos: output.AceitaAgendamentos,
-		DescansoMinutos:    output.DescansoMinutos,
-		HorariosPadrao:     blocosParaDTO(output.HorariosPadrao),
+		AceitaAgendamentos:        output.AceitaAgendamentos,
+		DescansoMinutos:           output.DescansoMinutos,
+		DuracaoAtendimentoMinutos: output.DuracaoAtendimentoMinutos,
+		HorariosPadrao:            blocosParaDTO(output.HorariosPadrao),
 	})
 }
 
@@ -190,4 +200,61 @@ func responderJSON(w http.ResponseWriter, status int, v any) {
 
 func responderErro(w http.ResponseWriter, status int, msg string) {
 	responderJSON(w, status, map[string]string{"erro": msg})
+}
+
+// Listar godoc
+//
+//	@Summary		Listar prestadores
+//	@Description	Lista todos os prestadores da vitrine; quem está com a agenda desativada aparece sem horários
+//	@Tags			providers
+//	@Produce		json
+//	@Success		200	{object}	dto.ListarPrestadoresResponse
+//	@Router			/providers [get]
+func (h *ProviderHandler) Listar(w http.ResponseWriter, r *http.Request) {
+	out, err := h.listar.Executar()
+	if err != nil {
+		responderErro(w, http.StatusInternalServerError, "erro interno")
+		return
+	}
+
+	prestadores := make([]dto.PrestadorResumoDTO, 0, len(out.Prestadores))
+	for _, p := range out.Prestadores {
+		prestadores = append(prestadores, resumoParaDTO(p))
+	}
+
+	responderJSON(w, http.StatusOK, dto.ListarPrestadoresResponse{Prestadores: prestadores})
+}
+
+// BuscarResumo godoc
+//
+//	@Summary		Buscar prestador
+//	@Description	Devolve a identificação pública de um prestador — usada pela página de agendamento acessada via link direto
+//	@Tags			providers
+//	@Produce		json
+//	@Param			id	path		string	true	"ID do prestador"
+//	@Success		200	{object}	dto.PrestadorResumoDTO
+//	@Failure		404	{object}	map[string]string
+//	@Router			/providers/{id} [get]
+func (h *ProviderHandler) BuscarResumo(w http.ResponseWriter, r *http.Request) {
+	resumo, err := h.buscarResumo.Executar(chi.URLParam(r, "id"))
+	if err != nil {
+		switch {
+		case errors.Is(err, ucprovider.ErrProviderNaoEncontrado):
+			responderErro(w, http.StatusNotFound, err.Error())
+		default:
+			responderErro(w, http.StatusInternalServerError, "erro interno")
+		}
+		return
+	}
+
+	responderJSON(w, http.StatusOK, resumoParaDTO(*resumo))
+}
+
+func resumoParaDTO(p ucprovider.PrestadorResumo) dto.PrestadorResumoDTO {
+	return dto.PrestadorResumoDTO{
+		ID:                        p.ID,
+		Nome:                      p.Nome,
+		DuracaoAtendimentoMinutos: p.DuracaoAtendimentoMinutos,
+		AceitaAgendamentos:        p.AceitaAgendamentos,
+	}
 }

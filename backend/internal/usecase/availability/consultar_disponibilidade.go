@@ -9,10 +9,10 @@ import (
 
 // blocosPadrao resolve o expediente default de uma data sem definição própria:
 // o expediente configurado em HorariosPadrao, aplicado em dias úteis quando o
-// prestador aceita agendamentos; vazio em fins de semana ou com a agenda
-// desativada.
+// prestador está ativo e aceita agendamentos; vazio em fins de semana, com a
+// agenda desativada ou com o prestador banido pelo admin.
 func blocosPadrao(p *provider.Provider, data time.Time) []availability.TimeBlock {
-	if !p.AceitaAgendamentos {
+	if !p.Ativo || !p.AceitaAgendamentos {
 		return nil
 	}
 	dia := availability.DiaSemanaDe(data)

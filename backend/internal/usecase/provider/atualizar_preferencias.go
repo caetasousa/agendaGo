@@ -18,17 +18,19 @@ type BlocoInput struct {
 // AtualizarPreferenciasInput contém as preferências a aplicar. ProviderID vem
 // da identidade da sessão autenticada, nunca do corpo da requisição.
 type AtualizarPreferenciasInput struct {
-	ProviderID         string
-	AceitaAgendamentos bool
-	DescansoMinutos    int
-	HorariosPadrao     []BlocoInput
+	ProviderID                string
+	AceitaAgendamentos        bool
+	DescansoMinutos           int
+	DuracaoAtendimentoMinutos int
+	HorariosPadrao            []BlocoInput
 }
 
 // AtualizarPreferenciasOutput contém as preferências após a atualização.
 type AtualizarPreferenciasOutput struct {
-	AceitaAgendamentos bool
-	DescansoMinutos    int
-	HorariosPadrao     []availability.TimeBlock
+	AceitaAgendamentos        bool
+	DescansoMinutos           int
+	DuracaoAtendimentoMinutos int
+	HorariosPadrao            []availability.TimeBlock
 }
 
 // AtualizarPreferenciasUseCase orquestra a atualização das preferências de um prestador.
@@ -63,6 +65,10 @@ func (uc *AtualizarPreferenciasUseCase) Executar(in AtualizarPreferenciasInput) 
 		return nil, err
 	}
 
+	if err := p.DefinirDuracaoAtendimento(in.DuracaoAtendimentoMinutos); err != nil {
+		return nil, err
+	}
+
 	blocos := make([]availability.TimeBlock, 0, len(in.HorariosPadrao))
 	for _, b := range in.HorariosPadrao {
 		bloco, err := availability.NovoTimeBlock(b.InicioMinutos, b.FimMinutos)
@@ -80,8 +86,9 @@ func (uc *AtualizarPreferenciasUseCase) Executar(in AtualizarPreferenciasInput) 
 	}
 
 	return &AtualizarPreferenciasOutput{
-		AceitaAgendamentos: p.AceitaAgendamentos,
-		DescansoMinutos:    p.DescansoMinutos,
-		HorariosPadrao:     p.HorariosPadrao,
+		AceitaAgendamentos:        p.AceitaAgendamentos,
+		DescansoMinutos:           p.DescansoMinutos,
+		DuracaoAtendimentoMinutos: p.DuracaoAtendimentoMinutos,
+		HorariosPadrao:            p.HorariosPadrao,
 	}, nil
 }

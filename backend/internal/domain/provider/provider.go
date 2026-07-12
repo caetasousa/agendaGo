@@ -8,16 +8,21 @@ import (
 )
 
 // Provider representa um prestador de serviço no sistema de agendamento.
+// Ativo distingue banimento (moderação pelo admin) de AceitaAgendamentos
+// (escolha do próprio prestador): um prestador inativo não loga, some da
+// vitrine e não oferta horários, mesmo com a agenda ativada.
 type Provider struct {
-	ID                 string
-	Nome               string
-	Email              string
-	SenhaHash          string
-	AceitaAgendamentos bool
-	DescansoMinutos    int
-	HorariosPadrao     []availability.TimeBlock
-	CriadoEm           time.Time
-	AtualizadoEm       time.Time
+	ID                        string
+	Nome                      string
+	Email                     string
+	SenhaHash                 string
+	Ativo                     bool
+	AceitaAgendamentos        bool
+	DescansoMinutos           int
+	DuracaoAtendimentoMinutos int
+	HorariosPadrao            []availability.TimeBlock
+	CriadoEm                  time.Time
+	AtualizadoEm              time.Time
 }
 
 var (
@@ -29,6 +34,8 @@ var (
 	ErrSenhaObrigatoria = errors.New("senha é obrigatória")
 	// ErrDescansoInvalido é retornado quando o tempo de descanso é negativo.
 	ErrDescansoInvalido = errors.New("descanso não pode ser negativo")
+	// ErrDuracaoInvalida é retornado quando a duração do atendimento está fora de [15, 1440] minutos.
+	ErrDuracaoInvalida = errors.New("duração do atendimento deve ficar entre 15 minutos e um dia")
 )
 
 // Novo cria um Provider com agenda desativada por padrão. Recebe o hash da
@@ -47,17 +54,37 @@ func Novo(id, nome, email, senhaHash string) (*Provider, error) {
 
 	agora := time.Now()
 	return &Provider{
-		ID:                 id,
-		Nome:               nome,
-		Email:              email,
-		SenhaHash:          senhaHash,
-		AceitaAgendamentos: false,
-		DescansoMinutos:    0,
-		HorariosPadrao:     horariosComerciaisPadrao,
-		CriadoEm:           agora,
-		AtualizadoEm:       agora,
+		ID:                        id,
+		Nome:                      nome,
+		Email:                     email,
+		SenhaHash:                 senhaHash,
+		Ativo:                     true,
+		AceitaAgendamentos:        false,
+		DescansoMinutos:           0,
+		DuracaoAtendimentoMinutos: duracaoAtendimentoSugerida,
+		HorariosPadrao:            horariosComerciaisPadrao,
+		CriadoEm:                  agora,
+		AtualizadoEm:              agora,
 	}, nil
 }
+
+// Banir desativa o prestador (moderação pelo admin): ele deixa de logar, some
+// da vitrine e para de ofertar horários. Reversível por Reativar.
+func (p *Provider) Banir() {
+	p.Ativo = false
+	p.AtualizadoEm = time.Now()
+}
+
+// Reativar reverte um banimento, devolvendo o acesso do prestador.
+func (p *Provider) Reativar() {
+	p.Ativo = true
+	p.AtualizadoEm = time.Now()
+}
+
+// duracaoAtendimentoSugerida é a duração inicial de um atendimento (1h) para
+// um prestador recém-criado — editável a qualquer momento em Preferências.
+// Enquanto não existe o domínio de serviços, a duração é única por prestador.
+const duracaoAtendimentoSugerida = 60
 
 // horariosComerciaisPadrao é o expediente sugerido a um prestador recém-criado
 // — 08:00–12:00 e 14:00–18:00 — editável a qualquer momento em Preferências.
@@ -99,6 +126,17 @@ func (p *Provider) DefinirDescanso(minutos int) error {
 		return ErrDescansoInvalido
 	}
 	p.DescansoMinutos = minutos
+	p.AtualizadoEm = time.Now()
+	return nil
+}
+
+// DefinirDuracaoAtendimento define a duração em minutos de um atendimento —
+// o tamanho de cada slot ofertado. Retorna erro fora de [15, 1440].
+func (p *Provider) DefinirDuracaoAtendimento(minutos int) error {
+	if minutos < 15 || minutos > 24*60 {
+		return ErrDuracaoInvalida
+	}
+	p.DuracaoAtendimentoMinutos = minutos
 	p.AtualizadoEm = time.Now()
 	return nil
 }

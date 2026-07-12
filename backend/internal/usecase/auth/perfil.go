@@ -9,24 +9,26 @@ import (
 // DescansoMinutos e HorariosPadrao só são preenchidos para prestadores —
 // ficam nil/vazios para clientes.
 type PerfilOutput struct {
-	ID                 string
-	Nome               string
-	Email              string
-	Tipo               string
-	AceitaAgendamentos *bool
-	DescansoMinutos    *int
-	HorariosPadrao     []availability.TimeBlock
+	ID                        string
+	Nome                      string
+	Email                     string
+	Tipo                      string
+	AceitaAgendamentos        *bool
+	DescansoMinutos           *int
+	DuracaoAtendimentoMinutos *int
+	HorariosPadrao            []availability.TimeBlock
 }
 
 // PerfilUseCase consulta os dados do usuário autenticado a partir da sua identidade de sessão.
 type PerfilUseCase struct {
 	providers buscadorProvider
 	clients   buscadorClient
+	admins    buscadorAdmin
 }
 
-// NovoPerfilUseCase cria uma instância de PerfilUseCase com os buscadores de prestador e cliente injetados.
-func NovoPerfilUseCase(providers buscadorProvider, clients buscadorClient) *PerfilUseCase {
-	return &PerfilUseCase{providers: providers, clients: clients}
+// NovoPerfilUseCase cria uma instância de PerfilUseCase com os buscadores de prestador, cliente e admin injetados.
+func NovoPerfilUseCase(providers buscadorProvider, clients buscadorClient, admins buscadorAdmin) *PerfilUseCase {
+	return &PerfilUseCase{providers: providers, clients: clients, admins: admins}
 }
 
 // Executar busca o prestador ou cliente correspondente à identidade, conforme o tipo de usuário.
@@ -41,13 +43,14 @@ func (uc *PerfilUseCase) Executar(id Identidade) (*PerfilOutput, error) {
 			return nil, ErrSessaoInvalida
 		}
 		return &PerfilOutput{
-			ID:                 p.ID,
-			Nome:               p.Nome,
-			Email:              p.Email,
-			Tipo:               string(session.TipoProvider),
-			AceitaAgendamentos: &p.AceitaAgendamentos,
-			DescansoMinutos:    &p.DescansoMinutos,
-			HorariosPadrao:     p.HorariosPadrao,
+			ID:                        p.ID,
+			Nome:                      p.Nome,
+			Email:                     p.Email,
+			Tipo:                      string(session.TipoProvider),
+			AceitaAgendamentos:        &p.AceitaAgendamentos,
+			DescansoMinutos:           &p.DescansoMinutos,
+			DuracaoAtendimentoMinutos: &p.DuracaoAtendimentoMinutos,
+			HorariosPadrao:            p.HorariosPadrao,
 		}, nil
 
 	case session.TipoClient:
@@ -59,6 +62,16 @@ func (uc *PerfilUseCase) Executar(id Identidade) (*PerfilOutput, error) {
 			return nil, ErrSessaoInvalida
 		}
 		return &PerfilOutput{ID: c.ID, Nome: c.Nome, Email: c.Email, Tipo: string(session.TipoClient)}, nil
+
+	case session.TipoAdmin:
+		a, err := uc.admins.BuscarPorID(id.UserID)
+		if err != nil {
+			return nil, err
+		}
+		if a == nil {
+			return nil, ErrSessaoInvalida
+		}
+		return &PerfilOutput{ID: a.ID, Nome: "Admin", Email: a.Email, Tipo: string(session.TipoAdmin)}, nil
 
 	default:
 		return nil, ErrSessaoInvalida

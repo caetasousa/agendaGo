@@ -23,9 +23,18 @@ func NovoClientPostgres(pool *pgxpool.Pool) *ClientPostgres {
 // SenhaHash vazio (cliente convidado) é gravado como NULL na coluna.
 func (r *ClientPostgres) Salvar(c *client.Client) error {
 	_, err := r.pool.Exec(context.Background(),
-		`INSERT INTO clients (id, nome, email, senha_hash)
-		 VALUES ($1, $2, $3, $4)`,
-		c.ID, c.Nome, c.Email, senhaHashOuNulo(c.SenhaHash),
+		`INSERT INTO clients (id, nome, email, telefone, senha_hash, ativo)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		c.ID, c.Nome, c.Email, telefoneOuNulo(c.Telefone), senhaHashOuNulo(c.SenhaHash), c.Ativo,
+	)
+	return err
+}
+
+// Atualizar persiste o estado mutável do cliente (por ora, só o banimento).
+func (r *ClientPostgres) Atualizar(c *client.Client) error {
+	_, err := r.pool.Exec(context.Background(),
+		`UPDATE clients SET ativo = $2, atualizado_em = $3 WHERE id = $1`,
+		c.ID, c.Ativo, c.AtualizadoEm,
 	)
 	return err
 }
@@ -33,38 +42,58 @@ func (r *ClientPostgres) Salvar(c *client.Client) error {
 // BuscarPorEmail retorna (cliente, nil) quando encontra, (nil, nil) quando
 // não existe cliente com o email, e (nil, err) em falha real de infraestrutura.
 func (r *ClientPostgres) BuscarPorEmail(email string) (*client.Client, error) {
-	var c client.Client
-	var senhaHash *string
-	err := r.pool.QueryRow(context.Background(),
-		`SELECT id, nome, email, senha_hash, criado_em, atualizado_em
-		 FROM clients WHERE email = $1`, email,
-	).Scan(&c.ID, &c.Nome, &c.Email, &senhaHash, &c.CriadoEm, &c.AtualizadoEm)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	if senhaHash != nil {
-		c.SenhaHash = *senhaHash
-	}
-	return &c, nil
+	return r.buscar(`SELECT id, nome, email, telefone, senha_hash, ativo, criado_em, atualizado_em
+		FROM clients WHERE email = $1`, email)
 }
 
 // BuscarPorID retorna (cliente, nil) quando encontra, (nil, nil) quando não
 // existe cliente com o id, e (nil, err) em falha real de infraestrutura.
 func (r *ClientPostgres) BuscarPorID(id string) (*client.Client, error) {
-	var c client.Client
-	var senhaHash *string
-	err := r.pool.QueryRow(context.Background(),
-		`SELECT id, nome, email, senha_hash, criado_em, atualizado_em
-		 FROM clients WHERE id = $1`, id,
-	).Scan(&c.ID, &c.Nome, &c.Email, &senhaHash, &c.CriadoEm, &c.AtualizadoEm)
+	return r.buscar(`SELECT id, nome, email, telefone, senha_hash, ativo, criado_em, atualizado_em
+		FROM clients WHERE id = $1`, id)
+}
+
+// Listar devolve todos os clientes com conta, ordenados por nome, para o
+// painel de moderação do admin. Convidados sem conta ficam de fora.
+func (r *ClientPostgres) Listar() ([]*client.Client, error) {
+	rows, err := r.pool.Query(context.Background(),
+		`SELECT id, nome, email, telefone, senha_hash, ativo, criado_em, atualizado_em
+		 FROM clients WHERE senha_hash IS NOT NULL ORDER BY nome`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var todos []*client.Client
+	for rows.Next() {
+		c, err := escanearClient(rows)
+		if err != nil {
+			return nil, err
+		}
+		todos = append(todos, c)
+	}
+	return todos, rows.Err()
+}
+
+func (r *ClientPostgres) buscar(sql, arg string) (*client.Client, error) {
+	c, err := escanearClient(r.pool.QueryRow(context.Background(), sql, arg))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
+	}
+	return c, nil
+}
+
+func escanearClient(linha escaneavel) (*client.Client, error) {
+	var c client.Client
+	var telefone, senhaHash *string
+	if err := linha.Scan(&c.ID, &c.Nome, &c.Email, &telefone, &senhaHash, &c.Ativo, &c.CriadoEm, &c.AtualizadoEm); err != nil {
+		return nil, err
+	}
+	if telefone != nil {
+		c.Telefone = *telefone
 	}
 	if senhaHash != nil {
 		c.SenhaHash = *senhaHash
@@ -79,4 +108,13 @@ func senhaHashOuNulo(senhaHash string) *string {
 		return nil
 	}
 	return &senhaHash
+}
+
+// telefoneOuNulo converte a string vazia (cliente com conta sem telefone) para
+// NULL, já que a coluna telefone é opcional no banco.
+func telefoneOuNulo(telefone string) *string {
+	if telefone == "" {
+		return nil
+	}
+	return &telefone
 }

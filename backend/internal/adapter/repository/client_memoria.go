@@ -22,6 +22,28 @@ func (r *ClientMemoria) Salvar(c *client.Client) error {
 	return nil
 }
 
+// Atualizar espelha o contrato do Postgres; como BuscarPorID devolve o
+// ponteiro guardado, reatribuir ao mapa mantém o estado consistente.
+func (r *ClientMemoria) Atualizar(c *client.Client) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.dados[c.ID] = c
+	return nil
+}
+
+// Listar devolve os clientes com conta, para o painel de moderação do admin.
+func (r *ClientMemoria) Listar() ([]*client.Client, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var todos []*client.Client
+	for _, c := range r.dados {
+		if c.TemConta() {
+			todos = append(todos, c)
+		}
+	}
+	return todos, nil
+}
+
 // BuscarPorEmail retorna (nil, nil) quando não há cliente com o email,
 // seguindo o mesmo contrato do repositório Postgres.
 func (r *ClientMemoria) BuscarPorEmail(email string) (*client.Client, error) {
