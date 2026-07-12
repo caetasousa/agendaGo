@@ -73,7 +73,12 @@
 			</div>
 
 			<div>
-				<label for="senha" class="block text-sm font-medium text-ink">Senha</label>
+				<div class="flex items-baseline justify-between">
+					<label for="senha" class="block text-sm font-medium text-ink">Senha</label>
+					<a href="/recuperar-senha" class="text-sm text-mute transition hover:text-ink"
+						>Esqueci minha senha</a
+					>
+				</div>
 				<input
 					id="senha"
 					type="password"

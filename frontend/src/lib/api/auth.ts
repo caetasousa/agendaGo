@@ -1,7 +1,7 @@
 // Tipos e chamadas da API de autenticação.
 // Espelham backend/internal/adapter/http/dto/auth.go
 
-import { ApiError, apiGet, apiPost, apiPostVazio } from './client';
+import { ApiError, apiGet, apiPost, apiPostVazio, apiPostSemResposta } from './client';
 import type { Bloco } from './availability';
 
 export interface LoginRequest {
@@ -65,4 +65,21 @@ export function logout(): Promise<void> {
 
 export function me(): Promise<MeResponse> {
 	return apiGet<MeResponse>('/auth/me');
+}
+
+export interface RecuperarSenhaRequest {
+	email: string;
+}
+
+export interface RedefinirSenhaRequest {
+	token: string;
+	novaSenha: string;
+}
+
+export function recuperarSenha(dados: RecuperarSenhaRequest): Promise<void> {
+	return apiPostSemResposta('/auth/recuperar-senha', dados);
+}
+
+export function redefinirSenha(dados: RedefinirSenhaRequest): Promise<void> {
+	return apiPostSemResposta('/auth/redefinir-senha', dados);
 }

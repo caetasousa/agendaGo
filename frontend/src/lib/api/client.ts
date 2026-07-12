@@ -82,6 +82,21 @@ export async function apiPostVazio(caminho: string): Promise<void> {
 	}
 }
 
+// apiPostSemResposta é para rotas que recebem corpo mas respondem sem
+// (ex: 204 No Content).
+export async function apiPostSemResposta<TReq>(caminho: string, corpo: TReq): Promise<void> {
+	const resposta = await fetch(`${BASE_URL}${caminho}`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		credentials: 'include',
+		body: JSON.stringify(corpo)
+	});
+
+	if (!resposta.ok) {
+		return parseErro(resposta);
+	}
+}
+
 // apiDelete é para rotas que respondem sem corpo (204 No Content).
 export async function apiDelete(caminho: string): Promise<void> {
 	const resposta = await fetch(`${BASE_URL}${caminho}`, {
