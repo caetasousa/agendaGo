@@ -17,9 +17,7 @@ import (
 	"agendago/internal/domain/provider"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 // migrationsOrdenadas devolve os caminhos absolutos de todas as migrations em
@@ -55,9 +53,11 @@ func novoPool(t *testing.T) *pgxpool.Pool {
 		tcpostgres.WithUsername("test"),
 		tcpostgres.WithPassword("test"),
 		tcpostgres.WithInitScripts(migrationsOrdenadas(t)...),
-		testcontainers.WithWaitStrategy(
-			wait.ForListeningPort("5432/tcp"),
-		),
+		// BasicWaitStrategies espera o log "ready to accept connections"
+		// aparecer duas vezes (o Postgres reinicia após o primeiro startup) e
+		// só então a porta ser servida. Esperar só a porta pega o servidor no
+		// meio do restart e causa "connection reset by peer" intermitente.
+		tcpostgres.BasicWaitStrategies(),
 	)
 	if err != nil {
 		t.Fatalf("subir container postgres: %v", err)
