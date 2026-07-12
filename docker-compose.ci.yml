@@ -1,0 +1,10 @@
+# Override usado só no CI (E2E). O serviço web monta ./frontend e roda
+# npm install como root; sem isolar node_modules, a pasta ficaria com dono root
+# no runner e o npm ci do job (não-root) falharia com EACCES. Um volume anônimo
+# em /app/node_modules faz o container usar suas próprias dependências, sem
+# tocar as do runner que o playwright test usa.
+services:
+  web:
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules

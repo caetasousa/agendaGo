@@ -16,12 +16,21 @@ jobs:
     name: Backend (build, vet, testes + integração)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.26'
           cache-dependency-path: backend/go.sum
+
+      # main.go importa o pacote agendago/docs (spec do Swagger), gerado por
+      # swag e fora do versionamento. Precisa ser gerado antes de compilar,
+      # como o Dockerfile faz no boot.
+      - name: gera docs do swagger
+        working-directory: backend
+        run: |
+          go install github.com/swaggo/swag/cmd/swag@v1.16.6
+          swag init -g cmd/api/main.go -o docs
 
       - name: go vet
         working-directory: backend
@@ -41,9 +50,9 @@ jobs:
     name: Frontend (svelte-check + unit)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: npm
@@ -65,13 +74,24 @@ jobs:
     name: E2E (Playwright sobre o docker-compose)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+
+      # Instala as dependências e o browser ANTES de subir o compose: o serviço
+      # web monta ./frontend e roda npm install como root no container, o que
+      # deixaria frontend/node_modules com dono root e faria o npm ci do runner
+      # (não-root) falhar com EACCES. Instalando primeiro, a pasta pertence ao
+      # runner, que é quem executa o playwright test.
+      - name: instala dependências e browser do Playwright
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
 
       # O compose consome o .env; o .example já aponta para o Mailpit (nenhum
       # email real é enviado). Desliga o rate limit porque os testes fazem
@@ -85,14 +105,11 @@ jobs:
           sed -i 's/^ADMIN_EMAIL=.*/ADMIN_EMAIL=admin@agendago.dev/' .env
           sed -i 's/^ADMIN_SENHA=.*/ADMIN_SENHA=admin12345/' .env
 
+      # O override isola o node_modules do container web num volume anônimo,
+      # para ele não sobrescrever (como root) as dependências que o runner
+      # instalou e que o playwright test usa.
       - name: sobe a stack (Postgres, migrations, API, web, Mailpit)
-        run: docker compose up -d --build
-
-      - name: instala dependências e browser do Playwright
-        working-directory: frontend
-        run: |
-          npm ci
-          npx playwright install --with-deps chromium
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build
 
       # Espera a API e o frontend responderem antes de disparar os testes.
       - name: aguarda a stack ficar pronta
@@ -113,8 +130,8 @@ jobs:
       # Em falha, os logs dos containers ajudam a diagnosticar sem reproduzir.
       - name: logs do compose (em falha)
         if: failure()
-        run: docker compose logs
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml logs
 
       - name: derruba a stack
         if: always()
-        run: docker compose down -v
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
