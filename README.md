@@ -40,6 +40,7 @@ docker compose down -v     # apaga os dados do banco junto
 - App: [http://localhost:5173](http://localhost:5173)
 - API: [http://localhost:8080](http://localhost:8080)
 - Swagger: [http://localhost:8080/swagger/index.html](http://localhost:8080/swagger/index.html)
+- Mailpit (emails capturados em dev, nada é enviado de verdade): [http://localhost:8025](http://localhost:8025)
 
 ### Administrador
 
@@ -69,6 +70,8 @@ e cai no painel de moderação (`/admin`), onde bane/reativa prestadores e clien
 | `POST` | [`/auth/admin/login`](http://localhost:8080/swagger/index.html#/auth/post_auth_admin_login) | Login do administrador |
 | `POST` | [`/auth/logout`](http://localhost:8080/swagger/index.html#/auth/post_auth_logout) | Encerrar sessão |
 | `GET` | [`/auth/me`](http://localhost:8080/swagger/index.html#/auth/get_auth_me) | Usuário autenticado atual |
+| `POST` | [`/auth/recuperar-senha`](http://localhost:8080/swagger/index.html#/auth/post_auth_recuperar_senha) | Solicitar recuperação de senha por email |
+| `POST` | [`/auth/redefinir-senha`](http://localhost:8080/swagger/index.html#/auth/post_auth_redefinir_senha) | Redefinir a senha com um token de recuperação |
 | `PUT` | [`/providers/me/preferencias`](http://localhost:8080/swagger/index.html#/providers/put_providers_me_preferencias) | Atualizar preferências do prestador |
 | `GET` | [`/providers/me/agenda`](http://localhost:8080/swagger/index.html#/availability/get_providers_me_agenda) | Consultar agenda resolvida do prestador (por período) |
 | `PUT` | [`/providers/me/dias/{data}`](http://localhost:8080/swagger/index.html#/availability/put_providers_me_dias__data_) | Definir um dia (bloqueio ou horários personalizados) |

@@ -214,6 +214,58 @@ eventual evolução para múltiplos fusos no futuro.
 
 ---
 
+## 6. Notificações por email
+
+O sistema envia email em cinco situações, sempre em português e melhor-esforço (uma falha
+de envio nunca impede a operação que a disparou — só é registrada em log):
+
+| Evento | Destinatário | Conteúdo |
+|---|---|---|
+| Novo pedido de horário | Prestador | Nome do cliente, data/hora, prazo para confirmar |
+| Confirmação | Cliente | Nome do prestador, data/hora confirmada |
+| Recusa | Cliente | Nome do prestador, data/hora recusada |
+| Cancelamento | A outra parte (quem não cancelou) | Quem cancelou, data/hora |
+| Lembrete (24h antes) | Cliente | Nome do prestador, data/hora do atendimento |
+
+O envio é assíncrono (goroutine), para não atrasar a resposta HTTP da ação que o disparou.
+
+### Recuperação de senha
+
+Prestadores e clientes **com conta** (`TemConta() == true`) podem redefinir a senha por
+email. Convidados (sem senha) não têm o que redefinir.
+
+- O pedido gera um **token opaco de 256 bits**, do mesmo jeito que o token de sessão
+  (`internal/pkg/token`): só o **hash SHA-256** é persistido, o token puro só existe no
+  link do email.
+- **TTL de 1h** a partir da emissão.
+- **Uso único** — o token é apagado no momento em que é consumido (`DELETE ... RETURNING`
+  atômico), então reusar o mesmo link uma segunda vez falha.
+- Um novo pedido **invalida qualquer token anterior** do mesmo usuário — só o link mais
+  recente funciona.
+- **Resposta idêntica para email existente e inexistente** (sempre 204, mesmo corpo): o
+  mesmo cuidado anti-enumeração já aplicado ao login (`internal/usecase/auth/auth.go`)
+  vale aqui — a rota nunca revela quais emails estão cadastrados.
+- Redefinir a senha **revoga todas as sessões ativas** do usuário (mesmo mecanismo do
+  banimento pelo admin) — uma redefinição de senha é motivo razoável para exigir login de
+  novo em todo dispositivo.
+- A rota de solicitação tem o mesmo **teto de requisições por IP** dos logins, para
+  mitigar tanto o esgotamento da cota diária do provedor de email quanto tentativas de
+  adivinhar tokens por força bruta.
+
+### Lembrete de agendamento
+
+Um worker de fundo (`internal/adapter/worker/reminder.go`) checa periodicamente
+(config: a cada 10 min) os agendamentos **CONFIRMADOs** cujo início está a **até 24h** de
+distância e ainda não foram lembrados, e dispara o email de lembrete.
+
+- **Nunca duplica**: marcar o lembrete como enviado é um `UPDATE` condicional
+  (`WHERE lembrete_enviado_em IS NULL`) — funciona como uma reivindicação atômica, então
+  mesmo sob concorrência só uma execução consegue enviar.
+- Um agendamento confirmado a **menos de 24h** do início já recebe o lembrete no primeiro
+  tick após a confirmação — redundante com o email de confirmação, mas inofensivo.
+
+---
+
 ## Parâmetros fixados
 
 Valores centralizados em `config/agendamento.go` e no domínio:
@@ -224,6 +276,9 @@ Valores centralizados em `config/agendamento.go` e no domínio:
 | Antecedência mínima de cancelamento | Prazo antes do início em que ainda se pode cancelar | 24h |
 | Granularidade de minutos | Múltiplo mínimo dos horários dos blocos | 15 min |
 | Duração do atendimento | Tamanho de cada slot ofertado (por prestador, editável) | sugestão inicial de 60 min |
+| TTL do token de recuperação de senha | Prazo até o link de redefinição expirar | 1h |
+| Antecedência do lembrete de agendamento | Quanto antes do início o lembrete é disparado | 24h |
+| Intervalo de checagem do worker de lembrete | Frequência do ticker que busca agendamentos a lembrar | 10 min |
 
 ---
 
@@ -237,6 +292,8 @@ Valores centralizados em `config/agendamento.go` e no domínio:
 | Disponibilidade | `internal/domain/availability/` | `TimeBlock`, `DateException` (bloqueio/extra), validação estrita |
 | Slot | `internal/domain/slot/` | `Slot`, `Livres` (cálculo puro: duração + buffer, sobra descartada) |
 | Agendamento | `internal/domain/appointment/` | `Appointment` + máquina de estados + expiração lazy |
-| Orquestração | `internal/usecase/{provider,availability,appointment,admin}/` | preferências, slots, solicitar, confirmar, recusar, cancelar, concluir, moderar |
-| Configuração | `config/agendamento.go`, `config/server.go` | fuso fixo, TTL, antecedência mínima, credenciais do admin |
-| Persistência | `migrations/` | `providers`, `horarios_padrao`, `clients`, `admins`, `date_exceptions`, `appointments` (anti-overbooking por lock transacional no repositório) |
+| Token de recuperação de senha | `internal/domain/passwordreset/` | `Token`, uso único, TTL curto |
+| Orquestração | `internal/usecase/{provider,availability,appointment,admin,auth}/` | preferências, slots, solicitar, confirmar, recusar, cancelar, concluir, moderar, recuperar/redefinir senha, lembrar |
+| Notificações | `internal/adapter/email/`, `internal/adapter/worker/` | templates, transporte SMTP, worker de lembrete |
+| Configuração | `config/agendamento.go`, `config/server.go`, `config/email.go` | fuso fixo, TTL, antecedência mínima, credenciais do admin, SMTP |
+| Persistência | `migrations/` | `providers`, `horarios_padrao`, `clients`, `admins`, `date_exceptions`, `appointments` (anti-overbooking por lock transacional no repositório), `sessions`, `password_reset_tokens` |
