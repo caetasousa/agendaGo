@@ -27,11 +27,16 @@ docker build -f frontend/Dockerfile.prod \
 |---|---|---|---|
 | `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | sim | — | conexão com o Postgres |
 | `APP_ENV` | sim (produção) | — | `production` liga o atributo `Secure` do cookie de sessão |
-| `FRONTEND_ORIGIN` | sim (produção) | `http://localhost:5173` | origem permitida no CORS — aponte para o domínio real do frontend |
+| `FRONTEND_ORIGIN` | sim (produção) | `http://localhost:5173` | origem permitida no CORS **e** base do link nos emails (ex.: recuperação de senha) — aponte para o domínio real do frontend, senão os links dos emails apontam para `localhost` |
 | `PORT` | não | `8080` | porta do servidor HTTP |
 | `ADMIN_EMAIL` / `ADMIN_SENHA` | não | — | semeiam o admin no boot (vazias = sem admin) |
 | `RATE_LIMIT_LOGIN_POR_MINUTO` | não | `10` | teto de logins por IP/minuto (0 desliga) |
 | `RATE_LIMIT_CONVIDADO_POR_MINUTO` | não | `10` | teto de agendamentos de convidado por IP/minuto (0 desliga) |
+| `SMTP_HOST` | não | — | servidor SMTP (ex.: `smtp-relay.brevo.com`). **Vazio desliga o envio**: os emails são só logados, não enviados |
+| `SMTP_PORT` | não | `587` | porta do servidor SMTP |
+| `SMTP_USER` / `SMTP_PASSWORD` | não | — | credenciais SMTP (vazias = sem autenticação, ex.: Mailpit) |
+| `SMTP_STARTTLS` | não | `true` | exige STARTTLS na conexão (desligue só contra o Mailpit) |
+| `EMAIL_REMETENTE` / `EMAIL_REMETENTE_NOME` | não | — | remetente dos emails (precisa ser o email verificado no provedor) |
 
 ## Migrations
 
