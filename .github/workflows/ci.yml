@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancela execuções antigas do mesmo ref quando um novo push chega.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (build, vet, testes + integração)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: backend/go.sum
+
+      - name: go vet
+        working-directory: backend
+        run: go vet ./...
+
+      - name: build
+        working-directory: backend
+        run: go build ./...
+
+      # Roda os testes rápidos e os de integração (Testcontainers sobe um
+      # Postgres efêmero via o Docker já presente no runner).
+      - name: testes
+        working-directory: backend
+        run: go test -tags=integration ./...
+
+  frontend:
+    name: Frontend (svelte-check + unit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: install
+        working-directory: frontend
+        run: npm ci
+
+      - name: svelte-check
+        working-directory: frontend
+        run: npm run check
+
+      - name: testes unitários
+        working-directory: frontend
+        run: npm run test:unit
+
+  e2e:
+    name: E2E (Playwright sobre o docker-compose)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # O compose consome o .env; o .example já aponta para o Mailpit (nenhum
+      # email real é enviado). Desliga o rate limit porque os testes fazem
+      # dezenas de logins do mesmo IP, e fixa as credenciais do admin nos
+      # valores que os specs de admin esperam (e2e/admin.spec.ts).
+      - name: prepara .env
+        run: |
+          cp .env.example .env
+          sed -i 's/^RATE_LIMIT_LOGIN_POR_MINUTO=.*/RATE_LIMIT_LOGIN_POR_MINUTO=0/' .env
+          sed -i 's/^RATE_LIMIT_CONVIDADO_POR_MINUTO=.*/RATE_LIMIT_CONVIDADO_POR_MINUTO=0/' .env
+          sed -i 's/^ADMIN_EMAIL=.*/ADMIN_EMAIL=admin@agendago.dev/' .env
+          sed -i 's/^ADMIN_SENHA=.*/ADMIN_SENHA=admin12345/' .env
+
+      - name: sobe a stack (Postgres, migrations, API, web, Mailpit)
+        run: docker compose up -d --build
+
+      - name: instala dependências e browser do Playwright
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      # Espera a API e o frontend responderem antes de disparar os testes.
+      - name: aguarda a stack ficar pronta
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8080/health >/dev/null \
+              && curl -sf http://localhost:5173 >/dev/null; then
+              echo "stack pronta"; exit 0
+            fi
+            sleep 2
+          done
+          echo "stack não ficou pronta a tempo"; exit 1
+
+      - name: testes E2E
+        working-directory: frontend
+        run: npx playwright test
+
+      # Em falha, os logs dos containers ajudam a diagnosticar sem reproduzir.
+      - name: logs do compose (em falha)
+        if: failure()
+        run: docker compose logs
+
+      - name: derruba a stack
+        if: always()
+        run: docker compose down -v
