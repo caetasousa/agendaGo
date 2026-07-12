@@ -4,3 +4,37 @@ export function emailUnico(prefixo: string): string {
 	const sufixo = Math.random().toString(36).slice(2, 8);
 	return `${prefixo}-${Date.now()}-${sufixo}@email.com`;
 }
+
+// URL da API do Mailpit, o catcher de SMTP do docker-compose. Os testes que
+// exercem email leem as mensagens capturadas aqui — logo, dependem de o SMTP
+// da API estar apontando para o Mailpit (padrão do compose), não para um
+// provedor real.
+const MAILPIT_API = 'http://localhost:8025/api/v1';
+
+// tokenDeRecuperacao espera o email de recuperação de senha de destinatario
+// chegar no Mailpit e extrai o token do link `/redefinir-senha?token=...`.
+// Faz polling porque o envio do email é assíncrono no backend.
+export async function tokenDeRecuperacao(
+	request: import('@playwright/test').APIRequestContext,
+	destinatario: string
+): Promise<string> {
+	for (let tentativa = 0; tentativa < 20; tentativa++) {
+		const resposta = await request.get(
+			`${MAILPIT_API}/search?query=${encodeURIComponent('to:' + destinatario)}`
+		);
+		if (resposta.ok()) {
+			const corpo = await resposta.json();
+			const mensagem = (corpo.messages ?? []).find((m: { Subject: string }) =>
+				m.Subject.includes('Redefinição de senha')
+			);
+			if (mensagem) {
+				const detalhe = await request.get(`${MAILPIT_API}/message/${mensagem.ID}`);
+				const html = (await detalhe.json()).HTML as string;
+				const encontrado = html.match(/token=([^"&]+)/);
+				if (encontrado) return encontrado[1];
+			}
+		}
+		await new Promise((r) => setTimeout(r, 250));
+	}
+	throw new Error(`email de recuperação para ${destinatario} não chegou no Mailpit`);
+}
