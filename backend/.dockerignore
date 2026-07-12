@@ -1,0 +1,6 @@
+tmp
+docs
+test
+Dockerfile.prod
+.dockerignore
+.air.toml

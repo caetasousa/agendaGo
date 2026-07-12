@@ -10,8 +10,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	_ "agendago/docs"
 	"agendago/config"
@@ -27,6 +32,7 @@ import (
 	ucprovider "agendago/internal/usecase/provider"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/httprate"
 )
 
 func main() {
@@ -97,12 +103,25 @@ func main() {
 	r.Get("/providers", providerHandler.Listar)
 	r.Get("/providers/{id}", providerHandler.BuscarResumo)
 	r.Get("/providers/{id}/slots", appointmentHandler.ConsultarSlots)
-	r.Post("/agendamentos/convidado", appointmentHandler.SolicitarConvidado)
+	// rota pública de convidado tem teto por IP: sem ele, uma rajada enche a
+	// agenda de um prestador com reservas falsas
+	r.Group(func(r chi.Router) {
+		if limite := config.RateLimitConvidadoPorMinuto(); limite > 0 {
+			r.Use(httprate.LimitByIP(limite, time.Minute))
+		}
+		r.Post("/agendamentos/convidado", appointmentHandler.SolicitarConvidado)
+	})
 	r.Post("/providers", providerHandler.Cadastrar)
 	r.Post("/clients", clientHandler.Cadastrar)
-	r.Post("/auth/provider/login", authHandler.LoginProvider)
-	r.Post("/auth/client/login", authHandler.LoginClient)
-	r.Post("/auth/admin/login", authHandler.LoginAdmin)
+	// logins têm teto por IP: mitiga brute-force e rajadas de Argon2id (CPU)
+	r.Group(func(r chi.Router) {
+		if limite := config.RateLimitLoginPorMinuto(); limite > 0 {
+			r.Use(httprate.LimitByIP(limite, time.Minute))
+		}
+		r.Post("/auth/provider/login", authHandler.LoginProvider)
+		r.Post("/auth/client/login", authHandler.LoginClient)
+		r.Post("/auth/admin/login", authHandler.LoginAdmin)
+	})
 	r.Post("/auth/logout", authHandler.Logout)
 	r.Group(func(r chi.Router) {
 		r.Use(authMw.Autenticar)
@@ -144,12 +163,27 @@ func main() {
 		r.Post("/admin/clientes/{id}/reativar", adminHandler.ReativarCliente)
 	})
 
-	// servidor
+	// servidor com desligamento gracioso: SIGINT/SIGTERM param de aceitar
+	// conexões novas e as requisições em andamento têm um prazo para concluir
 	srv := config.NovoServidor(r)
-	log.Printf("servidor iniciado na porta %s", config.Porta)
-	if err := srv.ListenAndServe(); err != nil {
-		log.Fatalf("erro ao iniciar servidor: %v", err)
+	go func() {
+		log.Printf("servidor iniciado na porta %s", config.Porta())
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("erro ao iniciar servidor: %v", err)
+		}
+	}()
+
+	ctx, parar := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer parar()
+	<-ctx.Done()
+
+	log.Println("encerrando: aguardando requisições em andamento")
+	ctxDesligamento, cancelar := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelar()
+	if err := srv.Shutdown(ctxDesligamento); err != nil {
+		log.Printf("desligamento forçado: %v", err)
 	}
+	log.Println("servidor encerrado")
 }
 
 // health godoc

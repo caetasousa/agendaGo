@@ -48,6 +48,9 @@ services:
       # Admin semeado no boot (moderação). Troque em produção.
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_SENHA: ${ADMIN_SENHA}
+      # Rate limiting por IP (0 desliga; padrão 10/min quando ausente)
+      RATE_LIMIT_LOGIN_POR_MINUTO: ${RATE_LIMIT_LOGIN_POR_MINUTO:-10}
+      RATE_LIMIT_CONVIDADO_POR_MINUTO: ${RATE_LIMIT_CONVIDADO_POR_MINUTO:-10}
     volumes:
       - ./backend:/app
     depends_on:

@@ -113,6 +113,7 @@ Guia completo (build tags, Testcontainers, Playwright): **[docs/testes.md](docs/
 - **[docs/tecnologias.md](docs/tecnologias.md)** — guia de estudo: o que é cada tecnologia, por que está aqui, fontes oficiais
 - **[docs/testes.md](docs/testes.md)** — como rodar cada camada de teste
 - **[docs/regra-de-negocio.md](docs/regra-de-negocio.md)** — modelo de negócio: disponibilidade, slots, ciclo de vida do agendamento
+- **[docs/producao.md](docs/producao.md)** — build das imagens de produção, variáveis de ambiente e checklist de deploy
 
 ---
 
@@ -124,5 +125,5 @@ Monorepo com arquitetura hexagonal no backend (`domain` → `usecase` → `adapt
 agendaGo/
 ├── backend/    API em Go — cmd/, config/, internal/{domain,usecase,adapter}/, migrations/, test/
 ├── frontend/   SvelteKit — src/{lib,routes}/, e2e/
-└── docs/       tecnologias.md · testes.md · regra-de-negocio.md
+└── docs/       tecnologias.md · testes.md · regra-de-negocio.md · producao.md
 ```

@@ -1,0 +1,35 @@
+# Imagem de produção da API: build multi-stage que gera um binário estático,
+# sem hot reload nem toolchain na imagem final. O Dockerfile (sem sufixo)
+# continua sendo o de desenvolvimento (air + swag em watch).
+FROM golang:1.26-alpine AS build
+
+WORKDIR /app
+
+RUN go install github.com/swaggo/swag/cmd/swag@v1.16.6
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+# regenera a doc do Swagger e compila estático (sem CGO) para a imagem mínima.
+# timetzdata embute o banco de fusos no binário — a imagem final não tem tzdata
+# e o app carrega America/Sao_Paulo no boot.
+RUN swag init -g cmd/api/main.go -o docs && \
+    CGO_ENABLED=0 go build -tags timetzdata -ldflags="-s -w" -o /bin/api ./cmd/api
+
+FROM alpine:3.21
+
+# certificados TLS (chamadas HTTPS de saída) e usuário sem privilégios
+RUN apk add --no-cache ca-certificates && \
+    adduser -D -u 10001 agendago
+USER agendago
+
+COPY --from=build /bin/api /usr/local/bin/api
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
+    CMD wget -qO- http://localhost:8080/health || exit 1
+
+ENTRYPOINT ["api"]

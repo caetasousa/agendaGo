@@ -28,3 +28,30 @@ func TestCookieSeguro(t *testing.T) {
 		}
 	})
 }
+
+func TestRateLimits(t *testing.T) {
+	t.Run("sem a variável vale o padrão de 10 por minuto", func(t *testing.T) {
+		t.Setenv("RATE_LIMIT_LOGIN_POR_MINUTO", "")
+		if got := config.RateLimitLoginPorMinuto(); got != 10 {
+			t.Errorf("esperava padrão 10, got: %d", got)
+		}
+	})
+
+	t.Run("zero desliga o limite", func(t *testing.T) {
+		t.Setenv("RATE_LIMIT_CONVIDADO_POR_MINUTO", "0")
+		if got := config.RateLimitConvidadoPorMinuto(); got != 0 {
+			t.Errorf("esperava 0 (desligado), got: %d", got)
+		}
+	})
+
+	t.Run("valor inválido ou negativo cai no padrão", func(t *testing.T) {
+		t.Setenv("RATE_LIMIT_LOGIN_POR_MINUTO", "abc")
+		if got := config.RateLimitLoginPorMinuto(); got != 10 {
+			t.Errorf("esperava padrão 10 para valor inválido, got: %d", got)
+		}
+		t.Setenv("RATE_LIMIT_LOGIN_POR_MINUTO", "-5")
+		if got := config.RateLimitLoginPorMinuto(); got != 10 {
+			t.Errorf("esperava padrão 10 para negativo, got: %d", got)
+		}
+	})
+}
