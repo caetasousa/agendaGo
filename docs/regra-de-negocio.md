@@ -77,16 +77,25 @@ recebe os horários livres calculados como:
 slots livres = blocos do dia − agendamentos (SOLICITADO/CONFIRMADO)
 ```
 
-### Fatiamento por serviço + buffer
-Cada bloco é fatiado em slots conforme a **duração do serviço escolhido** somada ao
-**buffer** do prestador:
+> **Link público de agendamento** — cada prestador tem um link (`/agendar/{id}`,
+> exibido no painel para compartilhar no Instagram/WhatsApp). Qualquer pessoa vê o
+> calendário de horários livres sem cadastro; criar conta/entrar só é exigido na hora
+> de solicitar.
 
-- **Buffer configurável por prestador** (`buffer_minutos`: 0, 10, 15…) — intervalo de
+### Fatiamento por duração + buffer
+Cada bloco é fatiado em slots conforme a **duração do atendimento** somada ao **buffer**
+do prestador. Enquanto não existe um domínio de serviços, a duração é única por
+prestador (`duracao_atendimento_minutos`, configurável em Preferências, sugestão inicial
+de 60 min):
+
+- **Buffer configurável por prestador** (`descanso_minutos`: 0, 10, 15…) — intervalo de
   preparação/limpeza entre atendimentos. O próximo slot só abre após
-  `duração_serviço + buffer`.
-- **Sobra descartada** — só vira slot o intervalo que cabe o **serviço inteiro (+ buffer)**
-  dentro do bloco. O tempo que sobra no fim do bloco é ignorado; um atendimento nunca
-  "vaza" para fora do bloco.
+  `duração + buffer`.
+- **Sobra descartada** — só vira slot o intervalo que cabe o **atendimento inteiro
+  (+ buffer)** dentro do bloco. O tempo que sobra no fim do bloco é ignorado; um
+  atendimento nunca "vaza" para fora do bloco.
+- **Nunca no passado** — dias anteriores a hoje não ofertam slots, e hoje só oferta
+  horários que ainda não começaram.
 
 ---
 
@@ -98,11 +107,28 @@ pessimista) com um prazo de expiração (`expira_em = agora + TTL`). Outros clie
 conseguem solicitar o mesmo intervalo.
 
 - Se o prestador não confirmar dentro do TTL, a pendência vira **EXPIRADO** e o intervalo
-  volta a ficar livre.
-- O conflito é barrado também no banco, por uma constraint de exclusão sobre
-  `(provider_id, intervalo)` para os status que ocupam horário, dentro de transação.
+  volta a ficar livre. A expiração é **lazy**: uma solicitação vencida deixa de ocupar o
+  intervalo imediatamente e o status é efetivado na próxima leitura.
+- O conflito é barrado na persistência **dentro de transação**: um lock na linha do
+  prestador serializa as reservas concorrentes dele, e a checagem de conflito + INSERT
+  acontecem sob esse lock. (Optamos pelo lock transacional em vez de uma constraint de
+  exclusão para o schema não carregar regra de negócio — decisão registrada no CLAUDE.md.)
 
 > Isso elimina a janela de overbooking entre "solicitar" e "confirmar".
+
+### Agendamento sem cadastro (convidado)
+Um visitante **sem conta** pode agendar pelo link público informando **nome, e-mail e
+telefone** de contato. O sistema cria (ou reusa) um **cliente convidado** — um cliente
+sem senha (`TemConta() == false`) — e reserva o slot como qualquer outra solicitação.
+
+- O **telefone** passa por uma **validação leve**: exige ao menos 8 dígitos (formatação
+  livre, sem verificação real). É guardado no cadastro do cliente para o prestador ter
+  como retornar o contato.
+- Se já existe um cliente com o **mesmo e-mail** (convidado anterior ou conta), a reserva
+  **reusa** esse cliente em vez de duplicar. Um cliente **banido** não agenda como
+  convidado (bloqueado como qualquer inativo).
+- Na listagem de agendamentos, o **prestador** enxerga o **nome, e-mail e telefone** do
+  cliente — informação de contato que **não** é exposta na visão do próprio cliente.
 
 ### Confirmação
 O agendamento só é **concluído após a confirmação do prestador**. Enquanto isso, fica
@@ -130,14 +156,48 @@ SOLICITADO ──► CONFIRMADO ──► REALIZADO
 Toda transição que encerra a reserva (RECUSADO, EXPIRADO, CANCELADO) **libera o intervalo**.
 
 ### Cancelamento
-**Cliente e prestador** podem cancelar um agendamento `CONFIRMADO`, respeitando uma
-**antecedência mínima** (config; ex.: até 24h antes do início). Cancelamentos dentro da
-janela mínima são bloqueados (tratamento de penalidade fica fora de escopo por enquanto).
+**Cliente e prestador** podem cancelar um agendamento `CONFIRMADO`, respeitando a
+**antecedência mínima** (config: 24h antes do início). Cancelamentos dentro da janela
+mínima são bloqueados (tratamento de penalidade fica fora de escopo por enquanto).
 Ao cancelar, o intervalo volta a ficar livre.
+
+O **cliente** também pode cancelar a própria solicitação ainda `SOLICITADO`, sem
+exigência de antecedência — desistir de um pedido não confirmado não surpreende ninguém.
+O **prestador** não cancela solicitações pendentes: para isso existe a recusa.
 
 ---
 
-## 4. Fuso horário
+## 4. Moderação (admin)
+
+Um **administrador** modera prestadores e clientes. Ele é semeado no boot a partir de
+`ADMIN_EMAIL`/`ADMIN_SENHA` (sem cadastro nem auto-registro), entra pela mesma tela de
+login e cai no painel de moderação.
+
+- **Banir** desativa o usuário (`ativo = false`): ele deixa de logar. Um prestador banido
+  também **some da vitrine** e **para de ofertar horários** — o link público dele passa a
+  não mostrar slots, sem vazar o motivo. **Reversível** por reativar.
+- **Histórico preservado** — banir não apaga nada; agendamentos existentes continuam.
+- `ativo` (moderação, decisão do admin) é distinto de `aceita_agendamentos` (decisão do
+  próprio prestador): um prestador ativo pode escolher não atender, mas um banido nunca
+  oferta, independente da flag.
+
+### Detalhe em leitura
+O admin pode **abrir o detalhe** de um prestador ou de um cliente e ver **tudo o que
+aquele usuário vê**, sem se passar por ele (nada de impersonation):
+
+- **Prestador** — dados cadastrais (e-mail, duração do atendimento, intervalo de
+  preparação, se aceita agendamentos) e a lista de **agendamentos recebidos**, com o
+  **contato do cliente** (nome, e-mail, telefone) — a mesma visão do painel do prestador.
+- **Cliente** — dados cadastrais (e-mail, telefone, se tem conta ou é convidado) e a lista
+  de **agendamentos feitos**, com o nome do prestador.
+
+É uma visão **somente leitura**: o admin não confirma, recusa nem cancela pelo detalhe —
+para intervir no acesso do usuário existem banir/reativar. O detalhe reaproveita a mesma
+listagem de agendamentos das pontas (com expiração lazy e nomes/contato já resolvidos).
+
+---
+
+## 5. Fuso horário
 
 Todo o sistema assume um **fuso único fixo**: `America/Sao_Paulo`. Os horários são
 interpretados e exibidos nesse fuso. O fuso deve ser centralizado em uma
@@ -146,15 +206,16 @@ eventual evolução para múltiplos fusos no futuro.
 
 ---
 
-## Parâmetros a calibrar na implementação
+## Parâmetros fixados
 
-Três valores numéricos ainda precisam ser fixados (sugestões iniciais entre parênteses):
+Valores centralizados em `config/agendamento.go` e no domínio:
 
-| Parâmetro | Descrição | Sugestão inicial |
+| Parâmetro | Descrição | Valor |
 |---|---|---|
 | TTL da pendência | Prazo até uma solicitação não confirmada expirar | 24h |
 | Antecedência mínima de cancelamento | Prazo antes do início em que ainda se pode cancelar | 24h |
-| Granularidade de minutos | Múltiplo mínimo dos horários dos blocos | a definir (ex.: 5 ou 15 min) |
+| Granularidade de minutos | Múltiplo mínimo dos horários dos blocos | 15 min |
+| Duração do atendimento | Tamanho de cada slot ofertado (por prestador, editável) | sugestão inicial de 60 min |
 
 ---
 
@@ -162,10 +223,12 @@ Três valores numéricos ainda precisam ser fixados (sugestões iniciais entre p
 
 | Conceito | Local | Conteúdo |
 |---|---|---|
-| Prestador | `internal/domain/provider/` | `aceita_agendamentos`, `descanso_minutos`, `HorariosPadrao` (expediente configurável) |
+| Prestador | `internal/domain/provider/` | `ativo`, `aceita_agendamentos`, `descanso_minutos`, `duracao_atendimento_minutos`, `HorariosPadrao` |
+| Cliente | `internal/domain/client/` | conta ou convidado, `telefone` (contato), `ativo` (moderação) |
+| Admin | `internal/domain/admin/` | moderador; semeado por env, sem cadastro |
 | Disponibilidade | `internal/domain/availability/` | `TimeBlock`, `DateException` (bloqueio/extra), validação estrita |
-| Slot | `internal/domain/slot/` | `Slot`, `SlotsLivres` (cálculo puro: duração + buffer, sobra descartada) |
-| Agendamento | `internal/domain/appointment/` | `Appointment` + máquina de estados |
-| Orquestração | `internal/usecase/{provider,availability,appointment}/` | atualizar preferências, solicitar, confirmar, recusar, cancelar, expirar |
-| Configuração | `config/` | fuso fixo, TTL, antecedência mínima |
-| Persistência | `migrations/` | `providers`, `horarios_padrao`, `date_exceptions`, `appointments` (exclusion constraint anti-overbooking) |
+| Slot | `internal/domain/slot/` | `Slot`, `Livres` (cálculo puro: duração + buffer, sobra descartada) |
+| Agendamento | `internal/domain/appointment/` | `Appointment` + máquina de estados + expiração lazy |
+| Orquestração | `internal/usecase/{provider,availability,appointment,admin}/` | preferências, slots, solicitar, confirmar, recusar, cancelar, concluir, moderar |
+| Configuração | `config/agendamento.go`, `config/server.go` | fuso fixo, TTL, antecedência mínima, credenciais do admin |
+| Persistência | `migrations/` | `providers`, `horarios_padrao`, `clients`, `admins`, `date_exceptions`, `appointments` (anti-overbooking por lock transacional no repositório) |

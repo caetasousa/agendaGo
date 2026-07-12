@@ -41,6 +41,20 @@ docker compose down -v     # apaga os dados do banco junto
 - API: [http://localhost:8080](http://localhost:8080)
 - Swagger: [http://localhost:8080/swagger/index.html](http://localhost:8080/swagger/index.html)
 
+### Administrador
+
+O **administrador** (moderação) é semeado no boot a partir de `ADMIN_EMAIL` e `ADMIN_SENHA`
+(definidos no `docker-compose.yml`). Em desenvolvimento, as credenciais são:
+
+| Campo | Valor |
+|---|---|
+| E-mail | `admin@agendago.dev` |
+| Senha | `admin12345` |
+
+Ele entra pela mesma tela de login ([http://localhost:5173/login](http://localhost:5173/login))
+e cai no painel de moderação (`/admin`), onde bane/reativa prestadores e clientes.
+**Troque essas credenciais em produção** editando as variáveis de ambiente.
+
 ---
 
 ## Rotas disponíveis
@@ -52,12 +66,33 @@ docker compose down -v     # apaga os dados do banco junto
 | `POST` | [`/clients`](http://localhost:8080/swagger/index.html#/clients/post_clients) | Cadastrar cliente (com conta) |
 | `POST` | [`/auth/provider/login`](http://localhost:8080/swagger/index.html#/auth/post_auth_provider_login) | Login do prestador |
 | `POST` | [`/auth/client/login`](http://localhost:8080/swagger/index.html#/auth/post_auth_client_login) | Login do cliente |
+| `POST` | [`/auth/admin/login`](http://localhost:8080/swagger/index.html#/auth/post_auth_admin_login) | Login do administrador |
 | `POST` | [`/auth/logout`](http://localhost:8080/swagger/index.html#/auth/post_auth_logout) | Encerrar sessão |
 | `GET` | [`/auth/me`](http://localhost:8080/swagger/index.html#/auth/get_auth_me) | Usuário autenticado atual |
 | `PUT` | [`/providers/me/preferencias`](http://localhost:8080/swagger/index.html#/providers/put_providers_me_preferencias) | Atualizar preferências do prestador |
 | `GET` | [`/providers/me/agenda`](http://localhost:8080/swagger/index.html#/availability/get_providers_me_agenda) | Consultar agenda resolvida do prestador (por período) |
 | `PUT` | [`/providers/me/dias/{data}`](http://localhost:8080/swagger/index.html#/availability/put_providers_me_dias__data_) | Definir um dia (bloqueio ou horários personalizados) |
 | `DELETE` | [`/providers/me/dias/{data}`](http://localhost:8080/swagger/index.html#/availability/delete_providers_me_dias__data_) | Remover a definição de um dia (volta ao padrão) |
+| `GET` | [`/providers`](http://localhost:8080/swagger/index.html#/providers/get_providers) | Listar prestadores (vitrine) |
+| `GET` | [`/providers/{id}`](http://localhost:8080/swagger/index.html#/providers/get_providers__id_) | Buscar prestador (página pública de agendamento) |
+| `GET` | [`/providers/{id}/slots`](http://localhost:8080/swagger/index.html#/appointments/get_providers__id__slots) | Consultar horários livres de um prestador (por período) |
+| `POST` | [`/agendamentos`](http://localhost:8080/swagger/index.html#/appointments/post_agendamentos) | Solicitar um agendamento (cliente) |
+| `POST` | [`/agendamentos/convidado`](http://localhost:8080/swagger/index.html#/appointments/post_agendamentos_convidado) | Solicitar um agendamento sem cadastro (nome/e-mail/telefone) |
+| `GET` | [`/clients/me/agendamentos`](http://localhost:8080/swagger/index.html#/appointments/get_clients_me_agendamentos) | Listar agendamentos do cliente |
+| `GET` | [`/providers/me/agendamentos`](http://localhost:8080/swagger/index.html#/appointments/get_providers_me_agendamentos) | Listar agendamentos recebidos pelo prestador |
+| `POST` | [`/agendamentos/{id}/confirmar`](http://localhost:8080/swagger/index.html#/appointments/post_agendamentos__id__confirmar) | Confirmar uma solicitação (prestador) |
+| `POST` | [`/agendamentos/{id}/recusar`](http://localhost:8080/swagger/index.html#/appointments/post_agendamentos__id__recusar) | Recusar uma solicitação (prestador) |
+| `POST` | [`/agendamentos/{id}/cancelar`](http://localhost:8080/swagger/index.html#/appointments/post_agendamentos__id__cancelar) | Cancelar um agendamento (cliente ou prestador) |
+| `POST` | [`/agendamentos/{id}/realizado`](http://localhost:8080/swagger/index.html#/appointments/post_agendamentos__id__realizado) | Marcar atendimento como realizado (prestador) |
+| `POST` | [`/agendamentos/{id}/nao-compareceu`](http://localhost:8080/swagger/index.html#/appointments/post_agendamentos__id__nao_compareceu) | Registrar não comparecimento (prestador) |
+| `GET` | [`/admin/prestadores`](http://localhost:8080/swagger/index.html#/admin/get_admin_prestadores) | Listar prestadores para moderação (admin) |
+| `GET` | [`/admin/prestadores/{id}`](http://localhost:8080/swagger/index.html#/admin/get_admin_prestadores__id_) | Detalhar um prestador em leitura: cadastro + agendamentos recebidos (admin) |
+| `GET` | [`/admin/clientes`](http://localhost:8080/swagger/index.html#/admin/get_admin_clientes) | Listar clientes para moderação (admin) |
+| `GET` | [`/admin/clientes/{id}`](http://localhost:8080/swagger/index.html#/admin/get_admin_clientes__id_) | Detalhar um cliente em leitura: cadastro + agendamentos feitos (admin) |
+| `POST` | [`/admin/prestadores/{id}/banir`](http://localhost:8080/swagger/index.html#/admin/post_admin_prestadores__id__banir) | Banir um prestador (admin) |
+| `POST` | [`/admin/prestadores/{id}/reativar`](http://localhost:8080/swagger/index.html#/admin/post_admin_prestadores__id__reativar) | Reativar um prestador (admin) |
+| `POST` | [`/admin/clientes/{id}/banir`](http://localhost:8080/swagger/index.html#/admin/post_admin_clientes__id__banir) | Banir um cliente (admin) |
+| `POST` | [`/admin/clientes/{id}/reativar`](http://localhost:8080/swagger/index.html#/admin/post_admin_clientes__id__reativar) | Reativar um cliente (admin) |
 | `GET` | [`/swagger/index.html`](http://localhost:8080/swagger/index.html) | Documentação interativa |
 
 ---
