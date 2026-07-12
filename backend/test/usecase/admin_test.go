@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"agendago/internal/adapter/email"
 	"agendago/internal/adapter/repository"
 	"agendago/internal/adapter/security"
 	"agendago/internal/domain/client"
@@ -220,7 +221,8 @@ func TestDetalhar(t *testing.T) {
 		appointments := repository.NovoAppointmentMemoria()
 		resolvedor := ucavailability.NovoConsultarDisponibilidadeUseCase(availabilityRepo, providers)
 		consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointments, providers, time.UTC)
-		solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointments, clients, 24*time.Hour)
+		notificador := email.NovoNotificador(email.NovaMailerMemoria(), "http://localhost:5173", time.UTC, email.ExecutorSincrono)
+		solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointments, clients, providers, notificador, 24*time.Hour)
 		listar := ucappointment.NovoListarUseCase(appointments, providers, clients)
 
 		if _, err := solicitar.Executar(ucappointment.SolicitarInput{

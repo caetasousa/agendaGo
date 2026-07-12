@@ -143,4 +143,99 @@ func TestAppointmentPostgres(t *testing.T) {
 			t.Errorf("esperava exatamente 1 vencedor e %d conflitos, got: %d/%d", concorrentes-1, sucessos, conflitos)
 		}
 	})
+
+	t.Run("lembrete: lista confirmados sem lembrete e marca como enviado", func(t *testing.T) {
+		id := "eeeeeeee-2222-0000-0000-000000000001"
+		a := novo(id, 15*60, 16*60)
+		if err := repo.SalvarSeLivre(a, agora); err != nil {
+			t.Fatalf("salvar de base falhou: %v", err)
+		}
+		if err := a.Confirmar(agora); err != nil {
+			t.Fatalf("confirmar no domínio: %v", err)
+		}
+		if err := repo.Atualizar(a); err != nil {
+			t.Fatalf("atualizar de base falhou: %v", err)
+		}
+
+		candidatos, err := repo.ListarConfirmadosSemLembrete(data, data)
+		if err != nil {
+			t.Fatalf("esperava sucesso, got: %v", err)
+		}
+		achou := false
+		for _, c := range candidatos {
+			if c.ID == id {
+				achou = true
+			}
+		}
+		if !achou {
+			t.Fatal("esperava encontrar o agendamento confirmado sem lembrete")
+		}
+
+		reivindicado, err := repo.MarcarLembreteEnviado(id, agora)
+		if err != nil {
+			t.Fatalf("esperava sucesso, got: %v", err)
+		}
+		if !reivindicado {
+			t.Error("esperava reivindicar o lembrete na primeira vez")
+		}
+
+		// já marcado: não aparece mais na listagem de pendentes
+		candidatos2, _ := repo.ListarConfirmadosSemLembrete(data, data)
+		for _, c := range candidatos2 {
+			if c.ID == id {
+				t.Error("não esperava agendamento já lembrado na listagem de pendentes")
+			}
+		}
+
+		// segunda tentativa de marcar não reivindica de novo
+		reivindicadoDeNovo, err := repo.MarcarLembreteEnviado(id, agora)
+		if err != nil {
+			t.Fatalf("esperava sucesso, got: %v", err)
+		}
+		if reivindicadoDeNovo {
+			t.Error("não esperava reivindicar o lembrete duas vezes")
+		}
+	})
+
+	t.Run("lembrete: corrida real entre goroutines, só uma reivindica", func(t *testing.T) {
+		id := "eeeeeeee-2222-0000-0000-000000000002"
+		a := novo(id, 17*60, 18*60)
+		if err := repo.SalvarSeLivre(a, agora); err != nil {
+			t.Fatalf("salvar de base falhou: %v", err)
+		}
+		if err := a.Confirmar(agora); err != nil {
+			t.Fatalf("confirmar no domínio: %v", err)
+		}
+		if err := repo.Atualizar(a); err != nil {
+			t.Fatalf("atualizar de base falhou: %v", err)
+		}
+
+		const concorrentes = 8
+		resultados := make(chan bool, concorrentes)
+		var wg sync.WaitGroup
+		for i := 0; i < concorrentes; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				reivindicado, err := repo.MarcarLembreteEnviado(id, agora)
+				if err != nil {
+					t.Errorf("erro inesperado na corrida: %v", err)
+					return
+				}
+				resultados <- reivindicado
+			}()
+		}
+		wg.Wait()
+		close(resultados)
+
+		vencedores := 0
+		for r := range resultados {
+			if r {
+				vencedores++
+			}
+		}
+		if vencedores != 1 {
+			t.Errorf("esperava exatamente 1 vencedor na reivindicação do lembrete, got: %d", vencedores)
+		}
+	})
 }

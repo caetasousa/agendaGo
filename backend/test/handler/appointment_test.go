@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"agendago/internal/adapter/email"
 	"agendago/internal/adapter/http/handler"
 	"agendago/internal/adapter/http/middleware"
 	"agendago/internal/adapter/repository"
@@ -48,11 +49,12 @@ func novoRouterAgendamento(t *testing.T) (r *chi.Mux, providerID string) {
 		return middleware.IdentidadeDoContexto(req.Context())
 	}
 
+	notificador := email.NovoNotificador(email.NovaMailerMemoria(), "http://localhost:5173", time.UTC, email.ExecutorSincrono)
 	resolvedor := ucavailability.NovoConsultarDisponibilidadeUseCase(availabilityRepo, providerRepo)
 	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointmentRepo, providerRepo, time.UTC)
-	solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointmentRepo, clientRepo, 24*time.Hour)
+	solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointmentRepo, clientRepo, providerRepo, notificador, 24*time.Hour)
 	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitar, clientRepo)
-	transicionar := ucappointment.NovoTransicionarUseCase(appointmentRepo, 24*time.Hour, time.UTC)
+	transicionar := ucappointment.NovoTransicionarUseCase(appointmentRepo, providerRepo, clientRepo, notificador, 24*time.Hour, time.UTC)
 	listar := ucappointment.NovoListarUseCase(appointmentRepo, providerRepo, clientRepo)
 
 	appointmentHandler := handler.NovoAppointmentHandler(consultarSlots, solicitar, solicitarConvidado, transicionar, listar, identidadeDoContexto)

@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"agendago/internal/adapter/email"
 	"agendago/internal/adapter/repository"
 	"agendago/internal/domain/appointment"
 	"agendago/internal/domain/client"
@@ -22,9 +23,11 @@ type ambienteAgendamento struct {
 	solicitarConvidado *ucappointment.SolicitarConvidadoUseCase
 	transicionar       *ucappointment.TransicionarUseCase
 	listar             *ucappointment.ListarUseCase
+	lembrar            *ucappointment.LembrarUseCase
 	appointments       *repository.AppointmentMemoria
 	clients            *repository.ClientMemoria
 	prestador          *provider.Provider
+	mailer             *email.MailerMemoria
 }
 
 func novoAmbienteAgendamento(t *testing.T) *ambienteAgendamento {
@@ -42,12 +45,16 @@ func novoAmbienteAgendamento(t *testing.T) *ambienteAgendamento {
 	availabilityRepo := repository.NovoAvailabilityMemoria()
 	appointments := repository.NovoAppointmentMemoria()
 
+	mailer := email.NovaMailerMemoria()
+	notificador := email.NovoNotificador(mailer, "http://localhost:5173", time.UTC, email.ExecutorSincrono)
+
 	resolvedor := ucavailability.NovoConsultarDisponibilidadeUseCase(availabilityRepo, providerRepo)
 	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointments, providerRepo, time.UTC)
-	solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointments, clientRepo, 24*time.Hour)
+	solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointments, clientRepo, providerRepo, notificador, 24*time.Hour)
 	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitar, clientRepo)
-	transicionar := ucappointment.NovoTransicionarUseCase(appointments, 24*time.Hour, time.UTC)
+	transicionar := ucappointment.NovoTransicionarUseCase(appointments, providerRepo, clientRepo, notificador, 24*time.Hour, time.UTC)
 	listar := ucappointment.NovoListarUseCase(appointments, providerRepo, clientRepo)
+	lembrar := ucappointment.NovoLembrarUseCase(appointments, providerRepo, clientRepo, notificador, time.UTC, 24*time.Hour)
 
 	return &ambienteAgendamento{
 		consultarSlots:     consultarSlots,
@@ -55,9 +62,11 @@ func novoAmbienteAgendamento(t *testing.T) *ambienteAgendamento {
 		solicitarConvidado: solicitarConvidado,
 		transicionar:       transicionar,
 		listar:             listar,
+		lembrar:            lembrar,
 		appointments:       appointments,
 		clients:            clientRepo,
 		prestador:          p,
+		mailer:             mailer,
 	}
 }
 
@@ -199,6 +208,38 @@ func TestSolicitarAgendamento(t *testing.T) {
 			t.Errorf("esperava reservar o slot liberado pela expiração, got: %v", err)
 		}
 	})
+
+	t.Run("solicitação bem-sucedida notifica o prestador por email", func(t *testing.T) {
+		amb := novoAmbienteAgendamento(t)
+
+		if _, err := amb.solicitar.Executar(ucappointment.SolicitarInput{
+			ClientID: "client-1", ProviderID: "provider-1", Data: segundaFutura, InicioMinutos: 8 * 60, Agora: agoraDoTeste,
+		}); err != nil {
+			t.Fatalf("esperava sucesso, got: %v", err)
+		}
+
+		enviadas := amb.mailer.Enviadas()
+		if len(enviadas) != 1 {
+			t.Fatalf("esperava 1 email ao prestador, got: %d", len(enviadas))
+		}
+		if enviadas[0].Para != "joao@email.com" {
+			t.Errorf("esperava email para o prestador joao@email.com, got: %s", enviadas[0].Para)
+		}
+	})
+
+	t.Run("slot indisponível não notifica ninguém", func(t *testing.T) {
+		amb := novoAmbienteAgendamento(t)
+
+		_, err := amb.solicitar.Executar(ucappointment.SolicitarInput{
+			ClientID: "client-1", ProviderID: "provider-1", Data: segundaFutura, InicioMinutos: 12 * 60, Agora: agoraDoTeste,
+		})
+		if err != ucappointment.ErrHorarioIndisponivel {
+			t.Fatalf("esperava ErrHorarioIndisponivel, got: %v", err)
+		}
+		if len(amb.mailer.Enviadas()) != 0 {
+			t.Errorf("esperava zero emails para solicitação rejeitada, got: %d", len(amb.mailer.Enviadas()))
+		}
+	})
 }
 
 func TestTransicionarAgendamento(t *testing.T) {
@@ -328,6 +369,90 @@ func TestTransicionarAgendamento(t *testing.T) {
 		})
 		if err != appointment.ErrAntecedenciaInsuficiente {
 			t.Errorf("esperava ErrAntecedenciaInsuficiente, got: %v", err)
+		}
+	})
+
+	t.Run("confirmar notifica o cliente por email", func(t *testing.T) {
+		amb := novoAmbienteAgendamento(t)
+		id := solicitarPadrao(t, amb)
+		amb.mailer.Limpar() // descarta o email de solicitação já disparado
+
+		if err := amb.transicionar.Confirmar(ucappointment.TransicionarInput{
+			AgendamentoID: id, UsuarioID: "provider-1", Tipo: session.TipoProvider, Agora: agoraDoTeste,
+		}); err != nil {
+			t.Fatalf("esperava confirmar, got: %v", err)
+		}
+
+		enviadas := amb.mailer.Enviadas()
+		if len(enviadas) != 1 {
+			t.Fatalf("esperava 1 email ao cliente, got: %d", len(enviadas))
+		}
+		if enviadas[0].Para != "maria@email.com" {
+			t.Errorf("esperava email para o cliente maria@email.com, got: %s", enviadas[0].Para)
+		}
+	})
+
+	t.Run("recusar notifica o cliente por email", func(t *testing.T) {
+		amb := novoAmbienteAgendamento(t)
+		id := solicitarPadrao(t, amb)
+		amb.mailer.Limpar()
+
+		if err := amb.transicionar.Recusar(ucappointment.TransicionarInput{
+			AgendamentoID: id, UsuarioID: "provider-1", Tipo: session.TipoProvider, Agora: agoraDoTeste,
+		}); err != nil {
+			t.Fatalf("esperava recusar, got: %v", err)
+		}
+
+		enviadas := amb.mailer.Enviadas()
+		if len(enviadas) != 1 {
+			t.Fatalf("esperava 1 email ao cliente, got: %d", len(enviadas))
+		}
+		if enviadas[0].Para != "maria@email.com" {
+			t.Errorf("esperava email para o cliente maria@email.com, got: %s", enviadas[0].Para)
+		}
+	})
+
+	t.Run("cancelamento pelo cliente notifica o prestador", func(t *testing.T) {
+		amb := novoAmbienteAgendamento(t)
+		id := solicitarPadrao(t, amb)
+		amb.mailer.Limpar()
+
+		if err := amb.transicionar.Cancelar(ucappointment.TransicionarInput{
+			AgendamentoID: id, UsuarioID: "client-1", Tipo: session.TipoClient, Agora: agoraDoTeste,
+		}); err != nil {
+			t.Fatalf("esperava cancelar, got: %v", err)
+		}
+
+		enviadas := amb.mailer.Enviadas()
+		if len(enviadas) != 1 {
+			t.Fatalf("esperava 1 email ao prestador, got: %d", len(enviadas))
+		}
+		if enviadas[0].Para != "joao@email.com" {
+			t.Errorf("esperava email para o prestador joao@email.com, got: %s", enviadas[0].Para)
+		}
+	})
+
+	t.Run("cancelamento pelo prestador notifica o cliente", func(t *testing.T) {
+		amb := novoAmbienteAgendamento(t)
+		id := solicitarPadrao(t, amb)
+		amb.transicionar.Confirmar(ucappointment.TransicionarInput{
+			AgendamentoID: id, UsuarioID: "provider-1", Tipo: session.TipoProvider, Agora: agoraDoTeste,
+		})
+		amb.mailer.Limpar()
+
+		antecedenciaOk := agoraDoTeste
+		if err := amb.transicionar.Cancelar(ucappointment.TransicionarInput{
+			AgendamentoID: id, UsuarioID: "provider-1", Tipo: session.TipoProvider, Agora: antecedenciaOk,
+		}); err != nil {
+			t.Fatalf("esperava cancelar, got: %v", err)
+		}
+
+		enviadas := amb.mailer.Enviadas()
+		if len(enviadas) != 1 {
+			t.Fatalf("esperava 1 email ao cliente, got: %d", len(enviadas))
+		}
+		if enviadas[0].Para != "maria@email.com" {
+			t.Errorf("esperava email para o cliente maria@email.com (cancelado pelo prestador), got: %s", enviadas[0].Para)
 		}
 	})
 }
