@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"agendago/internal/domain/client"
 
@@ -35,6 +36,17 @@ func (r *ClientPostgres) Atualizar(c *client.Client) error {
 	_, err := r.pool.Exec(context.Background(),
 		`UPDATE clients SET ativo = $2, atualizado_em = $3 WHERE id = $1`,
 		c.ID, c.Ativo, c.AtualizadoEm,
+	)
+	return err
+}
+
+// AtualizarSenha persiste um novo hash de senha — usado na redefinição via
+// recuperação de senha. Método dedicado para não passar pelo Atualizar
+// genérico, que só toca o banimento.
+func (r *ClientPostgres) AtualizarSenha(id, senhaHash string) error {
+	_, err := r.pool.Exec(context.Background(),
+		`UPDATE clients SET senha_hash = $2, atualizado_em = $3 WHERE id = $1`,
+		id, senhaHash, time.Now(),
 	)
 	return err
 }

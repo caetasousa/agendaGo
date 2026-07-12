@@ -38,6 +38,8 @@ type repositorioAppointment interface {
 	ListarPorPrestador(providerID string) ([]*appointment.Appointment, error)
 	ListarPorCliente(clientID string) ([]*appointment.Appointment, error)
 	ListarOcupantesPorPeriodo(providerID string, de, ate time.Time, agora time.Time) ([]*appointment.Appointment, error)
+	ListarConfirmadosSemLembrete(de, ate time.Time) ([]*appointment.Appointment, error)
+	MarcarLembreteEnviado(id string, quando time.Time) (bool, error)
 }
 
 // repositorioProvider busca prestadores (duração, buffer e agenda ativa).

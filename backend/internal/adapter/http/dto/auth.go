@@ -15,6 +15,23 @@ type LoginResponse struct {
 	Tipo string `json:"tipo"`
 }
 
+type RecuperarSenhaRequest struct {
+	Email string `json:"email" validate:"required,email"`
+}
+
+func (r RecuperarSenhaRequest) Validar() error {
+	return validate.Struct(r)
+}
+
+type RedefinirSenhaRequest struct {
+	Token     string `json:"token" validate:"required"`
+	NovaSenha string `json:"novaSenha" validate:"required,min=8"`
+}
+
+func (r RedefinirSenhaRequest) Validar() error {
+	return validate.Struct(r)
+}
+
 type MeResponse struct {
 	ID                        string     `json:"id"`
 	Nome                      string     `json:"nome"`

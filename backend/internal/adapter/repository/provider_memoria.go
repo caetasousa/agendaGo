@@ -56,6 +56,16 @@ func (r *ProviderMemoria) Atualizar(p *provider.Provider) error {
 	return nil
 }
 
+// AtualizarSenha persiste um novo hash de senha, espelhando o contrato do Postgres.
+func (r *ProviderMemoria) AtualizarSenha(id, senhaHash string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if p, ok := r.dados[id]; ok {
+		p.SenhaHash = senhaHash
+	}
+	return nil
+}
+
 // Listar devolve todos os prestadores, para a vitrine de agendamento.
 func (r *ProviderMemoria) Listar() ([]*provider.Provider, error) {
 	r.mu.RLock()

@@ -21,8 +21,17 @@ var ErrUsuarioInativo = errors.New("usuário desativado")
 // sessão ativa ou a sessão já expirou.
 var ErrSessaoInvalida = errors.New("sessão inválida")
 
+// ErrTokenRecuperacaoInvalido é retornado tanto para token inexistente
+// quanto para token expirado — resposta genérica, para não vazar detalhes
+// sobre um token que um atacante possa estar testando.
+var ErrTokenRecuperacaoInvalido = errors.New("token de recuperação inválido ou expirado")
+
 // TTLSessao é a validade fixa de uma sessão a partir do login.
 const TTLSessao = 7 * 24 * time.Hour
+
+// TTLRecuperacaoSenha é o prazo de validade de um token de recuperação de
+// senha a partir da emissão.
+const TTLRecuperacaoSenha = time.Hour
 
 // hashDummy é comparado contra a senha informada quando o email não é
 // encontrado, para equalizar o tempo de resposta e evitar que a diferença de

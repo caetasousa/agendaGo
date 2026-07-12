@@ -78,6 +78,29 @@ func (r *AppointmentMemoria) ListarOcupantesPorPeriodo(providerID string, de, at
 	})
 }
 
+// ListarConfirmadosSemLembrete devolve os agendamentos CONFIRMADOs cuja data
+// está entre de e ate (inclusive) e cujo lembrete ainda não foi enviado.
+func (r *AppointmentMemoria) ListarConfirmadosSemLembrete(de, ate time.Time) ([]*appointment.Appointment, error) {
+	return r.listar(func(a *appointment.Appointment) bool {
+		return a.Status == appointment.StatusConfirmado &&
+			!a.Data.Before(de) && !a.Data.After(ate) &&
+			a.LembreteEnviadoEm == nil
+	})
+}
+
+// MarcarLembreteEnviado marca o lembrete como enviado, mas só se ainda não
+// tiver sido, espelhando o claim do repositório Postgres.
+func (r *AppointmentMemoria) MarcarLembreteEnviado(id string, quando time.Time) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	a, ok := r.dados[id]
+	if !ok || a.LembreteEnviadoEm != nil {
+		return false, nil
+	}
+	a.LembreteEnviadoEm = &quando
+	return true, nil
+}
+
 func (r *AppointmentMemoria) listar(filtro func(*appointment.Appointment) bool) ([]*appointment.Appointment, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

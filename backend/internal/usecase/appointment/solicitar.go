@@ -36,6 +36,8 @@ type SolicitarUseCase struct {
 	consultarSlots *ConsultarSlotsUseCase
 	repo           repositorioAppointment
 	clientRepo     repositorioClient
+	providerRepo   repositorioProvider
+	notificador    notificadorAgendamento
 	ttl            time.Duration
 }
 
@@ -44,9 +46,18 @@ func NovoSolicitarUseCase(
 	consultarSlots *ConsultarSlotsUseCase,
 	repo repositorioAppointment,
 	clientRepo repositorioClient,
+	providerRepo repositorioProvider,
+	notificador notificadorAgendamento,
 	ttl time.Duration,
 ) *SolicitarUseCase {
-	return &SolicitarUseCase{consultarSlots: consultarSlots, repo: repo, clientRepo: clientRepo, ttl: ttl}
+	return &SolicitarUseCase{
+		consultarSlots: consultarSlots,
+		repo:           repo,
+		clientRepo:     clientRepo,
+		providerRepo:   providerRepo,
+		notificador:    notificador,
+		ttl:            ttl,
+	}
 }
 
 // Executar valida o cliente e o slot (disponibilidade do dia, ocupação,
@@ -105,6 +116,8 @@ func (uc *SolicitarUseCase) reservar(providerID, clientID string, data time.Time
 		return nil, err
 	}
 
+	uc.notificarSolicitacao(novo)
+
 	return &SolicitarOutput{
 		ID:            novo.ID,
 		ProviderID:    novo.ProviderID,
@@ -114,4 +127,29 @@ func (uc *SolicitarUseCase) reservar(providerID, clientID string, data time.Time
 		Status:        novo.Status,
 		ExpiraEm:      novo.ExpiraEm,
 	}, nil
+}
+
+// notificarSolicitacao avisa o prestador do novo pedido. Best-effort: se não
+// conseguir resolver os nomes/emails das partes, a notificação é só
+// silenciosamente pulada — nunca falha a reserva já persistida.
+func (uc *SolicitarUseCase) notificarSolicitacao(a *appointment.Appointment) {
+	p, err := uc.providerRepo.BuscarPorID(a.ProviderID)
+	if err != nil || p == nil {
+		return
+	}
+	c, err := uc.clientRepo.BuscarPorID(a.ClientID)
+	if err != nil || c == nil {
+		return
+	}
+
+	uc.notificador.NotificarSolicitacao(NotificacaoAgendamento{
+		NomePrestador:  p.Nome,
+		EmailPrestador: p.Email,
+		NomeCliente:    c.Nome,
+		EmailCliente:   c.Email,
+		Data:           a.Data,
+		InicioMinutos:  a.InicioMinutos,
+		FimMinutos:     a.FimMinutos,
+		ExpiraEm:       a.ExpiraEm,
+	})
 }

@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"agendago/internal/domain/availability"
 	"agendago/internal/domain/provider"
@@ -99,6 +100,17 @@ func (r *ProviderPostgres) Atualizar(p *provider.Provider) error {
 	}
 
 	return tx.Commit(ctx)
+}
+
+// AtualizarSenha persiste um novo hash de senha — usado na redefinição via
+// recuperação de senha. Método dedicado para não passar pelo Atualizar
+// genérico, que não toca a coluna senha_hash.
+func (r *ProviderPostgres) AtualizarSenha(id, senhaHash string) error {
+	_, err := r.pool.Exec(context.Background(),
+		`UPDATE providers SET senha_hash = $2, atualizado_em = $3 WHERE id = $1`,
+		id, senhaHash, time.Now(),
+	)
+	return err
 }
 
 // BuscarPorID retorna (prestador, nil) quando encontra, (nil, nil) quando não

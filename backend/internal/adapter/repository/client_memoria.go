@@ -31,6 +31,16 @@ func (r *ClientMemoria) Atualizar(c *client.Client) error {
 	return nil
 }
 
+// AtualizarSenha persiste um novo hash de senha, espelhando o contrato do Postgres.
+func (r *ClientMemoria) AtualizarSenha(id, senhaHash string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if c, ok := r.dados[id]; ok {
+		c.SenhaHash = senhaHash
+	}
+	return nil
+}
+
 // Listar devolve os clientes com conta, para o painel de moderação do admin.
 func (r *ClientMemoria) Listar() ([]*client.Client, error) {
 	r.mu.RLock()

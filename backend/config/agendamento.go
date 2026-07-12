@@ -14,6 +14,14 @@ const TTLSolicitacao = 24 * time.Hour
 // atendimento em que um agendamento confirmado ainda pode ser cancelado.
 const AntecedenciaMinimaCancelamento = 24 * time.Hour
 
+// AntecedenciaLembrete é o quanto antes do início do atendimento confirmado
+// o lembrete por email é disparado.
+const AntecedenciaLembrete = 24 * time.Hour
+
+// IntervaloVerificacaoLembrete é o período entre cada checagem do worker de
+// lembretes por agendamentos confirmados ainda não lembrados.
+const IntervaloVerificacaoLembrete = 10 * time.Minute
+
 // FusoHorario é o fuso único do sistema (America/Sao_Paulo). Falha no boot se
 // o tzdata não estiver disponível — melhor que operar em fuso errado.
 var FusoHorario = carregarFuso()

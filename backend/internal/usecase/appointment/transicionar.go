@@ -23,42 +23,71 @@ type TransicionarInput struct {
 // existente. As regras de cada transição vivem no domínio; aqui ficam a
 // autorização (dono do recurso), a expiração lazy e a persistência.
 type TransicionarUseCase struct {
-	repo        repositorioAppointment
+	repo         repositorioAppointment
+	providerRepo repositorioProvider
+	clientRepo   repositorioClient
+	notificador  notificadorAgendamento
 	antecedencia time.Duration
-	fuso        *time.Location
+	fuso         *time.Location
 }
 
 // NovoTransicionarUseCase cria uma instância de TransicionarUseCase com as dependências injetadas.
-func NovoTransicionarUseCase(repo repositorioAppointment, antecedencia time.Duration, fuso *time.Location) *TransicionarUseCase {
-	return &TransicionarUseCase{repo: repo, antecedencia: antecedencia, fuso: fuso}
+func NovoTransicionarUseCase(
+	repo repositorioAppointment,
+	providerRepo repositorioProvider,
+	clientRepo repositorioClient,
+	notificador notificadorAgendamento,
+	antecedencia time.Duration,
+	fuso *time.Location,
+) *TransicionarUseCase {
+	return &TransicionarUseCase{
+		repo:         repo,
+		providerRepo: providerRepo,
+		clientRepo:   clientRepo,
+		notificador:  notificador,
+		antecedencia: antecedencia,
+		fuso:         fuso,
+	}
 }
 
 // Confirmar aceita uma solicitação pendente do prestador autenticado.
 func (uc *TransicionarUseCase) Confirmar(in TransicionarInput) error {
-	return uc.transicionarComoPrestador(in, func(a *appointment.Appointment) error {
+	a, err := uc.transicionarComoPrestador(in, func(a *appointment.Appointment) error {
 		return a.Confirmar(in.Agora)
 	})
+	if err != nil {
+		return err
+	}
+	uc.notificar(a, uc.notificador.NotificarConfirmacao, false)
+	return nil
 }
 
 // Recusar nega uma solicitação pendente do prestador autenticado.
 func (uc *TransicionarUseCase) Recusar(in TransicionarInput) error {
-	return uc.transicionarComoPrestador(in, func(a *appointment.Appointment) error {
+	a, err := uc.transicionarComoPrestador(in, func(a *appointment.Appointment) error {
 		return a.Recusar(in.Agora)
 	})
+	if err != nil {
+		return err
+	}
+	uc.notificar(a, uc.notificador.NotificarRecusa, false)
+	return nil
 }
 
 // MarcarRealizado conclui um agendamento confirmado cujo horário já passou.
 func (uc *TransicionarUseCase) MarcarRealizado(in TransicionarInput) error {
-	return uc.transicionarComoPrestador(in, func(a *appointment.Appointment) error {
+	_, err := uc.transicionarComoPrestador(in, func(a *appointment.Appointment) error {
 		return a.MarcarRealizado(in.Agora, uc.fuso)
 	})
+	return err
 }
 
 // MarcarNaoCompareceu registra a ausência do cliente num agendamento confirmado.
 func (uc *TransicionarUseCase) MarcarNaoCompareceu(in TransicionarInput) error {
-	return uc.transicionarComoPrestador(in, func(a *appointment.Appointment) error {
+	_, err := uc.transicionarComoPrestador(in, func(a *appointment.Appointment) error {
 		return a.MarcarNaoCompareceu(in.Agora, uc.fuso)
 	})
+	return err
 }
 
 // Cancelar encerra o agendamento a pedido do cliente ou do prestador. O
@@ -84,32 +113,64 @@ func (uc *TransicionarUseCase) Cancelar(in TransicionarInput) error {
 	if err := a.Cancelar(in.Agora, uc.antecedencia, uc.fuso); err != nil {
 		return err
 	}
-	return uc.repo.Atualizar(a)
+	if err := uc.repo.Atualizar(a); err != nil {
+		return err
+	}
+	uc.notificar(a, uc.notificador.NotificarCancelamento, in.Tipo == session.TipoProvider)
+	return nil
 }
 
 // transicionarComoPrestador carrega o agendamento do prestador autenticado,
 // efetiva a expiração lazy e aplica a transição do domínio.
-func (uc *TransicionarUseCase) transicionarComoPrestador(in TransicionarInput, transicao func(*appointment.Appointment) error) error {
+func (uc *TransicionarUseCase) transicionarComoPrestador(in TransicionarInput, transicao func(*appointment.Appointment) error) (*appointment.Appointment, error) {
 	if in.Tipo != session.TipoProvider {
-		return ErrAgendamentoNaoEncontrado
+		return nil, ErrAgendamentoNaoEncontrado
 	}
 
 	a, err := uc.carregarDoUsuario(in)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if a.ExpirarSeVencido(in.Agora) {
 		if err := uc.repo.Atualizar(a); err != nil {
-			return err
+			return nil, err
 		}
-		return appointment.ErrSolicitacaoExpirada
+		return nil, appointment.ErrSolicitacaoExpirada
 	}
 
 	if err := transicao(a); err != nil {
-		return err
+		return nil, err
 	}
-	return uc.repo.Atualizar(a)
+	if err := uc.repo.Atualizar(a); err != nil {
+		return nil, err
+	}
+	return a, nil
+}
+
+// notificar resolve nome/email das duas partes e dispara o evento
+// correspondente. Best-effort: se não conseguir resolver os dados, a
+// notificação é silenciosamente pulada.
+func (uc *TransicionarUseCase) notificar(a *appointment.Appointment, evento func(NotificacaoAgendamento), canceladoPorPrestador bool) {
+	p, err := uc.providerRepo.BuscarPorID(a.ProviderID)
+	if err != nil || p == nil {
+		return
+	}
+	c, err := uc.clientRepo.BuscarPorID(a.ClientID)
+	if err != nil || c == nil {
+		return
+	}
+
+	evento(NotificacaoAgendamento{
+		NomePrestador:         p.Nome,
+		EmailPrestador:        p.Email,
+		NomeCliente:           c.Nome,
+		EmailCliente:          c.Email,
+		Data:                  a.Data,
+		InicioMinutos:         a.InicioMinutos,
+		FimMinutos:            a.FimMinutos,
+		CanceladoPorPrestador: canceladoPorPrestador,
+	})
 }
 
 // carregarDoUsuario busca o agendamento e garante que pertence ao usuário da

@@ -120,6 +120,32 @@ func (r *AppointmentPostgres) ListarOcupantesPorPeriodo(providerID string, de, a
 		string(appointment.StatusConfirmado), string(appointment.StatusSolicitado), agora)
 }
 
+// ListarConfirmadosSemLembrete devolve os agendamentos CONFIRMADOs cuja data
+// está entre de e ate (inclusive) e cujo lembrete ainda não foi enviado.
+func (r *AppointmentPostgres) ListarConfirmadosSemLembrete(de, ate time.Time) ([]*appointment.Appointment, error) {
+	return r.listar(
+		`SELECT id, provider_id, client_id, data, inicio_minutos, fim_minutos, status, expira_em, criado_em, atualizado_em
+		 FROM appointments
+		 WHERE status = $1 AND data BETWEEN $2 AND $3 AND lembrete_enviado_em IS NULL
+		 ORDER BY data, inicio_minutos`,
+		string(appointment.StatusConfirmado), de, ate)
+}
+
+// MarcarLembreteEnviado marca o lembrete como enviado, mas só se ainda não
+// tiver sido — o UPDATE condicional funciona como claim: quando duas
+// execuções competem pelo mesmo agendamento, só uma tem RowsAffected() > 0,
+// o que evita lembrete duplicado sem exigir lock explícito.
+func (r *AppointmentPostgres) MarcarLembreteEnviado(id string, quando time.Time) (bool, error) {
+	tag, err := r.pool.Exec(context.Background(),
+		`UPDATE appointments SET lembrete_enviado_em = $2 WHERE id = $1 AND lembrete_enviado_em IS NULL`,
+		id, quando,
+	)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
 func (r *AppointmentPostgres) listar(sql string, args ...any) ([]*appointment.Appointment, error) {
 	rows, err := r.pool.Query(context.Background(), sql, args...)
 	if err != nil {

@@ -68,6 +68,9 @@ type Appointment struct {
 	ExpiraEm      time.Time
 	CriadoEm      time.Time
 	AtualizadoEm  time.Time
+	// LembreteEnviadoEm marca quando o lembrete por email foi enviado; nil
+	// significa que ainda não foi.
+	LembreteEnviadoEm *time.Time
 }
 
 // Novo cria uma solicitação de agendamento (SOLICITADO) que já ocupa o
