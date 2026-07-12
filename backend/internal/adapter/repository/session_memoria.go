@@ -42,6 +42,19 @@ func (r *SessionMemoria) Remover(hash string) error {
 	return nil
 }
 
+// RemoverDoUsuario apaga todas as sessões de um usuário — usado ao bani-lo,
+// para o bloqueio valer imediatamente e não só no próximo login.
+func (r *SessionMemoria) RemoverDoUsuario(userID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for hash, s := range r.dados {
+		if s.UserID == userID {
+			delete(r.dados, hash)
+		}
+	}
+	return nil
+}
+
 // RemoverExpiradas apaga todas as sessões cuja expira_em já passou.
 func (r *SessionMemoria) RemoverExpiradas() error {
 	r.mu.Lock()

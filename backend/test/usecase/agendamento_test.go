@@ -426,4 +426,38 @@ func TestSolicitarConvidado(t *testing.T) {
 			t.Errorf("esperava ErrClientInativo, got: %v", err)
 		}
 	})
+
+	t.Run("e-mail de conta registrada é rejeitado — sem posse do e-mail não se agenda na conta alheia", func(t *testing.T) {
+		amb := novoAmbienteAgendamento(t)
+
+		// "maria@email.com" é a conta registrada do ambiente
+		in := dados(8 * 60)
+		in.Email = "maria@email.com"
+		_, err := amb.solicitarConvidado.Executar(in)
+		if err != ucappointment.ErrEmailTemConta {
+			t.Errorf("esperava ErrEmailTemConta, got: %v", err)
+		}
+
+		// nada foi reservado na conta da vítima
+		doCliente, _ := amb.listar.DoCliente(ucappointment.ListarInput{UsuarioID: "client-1", Agora: agoraDoTeste})
+		if len(doCliente.Agendamentos) != 0 {
+			t.Errorf("não deveria criar agendamento na conta registrada, got: %d", len(doCliente.Agendamentos))
+		}
+	})
+}
+
+func TestSolicitarClienteBanido(t *testing.T) {
+	t.Run("cliente banido com sessão ativa não agenda pela rota autenticada", func(t *testing.T) {
+		amb := novoAmbienteAgendamento(t)
+		banido, _ := amb.clients.BuscarPorID("client-1")
+		banido.Banir()
+		amb.clients.Atualizar(banido)
+
+		_, err := amb.solicitar.Executar(ucappointment.SolicitarInput{
+			ClientID: "client-1", ProviderID: "provider-1", Data: segundaFutura, InicioMinutos: 8 * 60, Agora: agoraDoTeste,
+		})
+		if err != ucappointment.ErrClientInativo {
+			t.Errorf("esperava ErrClientInativo, got: %v", err)
+		}
+	})
 }

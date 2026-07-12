@@ -8,6 +8,7 @@ import (
 	"agendago/internal/adapter/security"
 	"agendago/internal/domain/client"
 	"agendago/internal/domain/provider"
+	"agendago/internal/domain/session"
 	ucadmin "agendago/internal/usecase/admin"
 	ucappointment "agendago/internal/usecase/appointment"
 	ucauth "agendago/internal/usecase/auth"
@@ -64,7 +65,13 @@ func TestSemearAdmin(t *testing.T) {
 }
 
 func TestModerar(t *testing.T) {
-	novoAmbiente := func() (*ucadmin.ModerarUseCase, *repository.ProviderMemoria, *repository.ClientMemoria) {
+	type ambiente struct {
+		uc        *ucadmin.ModerarUseCase
+		providers *repository.ProviderMemoria
+		clients   *repository.ClientMemoria
+		sessoes   *repository.SessionMemoria
+	}
+	novoAmbiente := func() ambiente {
 		providers := repository.NovoProviderMemoria()
 		p, _ := provider.Novo("p-1", "João Prestador", "joao@email.com", "hash")
 		p.AtivarAgenda()
@@ -74,11 +81,17 @@ func TestModerar(t *testing.T) {
 		c, _ := client.NovoComConta("c-1", "Maria Cliente", "maria@email.com", "hash")
 		clients.Salvar(c)
 
-		return ucadmin.NovoModerarUseCase(providers, clients), providers, clients
+		sessoes := repository.NovoSessionMemoria()
+		return ambiente{
+			uc:        ucadmin.NovoModerarUseCase(providers, clients, sessoes),
+			providers: providers,
+			clients:   clients,
+			sessoes:   sessoes,
+		}
 	}
 
 	t.Run("lista prestadores e clientes com status de moderação", func(t *testing.T) {
-		uc, _, _ := novoAmbiente()
+		uc := novoAmbiente().uc
 
 		ps, err := uc.ListarPrestadores()
 		if err != nil || len(ps) != 1 || !ps[0].Ativo || !ps[0].AceitaAgendamentos {
@@ -92,7 +105,8 @@ func TestModerar(t *testing.T) {
 	})
 
 	t.Run("banir e reativar prestador reflete no login e na listagem", func(t *testing.T) {
-		uc, providers, _ := novoAmbiente()
+		amb := novoAmbiente()
+		uc, providers := amb.uc, amb.providers
 		sessionRepo := repository.NovoSessionMemoria()
 		hasher := security.NovoHasherArgon2id()
 
@@ -123,7 +137,8 @@ func TestModerar(t *testing.T) {
 	})
 
 	t.Run("banir cliente bloqueia o login dele", func(t *testing.T) {
-		uc, _, clients := novoAmbiente()
+		amb := novoAmbiente()
+		uc, clients := amb.uc, amb.clients
 		sessionRepo := repository.NovoSessionMemoria()
 		hasher := security.NovoHasherArgon2id()
 
@@ -138,8 +153,35 @@ func TestModerar(t *testing.T) {
 		}
 	})
 
+	t.Run("banir revoga as sessões ativas do usuário na hora", func(t *testing.T) {
+		amb := novoAmbiente()
+
+		// prestador e cliente com sessões ativas; um terceiro não é afetado
+		amb.sessoes.Salvar(session.Nova(hashDoToken("tok-prestador"), "p-1", session.TipoProvider, time.Hour))
+		amb.sessoes.Salvar(session.Nova(hashDoToken("tok-cliente"), "c-1", session.TipoClient, time.Hour))
+		amb.sessoes.Salvar(session.Nova(hashDoToken("tok-outro"), "outro", session.TipoClient, time.Hour))
+
+		if err := amb.uc.BanirPrestador("p-1"); err != nil {
+			t.Fatalf("esperava banir prestador, got: %v", err)
+		}
+		if s, _ := amb.sessoes.BuscarPorTokenHash(hashDoToken("tok-prestador")); s != nil {
+			t.Error("esperava sessão do prestador banido revogada")
+		}
+
+		if err := amb.uc.BanirCliente("c-1"); err != nil {
+			t.Fatalf("esperava banir cliente, got: %v", err)
+		}
+		if s, _ := amb.sessoes.BuscarPorTokenHash(hashDoToken("tok-cliente")); s != nil {
+			t.Error("esperava sessão do cliente banido revogada")
+		}
+
+		if s, _ := amb.sessoes.BuscarPorTokenHash(hashDoToken("tok-outro")); s == nil {
+			t.Error("sessão de usuário não banido não deveria ser tocada")
+		}
+	})
+
 	t.Run("banir usuário inexistente retorna erro", func(t *testing.T) {
-		uc, _, _ := novoAmbiente()
+		uc := novoAmbiente().uc
 		if err := uc.BanirPrestador("fantasma"); err != ucadmin.ErrProviderNaoEncontrado {
 			t.Errorf("esperava ErrProviderNaoEncontrado, got: %v", err)
 		}

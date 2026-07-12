@@ -34,8 +34,10 @@ func NovoSolicitarConvidadoUseCase(solicitar *SolicitarUseCase, clientRepo repos
 }
 
 // Executar resolve o cliente do agendamento e reserva o slot. Se já existe um
-// cliente com o email informado (convidado anterior ou conta), reusa esse
-// cliente — banido não pode agendar. Caso contrário cria um convidado novo.
+// convidado com o email informado, reusa esse convidado — banido não pode
+// agendar. E-mail de conta registrada é rejeitado: sem verificação de posse,
+// aceitar permitiria criar agendamentos dentro da conta de um terceiro.
+// Caso o e-mail seja inédito, cria um convidado novo.
 func (uc *SolicitarConvidadoUseCase) Executar(in SolicitarConvidadoInput) (*SolicitarOutput, error) {
 	existente, err := uc.clientRepo.BuscarPorEmail(in.Email)
 	if err != nil {
@@ -44,6 +46,9 @@ func (uc *SolicitarConvidadoUseCase) Executar(in SolicitarConvidadoInput) (*Soli
 
 	var clientID string
 	if existente != nil {
+		if existente.TemConta() {
+			return nil, ErrEmailTemConta
+		}
 		if !existente.Ativo {
 			return nil, ErrClientInativo
 		}

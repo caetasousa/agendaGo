@@ -400,6 +400,8 @@ func responderErroAgendamento(w http.ResponseWriter, err error) {
 		responderErro(w, http.StatusNotFound, err.Error())
 	case errors.Is(err, ucappointment.ErrClientInativo):
 		responderErro(w, http.StatusForbidden, err.Error())
+	case errors.Is(err, ucappointment.ErrEmailTemConta):
+		responderErro(w, http.StatusConflict, err.Error())
 	case errors.Is(err, ucappointment.ErrHorarioIndisponivel),
 		errors.Is(err, domappointment.ErrConflitoHorario),
 		errors.Is(err, domappointment.ErrTransicaoInvalida),

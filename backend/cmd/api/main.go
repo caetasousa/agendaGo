@@ -63,7 +63,7 @@ func main() {
 	logout := ucauth.NovoLogoutUseCase(sessionRepo)
 	validarSessao := ucauth.NovoValidarSessaoUseCase(sessionRepo)
 	perfil := ucauth.NovoPerfilUseCase(providerRepo, clientRepo, adminRepo)
-	moderar := ucadmin.NovoModerarUseCase(providerRepo, clientRepo)
+	moderar := ucadmin.NovoModerarUseCase(providerRepo, clientRepo, sessionRepo)
 	consultarAgenda := ucavailability.NovoConsultarAgendaUseCase(availabilityRepo, providerRepo)
 	definirDia := ucavailability.NovoDefinirDiaUseCase(availabilityRepo)
 	removerDia := ucavailability.NovoRemoverDiaUseCase(availabilityRepo)

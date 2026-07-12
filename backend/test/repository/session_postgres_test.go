@@ -81,4 +81,26 @@ func TestSessionPostgres(t *testing.T) {
 			t.Error("esperava sessão válida mantida")
 		}
 	})
+
+	t.Run("remove todas as sessões de um usuário (banimento)", func(t *testing.T) {
+		alvo := "cccccccc-cccc-cccc-cccc-cccccccccccc"
+		outro := "dddddddd-dddd-dddd-dddd-dddddddddddd"
+		repo.Salvar(session.Nova("hash-alvo-1", alvo, session.TipoClient, time.Hour))
+		repo.Salvar(session.Nova("hash-alvo-2", alvo, session.TipoClient, time.Hour))
+		repo.Salvar(session.Nova("hash-outro", outro, session.TipoClient, time.Hour))
+
+		if err := repo.RemoverDoUsuario(alvo); err != nil {
+			t.Fatalf("esperava sucesso, got: %v", err)
+		}
+
+		if s, _ := repo.BuscarPorTokenHash("hash-alvo-1"); s != nil {
+			t.Error("esperava primeira sessão do banido removida")
+		}
+		if s, _ := repo.BuscarPorTokenHash("hash-alvo-2"); s != nil {
+			t.Error("esperava segunda sessão do banido removida")
+		}
+		if s, _ := repo.BuscarPorTokenHash("hash-outro"); s == nil {
+			t.Error("sessão de outro usuário não deveria ser tocada")
+		}
+	})
 }

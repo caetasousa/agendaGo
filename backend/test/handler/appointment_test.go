@@ -172,7 +172,7 @@ func TestHandlerAgendamento(t *testing.T) {
 		}
 	})
 
-	t.Run("prestador não solicita agendamento (rota exige cliente)", func(t *testing.T) {
+t.Run("prestador não solicita agendamento (rota exige cliente)", func(t *testing.T) {
 		r, providerID := novoRouterAgendamento(t)
 		cookiePrestador := loginEObterCookie(t, r, "/auth/provider/login", "joao@email.com", "12345678")
 
@@ -249,6 +249,23 @@ func TestHandlerAgendamentoConvidado(t *testing.T) {
 		a := agendamentos[0].(map[string]any)
 		if a["nomeCliente"] != "Convidada Silva" || a["emailCliente"] != "convidada@email.com" || a["telefoneCliente"] != "(11) 99999-8888" {
 			t.Errorf("esperava contato do convidado visível ao prestador, got: %+v", a)
+		}
+	})
+
+	t.Run("e-mail de conta registrada leva 409 e orienta a entrar", func(t *testing.T) {
+		r, providerID := novoRouterAgendamento(t)
+		corpo := map[string]any{
+			"providerId":    providerID,
+			"data":          dataFutura(t),
+			"inicioMinutos": 8 * 60,
+			"nome":          "Impostora",
+			// e-mail da cliente registrada do ambiente de teste
+			"email":    "maria@email.com",
+			"telefone": "(11) 99999-8888",
+		}
+		rr := requisicaoComCookie(t, r, http.MethodPost, "/agendamentos/convidado", corpo, nil)
+		if rr.Code != http.StatusConflict {
+			t.Errorf("esperava 409 para e-mail com conta, got: %d, body: %s", rr.Code, rr.Body.String())
 		}
 	})
 

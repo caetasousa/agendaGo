@@ -56,6 +56,15 @@ func (r *SessionPostgres) Remover(hash string) error {
 	return err
 }
 
+// RemoverDoUsuario apaga todas as sessões de um usuário — usado ao bani-lo,
+// para o bloqueio valer imediatamente e não só no próximo login.
+func (r *SessionPostgres) RemoverDoUsuario(userID string) error {
+	_, err := r.pool.Exec(context.Background(),
+		`DELETE FROM sessions WHERE user_id = $1`, userID,
+	)
+	return err
+}
+
 // RemoverExpiradas apaga todas as sessões cuja expira_em já passou.
 func (r *SessionPostgres) RemoverExpiradas() error {
 	_, err := r.pool.Exec(context.Background(),

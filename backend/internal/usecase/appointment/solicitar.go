@@ -62,6 +62,10 @@ func (uc *SolicitarUseCase) Executar(in SolicitarInput) (*SolicitarOutput, error
 	if c == nil {
 		return nil, ErrClientNaoEncontrado
 	}
+	// a sessão pode ter nascido antes do banimento — re-checa o status aqui
+	if !c.Ativo {
+		return nil, ErrClientInativo
+	}
 
 	return uc.reservar(in.ProviderID, in.ClientID, in.Data, in.InicioMinutos, in.Agora)
 }

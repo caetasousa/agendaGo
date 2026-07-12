@@ -48,7 +48,7 @@ func novoRouterAdmin(t *testing.T) (r *chi.Mux, providerID, clientID string) {
 	identidadeDoContexto := func(req *http.Request) (ucauth.Identidade, bool) {
 		return middleware.IdentidadeDoContexto(req.Context())
 	}
-	moderar := ucadmin.NovoModerarUseCase(providerRepo, clientRepo)
+	moderar := ucadmin.NovoModerarUseCase(providerRepo, clientRepo, sessionRepo)
 	appointmentRepo := repository.NovoAppointmentMemoria()
 	listarAgendamentos := ucappointment.NovoListarUseCase(appointmentRepo, providerRepo, clientRepo)
 	detalhar := ucadmin.NovoDetalharUseCase(providerRepo, clientRepo, listarAgendamentos)

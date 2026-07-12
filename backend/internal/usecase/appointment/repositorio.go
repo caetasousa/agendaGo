@@ -16,6 +16,10 @@ var (
 	ErrClientNaoEncontrado = errors.New("cliente não encontrado")
 	// ErrClientInativo é retornado quando um cliente banido tenta agendar (por email).
 	ErrClientInativo = errors.New("cliente desativado")
+	// ErrEmailTemConta é retornado quando o e-mail do convidado pertence a uma
+	// conta registrada — sem verificação de posse do e-mail, aceitar criaria
+	// agendamentos dentro da conta de um terceiro.
+	ErrEmailTemConta = errors.New("este e-mail já tem conta; entre para agendar")
 	// ErrAgendamentoNaoEncontrado é retornado quando o agendamento não existe ou não
 	// pertence ao usuário — não distingue os casos para não vazar recursos de terceiros.
 	ErrAgendamentoNaoEncontrado = errors.New("agendamento não encontrado")

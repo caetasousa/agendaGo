@@ -28,6 +28,12 @@ type repositorioClient interface {
 	Atualizar(c *client.Client) error
 }
 
+// revogadorSessoes encerra as sessões ativas de um usuário. O banimento revoga
+// as sessões na hora — sem isso o banido manteria acesso até o TTL vencer.
+type revogadorSessoes interface {
+	RemoverDoUsuario(userID string) error
+}
+
 // UsuarioResumo descreve um prestador ou cliente na visão de moderação.
 type UsuarioResumo struct {
 	ID                 string
@@ -41,11 +47,12 @@ type UsuarioResumo struct {
 type ModerarUseCase struct {
 	providers repositorioProvider
 	clients   repositorioClient
+	sessoes   revogadorSessoes
 }
 
-// NovoModerarUseCase cria uma instância de ModerarUseCase com os repositórios injetados.
-func NovoModerarUseCase(providers repositorioProvider, clients repositorioClient) *ModerarUseCase {
-	return &ModerarUseCase{providers: providers, clients: clients}
+// NovoModerarUseCase cria uma instância de ModerarUseCase com as dependências injetadas.
+func NovoModerarUseCase(providers repositorioProvider, clients repositorioClient, sessoes revogadorSessoes) *ModerarUseCase {
+	return &ModerarUseCase{providers: providers, clients: clients, sessoes: sessoes}
 }
 
 // ListarPrestadores devolve todos os prestadores com o status de moderação.
@@ -85,10 +92,14 @@ func (uc *ModerarUseCase) ListarClientes() ([]UsuarioResumo, error) {
 	return resumos, nil
 }
 
-// BanirPrestador desativa um prestador. ativo=false remove o acesso e a oferta;
-// reversível por ReativarPrestador. Retorna ErrProviderNaoEncontrado se o id não existe.
+// BanirPrestador desativa um prestador e revoga as sessões ativas dele.
+// ativo=false remove o acesso e a oferta; reversível por ReativarPrestador.
+// Retorna ErrProviderNaoEncontrado se o id não existe.
 func (uc *ModerarUseCase) BanirPrestador(id string) error {
-	return uc.mudarPrestador(id, func(p *provider.Provider) { p.Banir() })
+	if err := uc.mudarPrestador(id, func(p *provider.Provider) { p.Banir() }); err != nil {
+		return err
+	}
+	return uc.sessoes.RemoverDoUsuario(id)
 }
 
 // ReativarPrestador reverte o banimento de um prestador.
@@ -96,9 +107,12 @@ func (uc *ModerarUseCase) ReativarPrestador(id string) error {
 	return uc.mudarPrestador(id, func(p *provider.Provider) { p.Reativar() })
 }
 
-// BanirCliente desativa um cliente (bloqueia o login).
+// BanirCliente desativa um cliente (bloqueia o login) e revoga as sessões ativas dele.
 func (uc *ModerarUseCase) BanirCliente(id string) error {
-	return uc.mudarCliente(id, func(c *client.Client) { c.Banir() })
+	if err := uc.mudarCliente(id, func(c *client.Client) { c.Banir() }); err != nil {
+		return err
+	}
+	return uc.sessoes.RemoverDoUsuario(id)
 }
 
 // ReativarCliente reverte o banimento de um cliente.
