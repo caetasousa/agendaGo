@@ -125,6 +125,29 @@ test('convidado agenda sem cadastro informando nome/email/telefone e o prestador
 	await expect(cartao.getByText('(11) 99999-8888')).toBeVisible();
 });
 
+test('convidado com e-mail de conta registrada é orientado a entrar', async ({ page }) => {
+	const linkPublico = await cadastrarPrestadorAtivo(
+		page,
+		`Prestador Conta ${Date.now()}`,
+		emailUnico('conta-prestador')
+	);
+	// cria uma conta de cliente e sai — o e-mail dela será usado no formulário
+	const emailComConta = emailUnico('conta-cliente');
+	await cadastrarCliente(page, 'Cliente Com Conta', emailComConta);
+	await page.click('button:has-text("Sair")');
+	await page.waitForURL('/');
+
+	await page.goto(linkPublico);
+	await escolherPrimeiroSlot(page);
+	await page.fill('input[autocomplete="name"]', 'Impostora');
+	await page.fill('input[autocomplete="email"]', emailComConta);
+	await page.fill('input[autocomplete="tel"]', '(11) 99999-8888');
+	await page.click('button:has-text("Solicitar agendamento")');
+
+	// o backend rejeita (409) e a página mostra a orientação
+	await expect(page.getByText('este e-mail já tem conta; entre para agendar')).toBeVisible();
+});
+
 test('link público rejeita telefone curto do convidado (validação leve)', async ({ page }) => {
 	const linkPublico = await cadastrarPrestadorAtivo(
 		page,

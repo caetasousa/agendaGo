@@ -117,6 +117,16 @@ Repare em `internal/usecase/auth/auth.go`: quando o email não existe, o código
 **Para estudar:**
 - [OWASP Authentication Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html) (seção sobre respostas genéricas de erro)
 
+### Rate limiting: go-chi/httprate
+
+Middleware de limitação de requisições por IP, da própria família do chi. Aplicado em `cmd/api/main.go` sobre as rotas de **login** (mitiga brute-force e rajadas de Argon2id, que é caro de CPU por design) e sobre o **agendamento de convidado** (rota pública — sem teto, uma rajada encheria a agenda de um prestador com reservas falsas). Os limites vêm de env vars (`RATE_LIMIT_*_POR_MINUTO`, 0 desliga — ver `config/server.go`); em dev ficam desligados porque os testes e2e disparam dezenas de logins do mesmo IP.
+
+Complementa o limite de **tamanho de corpo** (`internal/adapter/http/middleware/body.go`, via `http.MaxBytesReader`): a API só troca JSONs pequenos, então qualquer corpo acima de 1 MiB é rejeitado antes de ocupar memória.
+
+**Para estudar:**
+- [go-chi/httprate](https://github.com/go-chi/httprate)
+- [OWASP — Denial of Service Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Denial_of_Service_Cheat_Sheet.html)
+
 ---
 
 ## 4. Banco de dados e infraestrutura
@@ -184,6 +194,14 @@ Framework utility-first: classes como `rounded-md border px-4` compõem o design
 
 **Para estudar:**
 - [Tailwind CSS — documentação oficial](https://tailwindcss.com/docs)
+
+### adapter-node (build de produção)
+
+O SvelteKit delega o formato do build final a um *adapter*. O projeto usa o `@sveltejs/adapter-node` (configurado em `frontend/vite.config.ts`): `npm run build` gera um servidor Node autônomo em `build/index.js`, empacotado na imagem `frontend/Dockerfile.prod`. Atenção ao detalhe de `PUBLIC_API_URL`: por ser `import.meta.env` do Vite, o valor é **embutido no build** — em produção ela é um argumento de build da imagem, não uma env de runtime. Ver `docs/producao.md`.
+
+**Para estudar:**
+- [SvelteKit — Adapters](https://svelte.dev/docs/kit/adapters)
+- [SvelteKit — adapter-node](https://svelte.dev/docs/kit/adapter-node)
 
 ---
 

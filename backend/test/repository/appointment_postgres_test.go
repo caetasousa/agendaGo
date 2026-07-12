@@ -3,6 +3,8 @@
 package repository_test
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -100,6 +102,45 @@ func TestAppointmentPostgres(t *testing.T) {
 		ocupantes, err := repo.ListarOcupantesPorPeriodo(providerID, data, data, agora.Add(72*time.Hour))
 		if err != nil || len(ocupantes) != 1 {
 			t.Errorf("esperava 1 ocupante, got: %d (%v)", len(ocupantes), err)
+		}
+	})
+
+	t.Run("corrida real: N goroutines disputando o mesmo slot, só uma vence", func(t *testing.T) {
+		// slot ainda livre (10:00–11:00) disputado de verdade contra o banco:
+		// o lock transacional na linha do prestador serializa as escritas.
+		const concorrentes = 8
+		// construídos fora das goroutines: novo() usa t.Fatalf, que só pode
+		// rodar na goroutine do teste
+		disputantes := make([]*appointment.Appointment, concorrentes)
+		for i := range disputantes {
+			disputantes[i] = novo(fmt.Sprintf("eeeeeeee-1111-0000-0000-00000000000%d", i), 10*60, 11*60)
+		}
+
+		resultados := make(chan error, concorrentes)
+		var wg sync.WaitGroup
+		for _, a := range disputantes {
+			wg.Add(1)
+			go func(a *appointment.Appointment) {
+				defer wg.Done()
+				resultados <- repo.SalvarSeLivre(a, agora)
+			}(a)
+		}
+		wg.Wait()
+		close(resultados)
+
+		sucessos, conflitos := 0, 0
+		for err := range resultados {
+			switch err {
+			case nil:
+				sucessos++
+			case appointment.ErrConflitoHorario:
+				conflitos++
+			default:
+				t.Fatalf("erro inesperado na corrida: %v", err)
+			}
+		}
+		if sucessos != 1 || conflitos != concorrentes-1 {
+			t.Errorf("esperava exatamente 1 vencedor e %d conflitos, got: %d/%d", concorrentes-1, sucessos, conflitos)
 		}
 	})
 }

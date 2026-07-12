@@ -124,9 +124,14 @@ sem senha (`TemConta() == false`) — e reserva o slot como qualquer outra solic
 - O **telefone** passa por uma **validação leve**: exige ao menos 8 dígitos (formatação
   livre, sem verificação real). É guardado no cadastro do cliente para o prestador ter
   como retornar o contato.
-- Se já existe um cliente com o **mesmo e-mail** (convidado anterior ou conta), a reserva
-  **reusa** esse cliente em vez de duplicar. Um cliente **banido** não agenda como
-  convidado (bloqueado como qualquer inativo).
+- Se já existe um **convidado** com o mesmo e-mail, a reserva **reusa** esse convidado em
+  vez de duplicar. Um cliente **banido** não agenda como convidado (bloqueado como
+  qualquer inativo).
+- E-mail de **conta registrada é rejeitado** (a resposta orienta a entrar): como o fluxo
+  de convidado não verifica a posse do e-mail, aceitar permitiria criar agendamentos
+  dentro da conta de um terceiro só conhecendo o e-mail dele.
+- A rota pública tem **teto de solicitações por IP** (configurável; padrão 10/min) —
+  sem ele, uma rajada encheria a agenda de um prestador com reservas falsas.
 - Na listagem de agendamentos, o **prestador** enxerga o **nome, e-mail e telefone** do
   cliente — informação de contato que **não** é exposta na visão do próprio cliente.
 
@@ -173,9 +178,12 @@ Um **administrador** modera prestadores e clientes. Ele é semeado no boot a par
 `ADMIN_EMAIL`/`ADMIN_SENHA` (sem cadastro nem auto-registro), entra pela mesma tela de
 login e cai no painel de moderação.
 
-- **Banir** desativa o usuário (`ativo = false`): ele deixa de logar. Um prestador banido
-  também **some da vitrine** e **para de ofertar horários** — o link público dele passa a
-  não mostrar slots, sem vazar o motivo. **Reversível** por reativar.
+- **Banir** desativa o usuário (`ativo = false`): ele deixa de logar e as **sessões
+  ativas dele são revogadas na hora** — sem isso, um banido com cookie válido manteria
+  acesso até a sessão expirar. Um prestador banido também **some da vitrine** e **para de
+  ofertar horários** — o link público dele passa a não mostrar slots, sem vazar o motivo.
+  Um cliente banido também não agenda, nem logado nem como convidado. **Reversível** por
+  reativar.
 - **Histórico preservado** — banir não apaga nada; agendamentos existentes continuam.
 - `ativo` (moderação, decisão do admin) é distinto de `aceita_agendamentos` (decisão do
   próprio prestador): um prestador ativo pode escolher não atender, mas um banido nunca

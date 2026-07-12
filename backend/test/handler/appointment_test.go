@@ -80,6 +80,8 @@ func novoRouterAgendamento(t *testing.T) (r *chi.Mux, providerID string) {
 		router.Post("/agendamentos/{id}/confirmar", appointmentHandler.Confirmar)
 		router.Post("/agendamentos/{id}/recusar", appointmentHandler.Recusar)
 		router.Post("/agendamentos/{id}/cancelar", appointmentHandler.Cancelar)
+		router.Post("/agendamentos/{id}/realizado", appointmentHandler.MarcarRealizado)
+		router.Post("/agendamentos/{id}/nao-compareceu", appointmentHandler.MarcarNaoCompareceu)
 	})
 
 	return router, p.ID
@@ -172,7 +174,40 @@ func TestHandlerAgendamento(t *testing.T) {
 		}
 	})
 
-t.Run("prestador não solicita agendamento (rota exige cliente)", func(t *testing.T) {
+	t.Run("prestador recusa solicitação; concluir antes da hora leva 409", func(t *testing.T) {
+		r, providerID := novoRouterAgendamento(t)
+		data := dataFutura(t)
+
+		cookieCliente := loginEObterCookie(t, r, "/auth/client/login", "maria@email.com", "12345678")
+		corpo := map[string]any{"providerId": providerID, "data": data, "inicioMinutos": 8 * 60}
+		rr := requisicaoComCookie(t, r, http.MethodPost, "/agendamentos", corpo, cookieCliente)
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("esperava 201 na solicitação, got: %d", rr.Code)
+		}
+		var criado map[string]any
+		json.NewDecoder(rr.Body).Decode(&criado)
+		id := criado["id"].(string)
+
+		cookiePrestador := loginEObterCookie(t, r, "/auth/provider/login", "joao@email.com", "12345678")
+
+		// concluir uma solicitação pendente (e futura) é transição inválida → 409
+		rr = requisicaoComCookie(t, r, http.MethodPost, "/agendamentos/"+id+"/realizado", nil, cookiePrestador)
+		if rr.Code != http.StatusConflict {
+			t.Errorf("esperava 409 ao marcar realizado antes da hora, got: %d, body: %s", rr.Code, rr.Body.String())
+		}
+		rr = requisicaoComCookie(t, r, http.MethodPost, "/agendamentos/"+id+"/nao-compareceu", nil, cookiePrestador)
+		if rr.Code != http.StatusConflict {
+			t.Errorf("esperava 409 ao marcar ausência antes da hora, got: %d, body: %s", rr.Code, rr.Body.String())
+		}
+
+		// recusar a pendência funciona
+		rr = requisicaoComCookie(t, r, http.MethodPost, "/agendamentos/"+id+"/recusar", nil, cookiePrestador)
+		if rr.Code != http.StatusNoContent {
+			t.Fatalf("esperava 204 na recusa, got: %d, body: %s", rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("prestador não solicita agendamento (rota exige cliente)", func(t *testing.T) {
 		r, providerID := novoRouterAgendamento(t)
 		cookiePrestador := loginEObterCookie(t, r, "/auth/provider/login", "joao@email.com", "12345678")
 

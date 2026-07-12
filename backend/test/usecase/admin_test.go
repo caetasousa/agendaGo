@@ -151,6 +151,14 @@ func TestModerar(t *testing.T) {
 		if _, err := login.Executar(ucauth.LoginInput{Email: "maria@email.com", Senha: "12345678"}); err != ucauth.ErrUsuarioInativo {
 			t.Errorf("esperava ErrUsuarioInativo, got: %v", err)
 		}
+
+		// reativar devolve o acesso
+		if err := uc.ReativarCliente("c-1"); err != nil {
+			t.Fatalf("esperava reativar, got: %v", err)
+		}
+		if _, err := login.Executar(ucauth.LoginInput{Email: "maria@email.com", Senha: "12345678"}); err != nil {
+			t.Errorf("esperava login OK após reativar, got: %v", err)
+		}
 	})
 
 	t.Run("banir revoga as sessões ativas do usuário na hora", func(t *testing.T) {

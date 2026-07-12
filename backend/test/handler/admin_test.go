@@ -69,6 +69,7 @@ func novoRouterAdmin(t *testing.T) (r *chi.Mux, providerID, clientID string) {
 		router.Post("/admin/prestadores/{id}/banir", adminHandler.BanirPrestador)
 		router.Post("/admin/prestadores/{id}/reativar", adminHandler.ReativarPrestador)
 		router.Post("/admin/clientes/{id}/banir", adminHandler.BanirCliente)
+		router.Post("/admin/clientes/{id}/reativar", adminHandler.ReativarCliente)
 	})
 
 	return router, p.ID, c.ID
@@ -125,6 +126,37 @@ func TestHandlerAdmin(t *testing.T) {
 		rr = requisicaoComCookie(t, r, http.MethodPost, "/admin/clientes/fantasma/banir", nil, cookieAdmin)
 		if rr.Code != http.StatusNotFound {
 			t.Errorf("esperava 404, got: %d", rr.Code)
+		}
+	})
+
+	t.Run("lista clientes com o status de moderação e reativa um banido", func(t *testing.T) {
+		r, _, clientID := novoRouterAdmin(t)
+		cookieAdmin := loginEObterCookie(t, r, "/auth/admin/login", "admin@agendago.dev", "12345678")
+
+		requisicaoComCookie(t, r, http.MethodPost, "/admin/clientes/"+clientID+"/banir", nil, cookieAdmin)
+
+		rr := requisicaoComCookie(t, r, http.MethodGet, "/admin/clientes", nil, cookieAdmin)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("esperava 200 na listagem de clientes, got: %d", rr.Code)
+		}
+		var lista map[string]any
+		json.NewDecoder(rr.Body).Decode(&lista)
+		usuarios := lista["usuarios"].([]any)
+		if len(usuarios) != 1 {
+			t.Fatalf("esperava 1 cliente na moderação, got: %d", len(usuarios))
+		}
+		if usuarios[0].(map[string]any)["ativo"] != false {
+			t.Error("esperava cliente banido na listagem")
+		}
+
+		rr = requisicaoComCookie(t, r, http.MethodPost, "/admin/clientes/"+clientID+"/reativar", nil, cookieAdmin)
+		if rr.Code != http.StatusNoContent {
+			t.Fatalf("esperava 204 na reativação, got: %d", rr.Code)
+		}
+		rr = requisicaoComCookie(t, r, http.MethodGet, "/admin/clientes", nil, cookieAdmin)
+		json.NewDecoder(rr.Body).Decode(&lista)
+		if lista["usuarios"].([]any)[0].(map[string]any)["ativo"] != true {
+			t.Error("esperava cliente ativo após reativar")
 		}
 	})
 

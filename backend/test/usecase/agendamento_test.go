@@ -288,6 +288,33 @@ func TestTransicionarAgendamento(t *testing.T) {
 		}
 	})
 
+	t.Run("prestador marca não comparecimento após o horário", func(t *testing.T) {
+		amb := novoAmbienteAgendamento(t)
+		id := solicitarPadrao(t, amb)
+		amb.transicionar.Confirmar(ucappointment.TransicionarInput{
+			AgendamentoID: id, UsuarioID: "provider-1", Tipo: session.TipoProvider, Agora: agoraDoTeste,
+		})
+
+		// antes do horário não dá para registrar ausência
+		err := amb.transicionar.MarcarNaoCompareceu(ucappointment.TransicionarInput{
+			AgendamentoID: id, UsuarioID: "provider-1", Tipo: session.TipoProvider, Agora: agoraDoTeste,
+		})
+		if err != appointment.ErrAtendimentoNaoIniciado {
+			t.Errorf("esperava ErrAtendimentoNaoIniciado antes do horário, got: %v", err)
+		}
+
+		depoisDoAtendimento := time.Date(2026, 8, 10, 10, 0, 0, 0, time.UTC)
+		if err := amb.transicionar.MarcarNaoCompareceu(ucappointment.TransicionarInput{
+			AgendamentoID: id, UsuarioID: "provider-1", Tipo: session.TipoProvider, Agora: depoisDoAtendimento,
+		}); err != nil {
+			t.Fatalf("esperava marcar não comparecimento, got: %v", err)
+		}
+		a, _ := amb.appointments.BuscarPorID(id)
+		if a.Status != appointment.StatusNaoCompareceu {
+			t.Errorf("esperava NAO_COMPARECEU persistido, got: %s", a.Status)
+		}
+	})
+
 	t.Run("cancelar confirmado em cima da hora é bloqueado", func(t *testing.T) {
 		amb := novoAmbienteAgendamento(t)
 		id := solicitarPadrao(t, amb)
