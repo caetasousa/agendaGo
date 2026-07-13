@@ -1,5 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
-import { emailUnico } from './helpers';
+import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
+import { emailUnico, tokenDeConfirmacaoCadastro } from './helpers';
 
 // O fluxo de agendamento gira em torno do link público do prestador
 // (/agendar/{id}): convidados veem os horários livres sem cadastro e o login
@@ -9,6 +9,7 @@ async function cadastrarPrestadorAtivo(page: Page, nome: string, email: string):
 	await page.goto('/cadastro');
 	await page.fill('#nome', nome);
 	await page.fill('#email', email);
+	await page.fill('#telefone', '(11) 99999-8888');
 	await page.fill('#senha', '12345678');
 	await page.fill('#confirmar-senha', '12345678');
 	await page.click('button[type="submit"]');
@@ -28,15 +29,23 @@ async function cadastrarPrestadorAtivo(page: Page, nome: string, email: string):
 	return new URL(link!.trim()).pathname;
 }
 
-async function cadastrarCliente(page: Page, nome: string, email: string) {
+// cadastrarCliente cria a conta e já confirma pelo link do email (via
+// Mailpit), já que a conta de cliente só nasce após a confirmação — mas não
+// loga: quem precisa de sessão chama entrar() em seguida.
+async function cadastrarCliente(page: Page, request: APIRequestContext, nome: string, email: string) {
 	await page.goto('/cadastro');
 	await page.click('label:has-text("Cliente")');
 	await page.fill('#nome', nome);
 	await page.fill('#email', email);
+	await page.fill('#telefone', '(11) 99999-8888');
 	await page.fill('#senha', '12345678');
 	await page.fill('#confirmar-senha', '12345678');
 	await page.click('button[type="submit"]');
-	await page.waitForURL('/painel');
+	await expect(page.getByText(`Enviamos um email para ${email}`)).toBeVisible();
+
+	const token = await tokenDeConfirmacaoCadastro(request, email);
+	await page.goto(`/confirmar-cadastro?token=${token}`);
+	await expect(page.getByText('Cadastro confirmado!')).toBeVisible();
 }
 
 async function entrar(page: Page, email: string) {
@@ -65,16 +74,14 @@ async function escolherSlotDoProximoMes(page: Page) {
 	await escolherPrimeiroSlot(page);
 }
 
-test('convidado vê os horários pelo link público e pode entrar para agendar', async ({ page }) => {
+test('convidado vê os horários pelo link público e pode entrar para agendar', async ({ page, request }) => {
 	const linkPublico = await cadastrarPrestadorAtivo(
 		page,
 		`Prestador Link ${Date.now()}`,
 		emailUnico('link-prestador')
 	);
 	const emailCliente = emailUnico('link-cliente');
-	await cadastrarCliente(page, 'Cliente Convidado', emailCliente);
-	await page.click('button:has-text("Sair")');
-	await page.waitForURL('/');
+	await cadastrarCliente(page, request, 'Cliente Convidado', emailCliente);
 
 	// convidado (sem sessão) abre o link e enxerga o calendário com horários
 	await page.goto(linkPublico);
@@ -125,17 +132,15 @@ test('convidado agenda sem cadastro informando nome/email/telefone e o prestador
 	await expect(cartao.getByText('(11) 99999-8888')).toBeVisible();
 });
 
-test('convidado com e-mail de conta registrada é orientado a entrar', async ({ page }) => {
+test('convidado com e-mail de conta registrada é orientado a entrar', async ({ page, request }) => {
 	const linkPublico = await cadastrarPrestadorAtivo(
 		page,
 		`Prestador Conta ${Date.now()}`,
 		emailUnico('conta-prestador')
 	);
-	// cria uma conta de cliente e sai — o e-mail dela será usado no formulário
+	// cria uma conta de cliente — o e-mail dela será usado no formulário
 	const emailComConta = emailUnico('conta-cliente');
-	await cadastrarCliente(page, 'Cliente Com Conta', emailComConta);
-	await page.click('button:has-text("Sair")');
-	await page.waitForURL('/');
+	await cadastrarCliente(page, request, 'Cliente Com Conta', emailComConta);
 
 	await page.goto(linkPublico);
 	await escolherPrimeiroSlot(page);
@@ -164,11 +169,15 @@ test('link público rejeita telefone curto do convidado (validação leve)', asy
 	await expect(page.getByRole('button', { name: 'Solicitar agendamento' })).toBeDisabled();
 });
 
-test('fluxo completo: cliente agenda pelo calendário, prestador confirma, cliente cancela', async ({ page }) => {
+test('fluxo completo: cliente agenda pelo calendário, prestador confirma, cliente cancela', async ({
+	page,
+	request
+}) => {
 	const emailPrestador = emailUnico('fluxo-prestador');
 	const linkPublico = await cadastrarPrestadorAtivo(page, `Prestador Fluxo ${Date.now()}`, emailPrestador);
 	const emailCliente = emailUnico('fluxo-cliente');
-	await cadastrarCliente(page, 'Cliente Fluxo', emailCliente);
+	await cadastrarCliente(page, request, 'Cliente Fluxo', emailCliente);
+	await entrar(page, emailCliente);
 
 	// cliente logado agenda direto pelo link, num dia bem à frente (a etapa de
 	// cancelamento abaixo exige 24h de antecedência do horário confirmado)
@@ -200,11 +209,12 @@ test('fluxo completo: cliente agenda pelo calendário, prestador confirma, clien
 	await expect(page.locator('li[data-agendamento]')).toHaveAttribute('data-status', 'CANCELADO');
 });
 
-test('prestador recusa uma solicitação e o cliente vê o status', async ({ page }) => {
+test('prestador recusa uma solicitação e o cliente vê o status', async ({ page, request }) => {
 	const emailPrestador = emailUnico('recusa-prestador');
 	const linkPublico = await cadastrarPrestadorAtivo(page, `Prestador Recusa ${Date.now()}`, emailPrestador);
 	const emailCliente = emailUnico('recusa-cliente');
-	await cadastrarCliente(page, 'Cliente Recusa', emailCliente);
+	await cadastrarCliente(page, request, 'Cliente Recusa', emailCliente);
+	await entrar(page, emailCliente);
 
 	await page.goto(linkPublico);
 	await escolherPrimeiroSlot(page);
@@ -225,10 +235,12 @@ test('prestador recusa uma solicitação e o cliente vê o status', async ({ pag
 	await expect(cartaoCliente.getByText('Recusado', { exact: true })).toBeVisible();
 });
 
-test('diretório do painel lista todos os prestadores com link para o calendário', async ({ page }) => {
+test('diretório do painel lista todos os prestadores com link para o calendário', async ({ page, request }) => {
 	const nomePrestador = `Prestador Diretorio ${Date.now()}`;
 	await cadastrarPrestadorAtivo(page, nomePrestador, emailUnico('diretorio-prestador'));
-	await cadastrarCliente(page, 'Cliente Diretorio', emailUnico('diretorio-cliente'));
+	const emailCliente = emailUnico('diretorio-cliente');
+	await cadastrarCliente(page, request, 'Cliente Diretorio', emailCliente);
+	await entrar(page, emailCliente);
 
 	await page.goto('/painel/agendar');
 	const cardPrestador = page.locator(`a:has-text("${nomePrestador}")`);

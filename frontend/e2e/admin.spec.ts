@@ -1,5 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
-import { emailUnico } from './helpers';
+import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
+import { emailUnico, tokenDeConfirmacaoCadastro } from './helpers';
 
 // Credenciais do admin semeado pelo docker-compose (ADMIN_EMAIL/ADMIN_SENHA).
 const ADMIN_EMAIL = 'admin@agendago.dev';
@@ -9,12 +9,42 @@ async function cadastrarPrestador(page: Page, nome: string, email: string) {
 	await page.goto('/cadastro');
 	await page.fill('#nome', nome);
 	await page.fill('#email', email);
+	await page.fill('#telefone', '(11) 99999-8888');
 	await page.fill('#senha', '12345678');
 	await page.fill('#confirmar-senha', '12345678');
 	await page.click('button[type="submit"]');
 	await page.waitForURL('/painel');
 	await page.click('button:has-text("Sair")');
 	await page.waitForURL('/');
+}
+
+// cadastrarClienteLogado cria a conta de cliente, confirma pelo link do
+// email (via Mailpit) e loga — a conta só nasce após a confirmação.
+async function cadastrarClienteLogado(
+	page: Page,
+	request: APIRequestContext,
+	nome: string,
+	email: string
+) {
+	await page.goto('/cadastro');
+	await page.click('label:has-text("Cliente")');
+	await page.fill('#nome', nome);
+	await page.fill('#email', email);
+	await page.fill('#telefone', '(11) 99999-8888');
+	await page.fill('#senha', '12345678');
+	await page.fill('#confirmar-senha', '12345678');
+	await page.click('button[type="submit"]');
+	await expect(page.getByText(`Enviamos um email para ${email}`)).toBeVisible();
+
+	const token = await tokenDeConfirmacaoCadastro(request, email);
+	await page.goto(`/confirmar-cadastro?token=${token}`);
+	await expect(page.getByText('Cadastro confirmado!')).toBeVisible();
+
+	await page.goto('/login');
+	await page.fill('#email', email);
+	await page.fill('#senha', '12345678');
+	await page.click('button[type="submit"]');
+	await page.waitForURL('/painel');
 }
 
 async function entrarComoAdmin(page: Page) {
@@ -89,20 +119,13 @@ test('admin abre o detalhe em leitura de um prestador pela lista', async ({ page
 	await page.waitForURL('**/admin');
 });
 
-test('prestador banido some da vitrine pública', async ({ page }) => {
+test('prestador banido some da vitrine pública', async ({ page, request }) => {
 	const nome = `Prestador Vitrine ${Date.now()}`;
 	const email = emailUnico('vitrine-ban');
 	await cadastrarPrestador(page, nome, email);
 
 	// aparece na vitrine antes do banimento (visto por um cliente)
-	await page.goto('/cadastro');
-	await page.click('label:has-text("Cliente")');
-	await page.fill('#nome', 'Cliente Vitrine');
-	await page.fill('#email', emailUnico('cliente-vitrine'));
-	await page.fill('#senha', '12345678');
-	await page.fill('#confirmar-senha', '12345678');
-	await page.click('button[type="submit"]');
-	await page.waitForURL('/painel');
+	await cadastrarClienteLogado(page, request, 'Cliente Vitrine', emailUnico('cliente-vitrine'));
 	await page.goto('/painel/agendar');
 	await expect(page.locator(`a:has-text("${nome}")`)).toBeVisible();
 	await page.click('button:has-text("Sair")');
@@ -116,14 +139,7 @@ test('prestador banido some da vitrine pública', async ({ page }) => {
 	await page.waitForURL('/');
 
 	// um cliente novo já não vê o prestador banido na vitrine
-	await page.goto('/cadastro');
-	await page.click('label:has-text("Cliente")');
-	await page.fill('#nome', 'Cliente Vitrine 2');
-	await page.fill('#email', emailUnico('cliente-vitrine-2'));
-	await page.fill('#senha', '12345678');
-	await page.fill('#confirmar-senha', '12345678');
-	await page.click('button[type="submit"]');
-	await page.waitForURL('/painel');
+	await cadastrarClienteLogado(page, request, 'Cliente Vitrine 2', emailUnico('cliente-vitrine-2'));
 	await page.goto('/painel/agendar');
 	await expect(page.locator(`a:has-text("${nome}")`)).toHaveCount(0);
 });
@@ -133,6 +149,7 @@ test('prestador logado não acessa /admin (é mandado ao painel)', async ({ page
 	await page.goto('/cadastro');
 	await page.fill('#nome', 'Prestador Guard');
 	await page.fill('#email', emailUnico('guard'));
+	await page.fill('#telefone', '(11) 99999-8888');
 	await page.fill('#senha', '12345678');
 	await page.fill('#confirmar-senha', '12345678');
 	await page.click('button[type="submit"]');

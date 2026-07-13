@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { emailUnico } from './helpers';
+import { emailUnico, tokenDeConfirmacaoCadastro } from './helpers';
 
 // Formata a data como YYYY-MM-DD no fuso local, igual ao data-data das células.
 function chaveLocal(data: Date): string {
@@ -13,6 +13,7 @@ async function cadastrarPrestador(page: Page, prefixo: string) {
 	await page.goto('/cadastro');
 	await page.fill('#nome', 'Disponibilidade Teste');
 	await page.fill('#email', emailUnico(prefixo));
+	await page.fill('#telefone', '(11) 99999-8888');
 	await page.fill('#senha', '12345678');
 	await page.fill('#confirmar-senha', '12345678');
 	await page.click('button[type="submit"]');
@@ -154,13 +155,26 @@ test('restaurar padrão a partir de um bloqueio de hoje continua permitido', asy
 	await expect(celulaHoje).not.toHaveAttribute('data-estado', 'bloqueado');
 });
 
-test('cliente é redirecionado do painel de disponibilidade para o painel', async ({ page }) => {
+test('cliente é redirecionado do painel de disponibilidade para o painel', async ({ page, request }) => {
+	const email = emailUnico('cliente-disponibilidade');
+
 	await page.goto('/cadastro');
 	await page.click('label:has-text("Cliente")');
 	await page.fill('#nome', 'Cliente Disponibilidade');
-	await page.fill('#email', emailUnico('cliente-disponibilidade'));
+	await page.fill('#email', email);
+	await page.fill('#telefone', '(11) 99999-8888');
 	await page.fill('#senha', '12345678');
 	await page.fill('#confirmar-senha', '12345678');
+	await page.click('button[type="submit"]');
+	await expect(page.getByText(`Enviamos um email para ${email}`)).toBeVisible();
+
+	const token = await tokenDeConfirmacaoCadastro(request, email);
+	await page.goto(`/confirmar-cadastro?token=${token}`);
+	await expect(page.getByText('Cadastro confirmado!')).toBeVisible();
+
+	await page.goto('/login');
+	await page.fill('#email', email);
+	await page.fill('#senha', '12345678');
 	await page.click('button[type="submit"]');
 	await page.waitForURL('/painel');
 

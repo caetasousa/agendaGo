@@ -10,6 +10,7 @@ test('recupera a senha e loga com a nova', async ({ page, request }) => {
 	await page.goto('/cadastro');
 	await page.fill('#nome', 'Prestador Recuperar');
 	await page.fill('#email', email);
+	await page.fill('#telefone', '(11) 99999-8888');
 	await page.fill('#senha', 'senha-antiga1');
 	await page.fill('#confirmar-senha', 'senha-antiga1');
 	await page.click('button[type="submit"]');

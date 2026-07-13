@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { emailUnico } from './helpers';
+import { emailUnico, tokenDeConfirmacaoCadastro } from './helpers';
 
 test('prestador acessa preferências, salva e vê o banner de sucesso', async ({ page }) => {
 	await page.goto('/cadastro');
 	await page.fill('#nome', 'Preferencias Teste');
 	await page.fill('#email', emailUnico('preferencias'));
+	await page.fill('#telefone', '(11) 99999-8888');
 	await page.fill('#senha', '12345678');
 	await page.fill('#confirmar-senha', '12345678');
 	await page.click('button[type="submit"]');
@@ -26,6 +27,7 @@ test('prestador começa com o expediente comercial sugerido e pode editá-lo', a
 	await page.goto('/cadastro');
 	await page.fill('#nome', 'Expediente Teste');
 	await page.fill('#email', emailUnico('expediente'));
+	await page.fill('#telefone', '(11) 99999-8888');
 	await page.fill('#senha', '12345678');
 	await page.fill('#confirmar-senha', '12345678');
 	await page.click('button[type="submit"]');
@@ -51,6 +53,7 @@ test('prestador define três períodos curtos no expediente padrão', async ({ p
 	await page.goto('/cadastro');
 	await page.fill('#nome', 'Tres Periodos Teste');
 	await page.fill('#email', emailUnico('tres-periodos'));
+	await page.fill('#telefone', '(11) 99999-8888');
 	await page.fill('#senha', '12345678');
 	await page.fill('#confirmar-senha', '12345678');
 	await page.click('button[type="submit"]');
@@ -91,6 +94,7 @@ test('expediente padrão configurado aparece no calendário de disponibilidade',
 	await page.goto('/cadastro');
 	await page.fill('#nome', 'Padrao Reflete Calendario');
 	await page.fill('#email', emailUnico('padrao-calendario'));
+	await page.fill('#telefone', '(11) 99999-8888');
 	await page.fill('#senha', '12345678');
 	await page.fill('#confirmar-senha', '12345678');
 	await page.click('button[type="submit"]');
@@ -127,13 +131,26 @@ test('expediente padrão configurado aparece no calendário de disponibilidade',
 	await expect(celula).toHaveAttribute('title', 'Disponível (09:00–11:00)');
 });
 
-test('cliente é redirecionado do painel de preferências para o painel', async ({ page }) => {
+test('cliente é redirecionado do painel de preferências para o painel', async ({ page, request }) => {
+	const email = emailUnico('cliente-preferencias');
+
 	await page.goto('/cadastro');
 	await page.click('label:has-text("Cliente")');
 	await page.fill('#nome', 'Cliente Preferencias');
-	await page.fill('#email', emailUnico('cliente-preferencias'));
+	await page.fill('#email', email);
+	await page.fill('#telefone', '(11) 99999-8888');
 	await page.fill('#senha', '12345678');
 	await page.fill('#confirmar-senha', '12345678');
+	await page.click('button[type="submit"]');
+	await expect(page.getByText(`Enviamos um email para ${email}`)).toBeVisible();
+
+	const token = await tokenDeConfirmacaoCadastro(request, email);
+	await page.goto(`/confirmar-cadastro?token=${token}`);
+	await expect(page.getByText('Cadastro confirmado!')).toBeVisible();
+
+	await page.goto('/login');
+	await page.fill('#email', email);
+	await page.fill('#senha', '12345678');
 	await page.click('button[type="submit"]');
 	await page.waitForURL('/painel');
 

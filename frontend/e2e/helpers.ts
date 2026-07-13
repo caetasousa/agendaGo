@@ -11,12 +11,15 @@ export function emailUnico(prefixo: string): string {
 // provedor real.
 const MAILPIT_API = 'http://localhost:8025/api/v1';
 
-// tokenDeRecuperacao espera o email de recuperação de senha de destinatario
-// chegar no Mailpit e extrai o token do link `/redefinir-senha?token=...`.
-// Faz polling porque o envio do email é assíncrono no backend.
-export async function tokenDeRecuperacao(
+// buscaTokenNoMailpit faz polling no Mailpit até achar, entre os emails
+// enviados a destinatario, um cujo assunto contenha assuntoContem, e extrai o
+// token do primeiro link "?token=..." do corpo HTML. Compartilhado entre a
+// recuperação de senha e a confirmação de cadastro, que seguem o mesmo padrão
+// de link — o envio do email é assíncrono no backend, daí o polling.
+async function buscaTokenNoMailpit(
 	request: import('@playwright/test').APIRequestContext,
-	destinatario: string
+	destinatario: string,
+	assuntoContem: string
 ): Promise<string> {
 	for (let tentativa = 0; tentativa < 20; tentativa++) {
 		const resposta = await request.get(
@@ -25,7 +28,7 @@ export async function tokenDeRecuperacao(
 		if (resposta.ok()) {
 			const corpo = await resposta.json();
 			const mensagem = (corpo.messages ?? []).find((m: { Subject: string }) =>
-				m.Subject.includes('Redefinição de senha')
+				m.Subject.includes(assuntoContem)
 			);
 			if (mensagem) {
 				const detalhe = await request.get(`${MAILPIT_API}/message/${mensagem.ID}`);
@@ -36,5 +39,24 @@ export async function tokenDeRecuperacao(
 		}
 		await new Promise((r) => setTimeout(r, 250));
 	}
-	throw new Error(`email de recuperação para ${destinatario} não chegou no Mailpit`);
+	throw new Error(`email "${assuntoContem}" para ${destinatario} não chegou no Mailpit`);
+}
+
+// tokenDeRecuperacao espera o email de recuperação de senha de destinatario
+// chegar no Mailpit e extrai o token do link `/redefinir-senha?token=...`.
+export async function tokenDeRecuperacao(
+	request: import('@playwright/test').APIRequestContext,
+	destinatario: string
+): Promise<string> {
+	return buscaTokenNoMailpit(request, destinatario, 'Redefinição de senha');
+}
+
+// tokenDeConfirmacaoCadastro espera o email de confirmação de cadastro de
+// destinatario chegar no Mailpit e extrai o token do link
+// `/confirmar-cadastro?token=...`.
+export async function tokenDeConfirmacaoCadastro(
+	request: import('@playwright/test').APIRequestContext,
+	destinatario: string
+): Promise<string> {
+	return buscaTokenNoMailpit(request, destinatario, 'Confirme seu cadastro');
 }
