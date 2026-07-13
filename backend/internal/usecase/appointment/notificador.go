@@ -14,7 +14,8 @@ type NotificacaoAgendamento struct {
 	// CanceladoPorPrestador distingue quem cancelou — só preenchido no cancelamento.
 	CanceladoPorPrestador bool
 	// TokenCancelamento é o token que o convidado usa para cancelar pelo email;
-	// só preenchido na confirmação de um agendamento de convidado. Vazio para
+	// preenchido na solicitação e na confirmação de um agendamento de
+	// convidado (um token novo em cada email — ambos valem). Vazio para
 	// cliente com conta (que cancela pelo painel).
 	TokenCancelamento string
 }
@@ -24,6 +25,7 @@ type NotificacaoAgendamento struct {
 // nunca deve falhar a operação que o disparou.
 type notificadorAgendamento interface {
 	NotificarSolicitacao(n NotificacaoAgendamento)
+	NotificarSolicitacaoConvidado(n NotificacaoAgendamento)
 	NotificarConfirmacao(n NotificacaoAgendamento)
 	NotificarRecusa(n NotificacaoAgendamento)
 	NotificarCancelamento(n NotificacaoAgendamento)

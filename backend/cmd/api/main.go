@@ -98,7 +98,7 @@ func main() {
 	buscarPrestador := ucprovider.NovoBuscarResumoUseCase(providerRepo)
 	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(consultarDisponibilidade, appointmentRepo, providerRepo, config.FusoHorario)
 	solicitarAgendamento := ucappointment.NovoSolicitarUseCase(consultarSlots, appointmentRepo, clientRepo, providerRepo, notificador, config.TTLSolicitacao)
-	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitarAgendamento, clientRepo)
+	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitarAgendamento, clientRepo, providerRepo, cancelamentoRepo, notificador)
 	transicionarAgendamento := ucappointment.NovoTransicionarUseCase(appointmentRepo, providerRepo, clientRepo, cancelamentoRepo, notificador, config.AntecedenciaMinimaCancelamento, config.FusoHorario)
 	cancelarPorToken := ucappointment.NovoCancelarPorTokenUseCase(appointmentRepo, cancelamentoRepo, providerRepo, clientRepo, notificador, config.AntecedenciaMinimaCancelamento, config.FusoHorario)
 	listarAgendamentos := ucappointment.NovoListarUseCase(appointmentRepo, providerRepo, clientRepo)

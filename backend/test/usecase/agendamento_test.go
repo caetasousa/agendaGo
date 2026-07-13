@@ -54,7 +54,7 @@ func novoAmbienteAgendamento(t *testing.T) *ambienteAgendamento {
 	resolvedor := ucavailability.NovoConsultarDisponibilidadeUseCase(availabilityRepo, providerRepo)
 	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointments, providerRepo, time.UTC)
 	solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointments, clientRepo, providerRepo, notificador, 24*time.Hour)
-	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitar, clientRepo)
+	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitar, clientRepo, providerRepo, cancelamentos, notificador)
 	transicionar := ucappointment.NovoTransicionarUseCase(appointments, providerRepo, clientRepo, cancelamentos, notificador, 24*time.Hour, time.UTC)
 	cancelarPorToken := ucappointment.NovoCancelarPorTokenUseCase(appointments, cancelamentos, providerRepo, clientRepo, notificador, 24*time.Hour, time.UTC)
 	listar := ucappointment.NovoListarUseCase(appointments, providerRepo, clientRepo)

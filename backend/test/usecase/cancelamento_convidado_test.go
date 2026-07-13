@@ -23,6 +23,10 @@ func agendarConvidadoConfirmado(t *testing.T, amb *ambienteAgendamento) (id, tok
 		t.Fatalf("solicitação de convidado falhou: %v", err)
 	}
 
+	// descarta os emails da solicitação (que já trazem link de cancelamento)
+	// para extrair o token gerado na confirmação
+	amb.mailer.Limpar()
+
 	if err := amb.transicionar.Confirmar(ucappointment.TransicionarInput{
 		AgendamentoID: out.ID, UsuarioID: "provider-1", Tipo: "provider", Agora: agoraDoTeste,
 	}); err != nil {
@@ -54,6 +58,71 @@ func tokenDoLinkCancelamento(t *testing.T, amb *ambienteAgendamento) string {
 }
 
 func TestCancelamentoConvidado(t *testing.T) {
+	t.Run("solicitação de convidado envia email com link de cancelamento e convite de conta", func(t *testing.T) {
+		amb := novoAmbienteAgendamento(t)
+
+		if _, err := amb.solicitarConvidado.Executar(ucappointment.SolicitarConvidadoInput{
+			ProviderID: "provider-1", Data: segundaFutura, InicioMinutos: 8 * 60,
+			Nome: "Convidado Teste", Email: "convidado@email.com", Telefone: "11999998888",
+			Agora: agoraDoTeste,
+		}); err != nil {
+			t.Fatalf("solicitação de convidado falhou: %v", err)
+		}
+
+		var emailConvidado string
+		for _, msg := range amb.mailer.Enviadas() {
+			if msg.Para == "convidado@email.com" {
+				emailConvidado = msg.HTML
+			}
+		}
+		if emailConvidado == "" {
+			t.Fatal("esperava email ao convidado na solicitação")
+		}
+		if !strings.Contains(emailConvidado, "/cancelar-agendamento/") {
+			t.Error("esperava link de cancelamento no email da solicitação")
+		}
+		if !strings.Contains(emailConvidado, "/cadastro") {
+			t.Error("esperava convite para criar conta no email da solicitação")
+		}
+	})
+
+	t.Run("cancelar por token funciona antes da confirmação do prestador", func(t *testing.T) {
+		amb := novoAmbienteAgendamento(t)
+
+		out, err := amb.solicitarConvidado.Executar(ucappointment.SolicitarConvidadoInput{
+			ProviderID: "provider-1", Data: segundaFutura, InicioMinutos: 8 * 60,
+			Nome: "Convidado Teste", Email: "convidado@email.com", Telefone: "11999998888",
+			Agora: agoraDoTeste,
+		})
+		if err != nil {
+			t.Fatalf("solicitação de convidado falhou: %v", err)
+		}
+		token := tokenDoLinkCancelamento(t, amb)
+
+		if err := amb.cancelarPorToken.Executar(token, agoraDoTeste); err != nil {
+			t.Fatalf("esperava cancelar a solicitação pendente, got: %v", err)
+		}
+		a, _ := amb.appointments.BuscarPorID(out.ID)
+		if a.Status != appointment.StatusCancelado {
+			t.Errorf("esperava CANCELADO, got: %s", a.Status)
+		}
+	})
+
+	t.Run("cliente com conta não recebe email de convidado na solicitação", func(t *testing.T) {
+		amb := novoAmbienteAgendamento(t)
+
+		if _, err := amb.solicitar.Executar(ucappointment.SolicitarInput{
+			ClientID: "client-1", ProviderID: "provider-1", Data: segundaFutura, InicioMinutos: 8 * 60, Agora: agoraDoTeste,
+		}); err != nil {
+			t.Fatalf("solicitação falhou: %v", err)
+		}
+		for _, msg := range amb.mailer.Enviadas() {
+			if msg.Para == "maria@email.com" {
+				t.Error("cliente com conta não deveria receber email de convidado na solicitação")
+			}
+		}
+	})
+
 	t.Run("confirmar agendamento de convidado gera token no email", func(t *testing.T) {
 		amb := novoAmbienteAgendamento(t)
 		_, token := agendarConvidadoConfirmado(t, amb)

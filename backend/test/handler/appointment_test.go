@@ -54,7 +54,7 @@ func novoRouterAgendamento(t *testing.T) (r *chi.Mux, providerID string) {
 	resolvedor := ucavailability.NovoConsultarDisponibilidadeUseCase(availabilityRepo, providerRepo)
 	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointmentRepo, providerRepo, time.UTC)
 	solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointmentRepo, clientRepo, providerRepo, notificador, 24*time.Hour)
-	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitar, clientRepo)
+	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitar, clientRepo, providerRepo, cancelamentoRepo, notificador)
 	transicionar := ucappointment.NovoTransicionarUseCase(appointmentRepo, providerRepo, clientRepo, cancelamentoRepo, notificador, 24*time.Hour, time.UTC)
 	cancelarPorToken := ucappointment.NovoCancelarPorTokenUseCase(appointmentRepo, cancelamentoRepo, providerRepo, clientRepo, notificador, 24*time.Hour, time.UTC)
 	listar := ucappointment.NovoListarUseCase(appointmentRepo, providerRepo, clientRepo)
