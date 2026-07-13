@@ -34,7 +34,7 @@ func novoRouterAgendamento(t *testing.T) (r *chi.Mux, providerID string) {
 	appointmentRepo := repository.NovoAppointmentMemoria()
 
 	senhaHash, _ := hasher.Gerar("12345678")
-	p, _ := provider.Novo("11111111-1111-1111-1111-111111111111", "João Silva", "joao@email.com", senhaHash)
+	p, _ := provider.Novo("11111111-1111-1111-1111-111111111111", "João Silva", "joao@email.com", "11999998888", senhaHash)
 	p.AtivarAgenda()
 	providerRepo.Salvar(p)
 
@@ -50,14 +50,16 @@ func novoRouterAgendamento(t *testing.T) (r *chi.Mux, providerID string) {
 	}
 
 	notificador := email.NovoNotificador(email.NovaMailerMemoria(), "http://localhost:5173", time.UTC, email.ExecutorSincrono)
+	cancelamentoRepo := repository.NovoCancellationMemoria()
 	resolvedor := ucavailability.NovoConsultarDisponibilidadeUseCase(availabilityRepo, providerRepo)
 	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointmentRepo, providerRepo, time.UTC)
 	solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointmentRepo, clientRepo, providerRepo, notificador, 24*time.Hour)
 	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitar, clientRepo)
-	transicionar := ucappointment.NovoTransicionarUseCase(appointmentRepo, providerRepo, clientRepo, notificador, 24*time.Hour, time.UTC)
+	transicionar := ucappointment.NovoTransicionarUseCase(appointmentRepo, providerRepo, clientRepo, cancelamentoRepo, notificador, 24*time.Hour, time.UTC)
+	cancelarPorToken := ucappointment.NovoCancelarPorTokenUseCase(appointmentRepo, cancelamentoRepo, providerRepo, clientRepo, notificador, 24*time.Hour, time.UTC)
 	listar := ucappointment.NovoListarUseCase(appointmentRepo, providerRepo, clientRepo)
 
-	appointmentHandler := handler.NovoAppointmentHandler(consultarSlots, solicitar, solicitarConvidado, transicionar, listar, identidadeDoContexto)
+	appointmentHandler := handler.NovoAppointmentHandler(consultarSlots, solicitar, solicitarConvidado, transicionar, cancelarPorToken, listar, identidadeDoContexto)
 	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, nil, nil, nil, false, identidadeDoContexto)
 	authMw := middleware.NovoAuth(validarSessao)
 
@@ -66,6 +68,8 @@ func novoRouterAgendamento(t *testing.T) (r *chi.Mux, providerID string) {
 	router.Post("/auth/client/login", authHandler.LoginClient)
 	router.Get("/providers/{id}/slots", appointmentHandler.ConsultarSlots)
 	router.Post("/agendamentos/convidado", appointmentHandler.SolicitarConvidado)
+	router.Get("/agendamentos/cancelar/{token}", appointmentHandler.DetalharCancelamento)
+	router.Post("/agendamentos/cancelar/{token}", appointmentHandler.CancelarPorToken)
 	router.Group(func(router chi.Router) {
 		router.Use(authMw.Autenticar)
 		router.Use(middleware.ExigirProvider)
@@ -319,6 +323,24 @@ func TestHandlerAgendamentoConvidado(t *testing.T) {
 		rr := requisicaoComCookie(t, r, http.MethodPost, "/agendamentos/convidado", corpo, nil)
 		if rr.Code != http.StatusBadRequest {
 			t.Errorf("esperava 400 para telefone curto, got: %d, body: %s", rr.Code, rr.Body.String())
+		}
+	})
+}
+
+func TestCancelamentoPorTokenHandler(t *testing.T) {
+	t.Run("detalhar com token inexistente retorna 404", func(t *testing.T) {
+		r, _ := novoRouterAgendamento(t)
+		rr := requisicaoComCookie(t, r, http.MethodGet, "/agendamentos/cancelar/token-inexistente", nil, nil)
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("esperava 404, got: %d, body: %s", rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("cancelar com token inexistente retorna 404", func(t *testing.T) {
+		r, _ := novoRouterAgendamento(t)
+		rr := requisicaoComCookie(t, r, http.MethodPost, "/agendamentos/cancelar/token-inexistente", nil, nil)
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("esperava 404, got: %d, body: %s", rr.Code, rr.Body.String())
 		}
 	})
 }

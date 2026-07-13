@@ -33,6 +33,12 @@ func SMTPStartTLS() bool {
 func EmailRemetente() string     { return os.Getenv("EMAIL_REMETENTE") }
 func EmailRemetenteNome() string { return os.Getenv("EMAIL_REMETENTE_NOME") }
 
+// EmailReplyTo é o endereço de resposta (env EMAIL_REPLY_TO). Vazio omite o
+// cabeçalho Reply-To. Útil quando o remetente é um endereço neutro (para não
+// esbarrar no DMARC de provedores como gmail.com): as respostas dos usuários
+// voltam para este endereço, não para o remetente.
+func EmailReplyTo() string { return os.Getenv("EMAIL_REPLY_TO") }
+
 // EmailAtivo informa se há um servidor SMTP configurado. Quando falso, o
 // sistema usa um mailer nulo em vez de tentar enviar emails de verdade.
 func EmailAtivo() bool { return SMTPHost() != "" }

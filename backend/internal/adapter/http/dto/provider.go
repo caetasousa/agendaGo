@@ -5,9 +5,10 @@ import "github.com/go-playground/validator/v10"
 var validate = validator.New()
 
 type CadastrarProviderRequest struct {
-	Nome  string `json:"nome"  validate:"required,min=2,max=100"`
-	Email string `json:"email" validate:"required,email"`
-	Senha string `json:"senha" validate:"required,min=8"`
+	Nome     string `json:"nome"     validate:"required,min=2,max=100"`
+	Email    string `json:"email"    validate:"required,email"`
+	Telefone string `json:"telefone" validate:"required,min=8,max=30"`
+	Senha    string `json:"senha"    validate:"required,min=8"`
 }
 
 func (r CadastrarProviderRequest) Validar() error {
@@ -21,6 +22,7 @@ type CadastrarProviderResponse struct {
 }
 
 type AtualizarPreferenciasRequest struct {
+	Telefone                  string     `json:"telefone" validate:"required,min=8,max=30"`
 	AceitaAgendamentos        bool       `json:"aceitaAgendamentos"`
 	DescansoMinutos           int        `json:"descansoMinutos" validate:"min=0"`
 	DuracaoAtendimentoMinutos int        `json:"duracaoAtendimentoMinutos" validate:"min=15,max=1440"`
@@ -32,6 +34,7 @@ func (r AtualizarPreferenciasRequest) Validar() error {
 }
 
 type AtualizarPreferenciasResponse struct {
+	Telefone                  string     `json:"telefone"`
 	AceitaAgendamentos        bool       `json:"aceitaAgendamentos"`
 	DescansoMinutos           int        `json:"descansoMinutos"`
 	DuracaoAtendimentoMinutos int        `json:"duracaoAtendimentoMinutos"`

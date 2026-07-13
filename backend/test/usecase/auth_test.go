@@ -20,7 +20,7 @@ func hashDoToken(t string) string {
 func TestLoginProvider(t *testing.T) {
 	hasher := security.NovoHasherArgon2id()
 	senhaHash, _ := hasher.Gerar("12345678")
-	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", senhaHash)
+	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
 
 	novoAmbiente := func() (*ucauth.LoginProviderUseCase, *repository.SessionMemoria) {
 		providers := repository.NovoProviderMemoria()
@@ -148,7 +148,7 @@ func TestValidarSessao(t *testing.T) {
 func TestPerfil(t *testing.T) {
 	hasher := security.NovoHasherArgon2id()
 	senhaHash, _ := hasher.Gerar("12345678")
-	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", senhaHash)
+	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
 	c, _ := client.NovoComConta("client-1", "Maria Silva", "maria@email.com", senhaHash)
 
 	novoAmbiente := func() *ucauth.PerfilUseCase {

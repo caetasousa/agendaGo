@@ -13,7 +13,7 @@ import (
 func novoAmbienteAgenda(t *testing.T, aceitaAgendamentos bool) (*ucavailability.ConsultarAgendaUseCase, *repository.AvailabilityMemoria) {
 	t.Helper()
 	providerRepo := repository.NovoProviderMemoria()
-	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "hash-da-senha")
+	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", "hash-da-senha")
 	if aceitaAgendamentos {
 		p.AtivarAgenda()
 	}

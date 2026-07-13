@@ -135,6 +135,30 @@ sem senha (`TemConta() == false`) — e reserva o slot como qualquer outra solic
 - Na listagem de agendamentos, o **prestador** enxerga o **nome, e-mail e telefone** do
   cliente — informação de contato que **não** é exposta na visão do próprio cliente.
 
+### Cadastro de cliente e verificação por email
+O cadastro de cliente (`POST /clients`) **não cria a conta na hora**: coleta nome, email,
+**telefone** (obrigatório) e senha, guarda o cadastro pendente (com a senha já hasheada) e
+envia um **email de confirmação**. A conta só nasce quando a pessoa clica no link
+(`/confirmar-cadastro?token=...`) — prova de posse do email. O prestador, por outro lado,
+cadastra e entra logado direto (sem essa etapa).
+
+- **Herança do histórico de convidado**: se o email já pertence a um **convidado**, a
+  confirmação **converte o mesmo registro** em conta (preservando o `client_id`), então
+  todos os agendamentos que a pessoa fez como convidado passam a aparecer na conta dela.
+  Essa é a razão de exigir verificação por email: sem prova de posse, qualquer um poderia
+  reivindicar o histórico de um convidado só sabendo o email.
+- **Email que já é conta**: a resposta na tela é **sempre a mesma** (anti-enumeração — não
+  revela se o email existe), mas o email enviado é um aviso "você já tem conta, entre ou
+  recupere a senha", em vez do link de confirmação.
+- **Convidado banido** não vira conta ativa pelo cadastro.
+- O **token de confirmação** é opaco (só o hash no banco), de **uso único**, com TTL de
+  24h; um novo cadastro do mesmo email invalida os pendentes anteriores. As rotas têm teto
+  por IP (mitiga spam de emails e força bruta de token).
+- **Email é único no sistema**: um endereço só pode existir como cliente/convidado **ou**
+  como prestador, nunca nos dois. O cadastro de prestador rejeita (409) um email já usado
+  por cliente/convidado; o de cliente responde com o aviso "você já tem conta" quando o
+  email pertence a um prestador (sem revelar isso na resposta HTTP).
+
 ### Confirmação
 O agendamento só é **concluído após a confirmação do prestador**. Enquanto isso, fica
 pendente (`SOLICITADO`) e ocupando o intervalo.
@@ -169,6 +193,22 @@ Ao cancelar, o intervalo volta a ficar livre.
 O **cliente** também pode cancelar a própria solicitação ainda `SOLICITADO`, sem
 exigência de antecedência — desistir de um pedido não confirmado não surpreende ninguém.
 O **prestador** não cancela solicitações pendentes: para isso existe a recusa.
+
+#### Cancelamento pelo convidado (por token no email)
+O **convidado não tem conta**, então não conseguiria cancelar por rotas autenticadas.
+Para isso, ao **confirmar** um agendamento de convidado, o sistema gera um **token de
+cancelamento** de uso pessoal (opaco, só o hash vai ao banco — mesmo padrão do token de
+recuperação de senha) e o envia no **email de confirmação** como um link
+`/cancelar-agendamento/{token}`. O convidado abre o link, vê os detalhes e confirma o
+cancelamento, **sem login**.
+
+- O token substitui apenas a autenticação; a **regra de antecedência de 24h continua
+  valendo** — o cancelamento por token passa pelo mesmo método de domínio, então cancelar
+  um confirmado em cima da hora é bloqueado do mesmo jeito. A página avisa quando o prazo
+  já passou.
+- O token **não expira** por conta própria: vale enquanto o agendamento for cancelável.
+- Ao cancelar, o **prestador é notificado** por email (cancelado pelo cliente).
+- Cliente **com conta** não recebe esse link — ele cancela pelo painel.
 
 ---
 
@@ -222,7 +262,7 @@ de envio nunca impede a operação que a disparou — só é registrada em log):
 | Evento | Destinatário | Conteúdo |
 |---|---|---|
 | Novo pedido de horário | Prestador | Nome do cliente, data/hora, prazo para confirmar |
-| Confirmação | Cliente | Nome do prestador, data/hora confirmada |
+| Confirmação | Cliente | Nome do prestador, data/hora confirmada (+ link de cancelamento, se convidado) |
 | Recusa | Cliente | Nome do prestador, data/hora recusada |
 | Cancelamento | A outra parte (quem não cancelou) | Quem cancelou, data/hora |
 | Lembrete (24h antes) | Cliente | Nome do prestador, data/hora do atendimento |
@@ -277,6 +317,7 @@ Valores centralizados em `config/agendamento.go` e no domínio:
 | Granularidade de minutos | Múltiplo mínimo dos horários dos blocos | 15 min |
 | Duração do atendimento | Tamanho de cada slot ofertado (por prestador, editável) | sugestão inicial de 60 min |
 | TTL do token de recuperação de senha | Prazo até o link de redefinição expirar | 1h |
+| TTL do token de confirmação de cadastro | Prazo até o link de confirmação de cadastro expirar | 24h |
 | Antecedência do lembrete de agendamento | Quanto antes do início o lembrete é disparado | 24h |
 | Intervalo de checagem do worker de lembrete | Frequência do ticker que busca agendamentos a lembrar | 10 min |
 
@@ -293,7 +334,9 @@ Valores centralizados em `config/agendamento.go` e no domínio:
 | Slot | `internal/domain/slot/` | `Slot`, `Livres` (cálculo puro: duração + buffer, sobra descartada) |
 | Agendamento | `internal/domain/appointment/` | `Appointment` + máquina de estados + expiração lazy |
 | Token de recuperação de senha | `internal/domain/passwordreset/` | `Token`, uso único, TTL curto |
-| Orquestração | `internal/usecase/{provider,availability,appointment,admin,auth}/` | preferências, slots, solicitar, confirmar, recusar, cancelar, concluir, moderar, recuperar/redefinir senha, lembrar |
+| Token de cancelamento (convidado) | `internal/domain/cancellation/` | `Token` por agendamento, gerado na confirmação, sem TTL |
+| Cadastro pendente (verificação de email) | `internal/domain/signup/` | `Pendente` com nome/telefone/senha-hash, uso único, TTL 24h; converte convidado em conta preservando o ID |
+| Orquestração | `internal/usecase/{provider,availability,appointment,admin,auth}/` | preferências, slots, solicitar, confirmar, recusar, cancelar (por sessão ou por token), concluir, moderar, recuperar/redefinir senha, lembrar |
 | Notificações | `internal/adapter/email/`, `internal/adapter/worker/` | templates, transporte SMTP, worker de lembrete |
 | Configuração | `config/agendamento.go`, `config/server.go`, `config/email.go` | fuso fixo, TTL, antecedência mínima, credenciais do admin, SMTP |
-| Persistência | `migrations/` | `providers`, `horarios_padrao`, `clients`, `admins`, `date_exceptions`, `appointments` (anti-overbooking por lock transacional no repositório), `sessions`, `password_reset_tokens` |
+| Persistência | `migrations/` | `providers`, `horarios_padrao`, `clients`, `admins`, `date_exceptions`, `appointments` (anti-overbooking por lock transacional no repositório), `sessions`, `password_reset_tokens`, `cancelamento_tokens`, `cadastros_pendentes`, `providers.telefone` |

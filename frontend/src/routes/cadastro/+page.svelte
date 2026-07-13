@@ -24,11 +24,14 @@
 	);
 	let nome = $state('');
 	let email = $state('');
+	let telefone = $state('');
 	let senha = $state('');
 	let confirmarSenha = $state('');
 
 	let enviando = $state(false);
 	let erro = $state<string | null>(null);
+	// Cliente: após o cadastro, a conta só nasce quando ele confirma pelo email.
+	let aguardandoConfirmacao = $state(false);
 
 	const senhasDivergentes = $derived(confirmarSenha.length > 0 && senha !== confirmarSenha);
 
@@ -45,19 +48,19 @@
 
 		try {
 			if (tipo === 'provider') {
-				await cadastrarProvider({ nome, email, senha });
+				// prestador entra logado direto (sem verificação por email)
+				await cadastrarProvider({ nome, email, telefone, senha });
+				await login({ email, senha });
+				sessao.definir(await me());
+				goto(destinoAposCadastro());
 			} else {
-				await cadastrarClient({ nome, email, senha });
+				// cliente: o backend envia um email de confirmação e responde sempre
+				// igual (exista ou não o email). Só entra logado ao confirmar pelo link.
+				await cadastrarClient({ nome, email, telefone, senha });
+				aguardandoConfirmacao = true;
 			}
-
-			await login({ email, senha });
-			// popula a sessão antes de navegar: o destino pode ser uma página
-			// pública (ex: link de agendamento) que não tem guard para fazê-lo
-			sessao.definir(await me());
-			goto(destinoAposCadastro());
 		} catch (e) {
-			// A API é a fonte da verdade da validação: mostramos a mensagem que ela devolve
-			// (400 = dado inválido, 409 = e-mail já cadastrado).
+			// A API é a fonte da verdade da validação: mostramos a mensagem que ela devolve.
 			erro = e instanceof ApiError ? e.message : 'Não foi possível concluir o cadastro.';
 		} finally {
 			enviando = false;
@@ -80,6 +83,16 @@
 	<p class="mt-3 text-body">Escolha o tipo de conta para começar.</p>
 
 	<div class="mt-8 rounded-xl border border-hairline-strong bg-surface-card p-8">
+		{#if aguardandoConfirmacao}
+			<p class="text-body">
+				Enviamos um email para <span class="font-medium text-ink">{email}</span>. Abra a mensagem e
+				clique no link para confirmar seu cadastro e ativar sua conta.
+			</p>
+			<p class="mt-4 text-sm text-mute">
+				Não recebeu? Verifique a caixa de spam. Se este email já tiver uma conta, você receberá
+				instruções para entrar.
+			</p>
+		{:else}
 		<form class="space-y-5" novalidate onsubmit={enviar}>
 			<div role="radiogroup" aria-label="Tipo de conta" class="flex gap-3">
 				<label class="{opcaoBaseClasse} {tipo === 'provider' ? opcaoAtivaClasse : opcaoInativaClasse}">
@@ -123,6 +136,19 @@
 					bind:value={email}
 					required
 					placeholder="voce@exemplo.com"
+					class={inputClasse}
+				/>
+			</div>
+
+			<div>
+				<label for="telefone" class="block text-sm font-medium text-ink">Telefone</label>
+				<input
+					id="telefone"
+					type="tel"
+					bind:value={telefone}
+					required
+					minlength="8"
+					placeholder="(11) 99999-8888"
 					class={inputClasse}
 				/>
 			</div>
@@ -172,5 +198,6 @@
 			Já tem conta?
 			<a href="/login" class="font-medium text-ink underline">Entrar</a>
 		</p>
+		{/if}
 	</div>
 </div>

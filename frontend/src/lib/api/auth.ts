@@ -19,6 +19,7 @@ export interface MeResponse {
 	id: string;
 	nome: string;
 	email: string;
+	telefone?: string;
 	tipo: string;
 	aceitaAgendamentos?: boolean;
 	descansoMinutos?: number;

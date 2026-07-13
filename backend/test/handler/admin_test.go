@@ -34,7 +34,7 @@ func novoRouterAdmin(t *testing.T) (r *chi.Mux, providerID, clientID string) {
 	}
 
 	senhaHash, _ := hasher.Gerar("12345678")
-	p, _ := provider.Novo("11111111-1111-1111-1111-111111111111", "João Silva", "joao@email.com", senhaHash)
+	p, _ := provider.Novo("11111111-1111-1111-1111-111111111111", "João Silva", "joao@email.com", "11999998888", senhaHash)
 	p.AtivarAgenda()
 	providerRepo.Salvar(p)
 	c, _ := client.NovoComConta("22222222-2222-2222-2222-222222222222", "Maria Souza", "maria@email.com", senhaHash)

@@ -59,6 +59,8 @@ func main() {
 	appointmentRepo := repository.NovoAppointmentPostgres(pool)
 	adminRepo := repository.NovoAdminPostgres(pool)
 	passwordResetRepo := repository.NovoPasswordResetPostgres(pool)
+	cancelamentoRepo := repository.NovoCancellationPostgres(pool)
+	signupRepo := repository.NovoSignupPostgres(pool)
 
 	// segurança
 	hasher := security.NovoHasherArgon2id()
@@ -75,9 +77,10 @@ func main() {
 	}
 
 	// usecases
-	cadastrarProvider := ucprovider.NovoCadastrarUseCase(providerRepo, hasher)
+	cadastrarProvider := ucprovider.NovoCadastrarUseCase(providerRepo, clientRepo, hasher)
 	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(providerRepo)
-	cadastrarClient := ucclient.NovoCadastrarUseCase(clientRepo, hasher)
+	solicitarCadastroClient := ucclient.NovoSolicitarCadastroUseCase(clientRepo, providerRepo, signupRepo, notificador, hasher)
+	confirmarCadastroClient := ucclient.NovoConfirmarCadastroUseCase(clientRepo, providerRepo, signupRepo)
 	loginProvider := ucauth.NovoLoginProviderUseCase(providerRepo, sessionRepo, hasher)
 	loginClient := ucauth.NovoLoginClientUseCase(clientRepo, sessionRepo, hasher)
 	loginAdmin := ucauth.NovoLoginAdminUseCase(adminRepo, sessionRepo, hasher)
@@ -96,7 +99,8 @@ func main() {
 	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(consultarDisponibilidade, appointmentRepo, providerRepo, config.FusoHorario)
 	solicitarAgendamento := ucappointment.NovoSolicitarUseCase(consultarSlots, appointmentRepo, clientRepo, providerRepo, notificador, config.TTLSolicitacao)
 	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitarAgendamento, clientRepo)
-	transicionarAgendamento := ucappointment.NovoTransicionarUseCase(appointmentRepo, providerRepo, clientRepo, notificador, config.AntecedenciaMinimaCancelamento, config.FusoHorario)
+	transicionarAgendamento := ucappointment.NovoTransicionarUseCase(appointmentRepo, providerRepo, clientRepo, cancelamentoRepo, notificador, config.AntecedenciaMinimaCancelamento, config.FusoHorario)
+	cancelarPorToken := ucappointment.NovoCancelarPorTokenUseCase(appointmentRepo, cancelamentoRepo, providerRepo, clientRepo, notificador, config.AntecedenciaMinimaCancelamento, config.FusoHorario)
 	listarAgendamentos := ucappointment.NovoListarUseCase(appointmentRepo, providerRepo, clientRepo)
 	detalharUsuario := ucadmin.NovoDetalharUseCase(providerRepo, clientRepo, listarAgendamentos)
 	lembrarAgendamento := ucappointment.NovoLembrarUseCase(appointmentRepo, providerRepo, clientRepo, notificador, config.FusoHorario, config.AntecedenciaLembrete)
@@ -106,11 +110,11 @@ func main() {
 		return middleware.IdentidadeDoContexto(r.Context())
 	}
 	providerHandler := handler.NovoProviderHandler(cadastrarProvider, atualizarPreferencias, listarPrestadores, buscarPrestador, identidadeDoContexto)
-	clientHandler := handler.NovoClientHandler(cadastrarClient)
+	clientHandler := handler.NovoClientHandler(solicitarCadastroClient, confirmarCadastroClient)
 	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, loginAdmin, logout, perfil, config.CookieSeguro(), identidadeDoContexto)
 	passwordResetHandler := handler.NovoPasswordResetHandler(solicitarRecuperacao, redefinirSenha)
 	availabilityHandler := handler.NovoAvailabilityHandler(consultarAgenda, definirDia, removerDia, identidadeDoContexto)
-	appointmentHandler := handler.NovoAppointmentHandler(consultarSlots, solicitarAgendamento, solicitarConvidado, transicionarAgendamento, listarAgendamentos, identidadeDoContexto)
+	appointmentHandler := handler.NovoAppointmentHandler(consultarSlots, solicitarAgendamento, solicitarConvidado, transicionarAgendamento, cancelarPorToken, listarAgendamentos, identidadeDoContexto)
 	adminHandler := handler.NovoAdminHandler(moderar, detalharUsuario)
 
 	// middlewares
@@ -122,16 +126,27 @@ func main() {
 	r.Get("/providers", providerHandler.Listar)
 	r.Get("/providers/{id}", providerHandler.BuscarResumo)
 	r.Get("/providers/{id}/slots", appointmentHandler.ConsultarSlots)
-	// rota pública de convidado tem teto por IP: sem ele, uma rajada enche a
-	// agenda de um prestador com reservas falsas
+	// rotas públicas de convidado (agendar e cancelar por token) têm teto por
+	// IP: sem ele, uma rajada enche a agenda de um prestador com reservas
+	// falsas ou tenta adivinhar tokens de cancelamento por força bruta
 	r.Group(func(r chi.Router) {
 		if limite := config.RateLimitConvidadoPorMinuto(); limite > 0 {
 			r.Use(httprate.LimitByIP(limite, time.Minute))
 		}
 		r.Post("/agendamentos/convidado", appointmentHandler.SolicitarConvidado)
+		r.Get("/agendamentos/cancelar/{token}", appointmentHandler.DetalharCancelamento)
+		r.Post("/agendamentos/cancelar/{token}", appointmentHandler.CancelarPorToken)
 	})
 	r.Post("/providers", providerHandler.Cadastrar)
-	r.Post("/clients", clientHandler.Cadastrar)
+	// cadastro de cliente dispara email (confirmação/aviso) e roda Argon2id:
+	// teto por IP mitiga spam de emails e força bruta de token de confirmação
+	r.Group(func(r chi.Router) {
+		if limite := config.RateLimitLoginPorMinuto(); limite > 0 {
+			r.Use(httprate.LimitByIP(limite, time.Minute))
+		}
+		r.Post("/clients", clientHandler.Cadastrar)
+		r.Post("/clients/confirmar-cadastro", clientHandler.ConfirmarCadastro)
+	})
 	// logins têm teto por IP: mitiga brute-force e rajadas de Argon2id (CPU)
 	r.Group(func(r chi.Router) {
 		if limite := config.RateLimitLoginPorMinuto(); limite > 0 {
@@ -232,7 +247,7 @@ func novoMailer() interface{ Enviar(email.Mensagem) error } {
 	}
 	m, err := email.NovaMailerSMTP(
 		config.SMTPHost(), config.SMTPPort(), config.SMTPUser(), config.SMTPPassword(),
-		config.SMTPStartTLS(), config.EmailRemetente(), config.EmailRemetenteNome(),
+		config.SMTPStartTLS(), config.EmailRemetente(), config.EmailRemetenteNome(), config.EmailReplyTo(),
 	)
 	if err != nil {
 		log.Fatalf("erro ao configurar SMTP: %v", err)

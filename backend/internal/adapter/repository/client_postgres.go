@@ -51,6 +51,17 @@ func (r *ClientPostgres) AtualizarSenha(id, senhaHash string) error {
 	return err
 }
 
+// ConverterEmConta define senha e telefone num convidado, transformando-o em
+// conta sem trocar o ID — assim os agendamentos que já apontam para esse
+// cliente são preservados. Usado ao confirmar o cadastro por email.
+func (r *ClientPostgres) ConverterEmConta(id, senhaHash, telefone string) error {
+	_, err := r.pool.Exec(context.Background(),
+		`UPDATE clients SET senha_hash = $2, telefone = $3, atualizado_em = $4 WHERE id = $1`,
+		id, senhaHash, telefone, time.Now(),
+	)
+	return err
+}
+
 // BuscarPorEmail retorna (cliente, nil) quando encontra, (nil, nil) quando
 // não existe cliente com o email, e (nil, err) em falha real de infraestrutura.
 func (r *ClientPostgres) BuscarPorEmail(email string) (*client.Client, error) {

@@ -12,6 +12,7 @@ type PerfilOutput struct {
 	ID                        string
 	Nome                      string
 	Email                     string
+	Telefone                  string
 	Tipo                      string
 	AceitaAgendamentos        *bool
 	DescansoMinutos           *int
@@ -46,6 +47,7 @@ func (uc *PerfilUseCase) Executar(id Identidade) (*PerfilOutput, error) {
 			ID:                        p.ID,
 			Nome:                      p.Nome,
 			Email:                     p.Email,
+			Telefone:                  p.Telefone,
 			Tipo:                      string(session.TipoProvider),
 			AceitaAgendamentos:        &p.AceitaAgendamentos,
 			DescansoMinutos:           &p.DescansoMinutos,
@@ -61,7 +63,7 @@ func (uc *PerfilUseCase) Executar(id Identidade) (*PerfilOutput, error) {
 		if c == nil {
 			return nil, ErrSessaoInvalida
 		}
-		return &PerfilOutput{ID: c.ID, Nome: c.Nome, Email: c.Email, Tipo: string(session.TipoClient)}, nil
+		return &PerfilOutput{ID: c.ID, Nome: c.Nome, Email: c.Email, Telefone: c.Telefone, Tipo: string(session.TipoClient)}, nil
 
 	case session.TipoAdmin:
 		a, err := uc.admins.BuscarPorID(id.UserID)

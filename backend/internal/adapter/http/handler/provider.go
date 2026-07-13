@@ -75,9 +75,10 @@ func (h *ProviderHandler) Cadastrar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	output, err := h.cadastrar.Executar(ucprovider.CadastrarInput{
-		Nome:  req.Nome,
-		Email: req.Email,
-		Senha: req.Senha,
+		Nome:     req.Nome,
+		Email:    req.Email,
+		Telefone: req.Telefone,
+		Senha:    req.Senha,
 	})
 	if err != nil {
 		switch {
@@ -140,6 +141,7 @@ func (h *ProviderHandler) AtualizarPreferencias(w http.ResponseWriter, r *http.R
 
 	output, err := h.atualizarPreferencias.Executar(ucprovider.AtualizarPreferenciasInput{
 		ProviderID:                id.UserID,
+		Telefone:                  req.Telefone,
 		AceitaAgendamentos:        req.AceitaAgendamentos,
 		DescansoMinutos:           req.DescansoMinutos,
 		DuracaoAtendimentoMinutos: req.DuracaoAtendimentoMinutos,
@@ -149,6 +151,7 @@ func (h *ProviderHandler) AtualizarPreferencias(w http.ResponseWriter, r *http.R
 		switch {
 		case errors.Is(err, provider.ErrDescansoInvalido),
 			errors.Is(err, provider.ErrDuracaoInvalida),
+			errors.Is(err, provider.ErrTelefoneObrigatorio),
 			errors.Is(err, availability.ErrFimAntesDoInicio),
 			errors.Is(err, availability.ErrForaDoDia),
 			errors.Is(err, availability.ErrGranularidadeInvalida),
@@ -163,6 +166,7 @@ func (h *ProviderHandler) AtualizarPreferencias(w http.ResponseWriter, r *http.R
 	}
 
 	responderJSON(w, http.StatusOK, dto.AtualizarPreferenciasResponse{
+		Telefone:                  output.Telefone,
 		AceitaAgendamentos:        output.AceitaAgendamentos,
 		DescansoMinutos:           output.DescansoMinutos,
 		DuracaoAtendimentoMinutos: output.DuracaoAtendimentoMinutos,

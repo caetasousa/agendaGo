@@ -27,7 +27,7 @@ func identidadeAusente(r *http.Request) (ucauth.Identidade, bool) {
 
 func novoHandler() *handler.ProviderHandler {
 	repo := repository.NovoProviderMemoria()
-	cadastrar := ucprovider.NovoCadastrarUseCase(repo, security.NovoHasherArgon2id())
+	cadastrar := ucprovider.NovoCadastrarUseCase(repo, repository.NovoClientMemoria(), security.NovoHasherArgon2id())
 	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
 	listar := ucprovider.NovoListarUseCase(repo)
 	buscarResumo := ucprovider.NovoBuscarResumoUseCase(repo)
@@ -56,7 +56,7 @@ func novoRouterPreferencias(t *testing.T) (r *chi.Mux, providerID string) {
 	sessionRepo := repository.NovoSessionMemoria()
 
 	senhaHash, _ := hasher.Gerar("12345678")
-	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", senhaHash)
+	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
 	providerRepo.Salvar(p)
 
 	c, _ := client.NovoComConta("client-1", "Maria Silva", "maria@email.com", senhaHash)
@@ -104,9 +104,10 @@ func loginEObterCookie(t *testing.T, r *chi.Mux, rota, email, senha string) *htt
 func TestHandlerCadastrarProvider(t *testing.T) {
 	t.Run("retorna 201 e ID do provider criado quando dados são válidos", func(t *testing.T) {
 		rr := fazerRequisicao(t, novoHandler(), map[string]string{
-			"nome":  "João Silva",
-			"email": "joao@email.com",
-			"senha": "12345678",
+			"nome":     "João Silva",
+			"email":    "joao@email.com",
+			"telefone": "11999998888",
+			"senha":    "12345678",
 		})
 		if rr.Code != http.StatusCreated {
 			t.Errorf("esperava 201, got: %d", rr.Code)
@@ -120,9 +121,10 @@ func TestHandlerCadastrarProvider(t *testing.T) {
 
 	t.Run("retorna 400 quando email não tem formato válido", func(t *testing.T) {
 		rr := fazerRequisicao(t, novoHandler(), map[string]string{
-			"nome":  "João Silva",
-			"email": "emailinvalido",
-			"senha": "12345678",
+			"nome":     "João Silva",
+			"email":    "emailinvalido",
+			"telefone": "11999998888",
+			"senha":    "12345678",
 		})
 		if rr.Code != http.StatusBadRequest {
 			t.Errorf("esperava 400, got: %d", rr.Code)
@@ -131,9 +133,10 @@ func TestHandlerCadastrarProvider(t *testing.T) {
 
 	t.Run("retorna 400 quando senha tem menos de 8 caracteres", func(t *testing.T) {
 		rr := fazerRequisicao(t, novoHandler(), map[string]string{
-			"nome":  "João Silva",
-			"email": "joao@email.com",
-			"senha": "123",
+			"nome":     "João Silva",
+			"email":    "joao@email.com",
+			"telefone": "11999998888",
+			"senha":    "123",
 		})
 		if rr.Code != http.StatusBadRequest {
 			t.Errorf("esperava 400, got: %d", rr.Code)
@@ -143,9 +146,10 @@ func TestHandlerCadastrarProvider(t *testing.T) {
 	t.Run("retorna 409 quando email já está cadastrado", func(t *testing.T) {
 		h := novoHandler()
 		body := map[string]string{
-			"nome":  "João Silva",
-			"email": "joao@email.com",
-			"senha": "12345678",
+			"nome":     "João Silva",
+			"email":    "joao@email.com",
+			"telefone": "11999998888",
+			"senha":    "12345678",
 		}
 		fazerRequisicao(t, h, body)
 		rr := fazerRequisicao(t, h, body)
@@ -170,7 +174,7 @@ func TestHandlerAtualizarPreferencias(t *testing.T) {
 		r, _ := novoRouterPreferencias(t)
 		cookie := loginEObterCookie(t, r, "/auth/provider/login", "joao@email.com", "12345678")
 
-		body, _ := json.Marshal(map[string]any{"aceitaAgendamentos": true, "descansoMinutos": 15, "duracaoAtendimentoMinutos": 60})
+		body, _ := json.Marshal(map[string]any{"telefone": "11999998888", "aceitaAgendamentos": true, "descansoMinutos": 15, "duracaoAtendimentoMinutos": 60})
 		req := httptest.NewRequest(http.MethodPut, "/providers/me/preferencias", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.AddCookie(cookie)
@@ -194,7 +198,7 @@ func TestHandlerAtualizarPreferencias(t *testing.T) {
 		r, _ := novoRouterPreferencias(t)
 		cookie := loginEObterCookie(t, r, "/auth/provider/login", "joao@email.com", "12345678")
 
-		body, _ := json.Marshal(map[string]any{"aceitaAgendamentos": true, "descansoMinutos": -5, "duracaoAtendimentoMinutos": 60})
+		body, _ := json.Marshal(map[string]any{"telefone": "11999998888", "aceitaAgendamentos": true, "descansoMinutos": -5, "duracaoAtendimentoMinutos": 60})
 		req := httptest.NewRequest(http.MethodPut, "/providers/me/preferencias", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.AddCookie(cookie)
@@ -210,7 +214,7 @@ func TestHandlerAtualizarPreferencias(t *testing.T) {
 		r, _ := novoRouterPreferencias(t)
 		cookie := loginEObterCookie(t, r, "/auth/client/login", "maria@email.com", "12345678")
 
-		body, _ := json.Marshal(map[string]any{"aceitaAgendamentos": true, "descansoMinutos": 10, "duracaoAtendimentoMinutos": 60})
+		body, _ := json.Marshal(map[string]any{"telefone": "11999998888", "aceitaAgendamentos": true, "descansoMinutos": 10, "duracaoAtendimentoMinutos": 60})
 		req := httptest.NewRequest(http.MethodPut, "/providers/me/preferencias", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.AddCookie(cookie)
@@ -225,7 +229,7 @@ func TestHandlerAtualizarPreferencias(t *testing.T) {
 	t.Run("retorna 401 sem cookie de sessão", func(t *testing.T) {
 		r, _ := novoRouterPreferencias(t)
 
-		body, _ := json.Marshal(map[string]any{"aceitaAgendamentos": true, "descansoMinutos": 10, "duracaoAtendimentoMinutos": 60})
+		body, _ := json.Marshal(map[string]any{"telefone": "11999998888", "aceitaAgendamentos": true, "descansoMinutos": 10, "duracaoAtendimentoMinutos": 60})
 		req := httptest.NewRequest(http.MethodPut, "/providers/me/preferencias", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		rr := httptest.NewRecorder()
@@ -241,6 +245,7 @@ func TestHandlerAtualizarPreferencias(t *testing.T) {
 		cookie := loginEObterCookie(t, r, "/auth/provider/login", "joao@email.com", "12345678")
 
 		body, _ := json.Marshal(map[string]any{
+			"telefone":                  "11999998888",
 			"aceitaAgendamentos":        true,
 			"descansoMinutos":           10,
 			"duracaoAtendimentoMinutos": 60,
@@ -272,6 +277,7 @@ func TestHandlerAtualizarPreferencias(t *testing.T) {
 		cookie := loginEObterCookie(t, r, "/auth/provider/login", "joao@email.com", "12345678")
 
 		body, _ := json.Marshal(map[string]any{
+			"telefone":                  "11999998888",
 			"aceitaAgendamentos":        true,
 			"descansoMinutos":           0,
 			"duracaoAtendimentoMinutos": 60,

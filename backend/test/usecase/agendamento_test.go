@@ -22,10 +22,12 @@ type ambienteAgendamento struct {
 	solicitar          *ucappointment.SolicitarUseCase
 	solicitarConvidado *ucappointment.SolicitarConvidadoUseCase
 	transicionar       *ucappointment.TransicionarUseCase
+	cancelarPorToken   *ucappointment.CancelarPorTokenUseCase
 	listar             *ucappointment.ListarUseCase
 	lembrar            *ucappointment.LembrarUseCase
 	appointments       *repository.AppointmentMemoria
 	clients            *repository.ClientMemoria
+	cancelamentos      *repository.CancellationMemoria
 	prestador          *provider.Provider
 	mailer             *email.MailerMemoria
 }
@@ -34,7 +36,7 @@ func novoAmbienteAgendamento(t *testing.T) *ambienteAgendamento {
 	t.Helper()
 
 	providerRepo := repository.NovoProviderMemoria()
-	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "hash")
+	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", "hash")
 	p.AtivarAgenda()
 	providerRepo.Salvar(p)
 
@@ -44,6 +46,7 @@ func novoAmbienteAgendamento(t *testing.T) *ambienteAgendamento {
 
 	availabilityRepo := repository.NovoAvailabilityMemoria()
 	appointments := repository.NovoAppointmentMemoria()
+	cancelamentos := repository.NovoCancellationMemoria()
 
 	mailer := email.NovaMailerMemoria()
 	notificador := email.NovoNotificador(mailer, "http://localhost:5173", time.UTC, email.ExecutorSincrono)
@@ -52,7 +55,8 @@ func novoAmbienteAgendamento(t *testing.T) *ambienteAgendamento {
 	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointments, providerRepo, time.UTC)
 	solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointments, clientRepo, providerRepo, notificador, 24*time.Hour)
 	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitar, clientRepo)
-	transicionar := ucappointment.NovoTransicionarUseCase(appointments, providerRepo, clientRepo, notificador, 24*time.Hour, time.UTC)
+	transicionar := ucappointment.NovoTransicionarUseCase(appointments, providerRepo, clientRepo, cancelamentos, notificador, 24*time.Hour, time.UTC)
+	cancelarPorToken := ucappointment.NovoCancelarPorTokenUseCase(appointments, cancelamentos, providerRepo, clientRepo, notificador, 24*time.Hour, time.UTC)
 	listar := ucappointment.NovoListarUseCase(appointments, providerRepo, clientRepo)
 	lembrar := ucappointment.NovoLembrarUseCase(appointments, providerRepo, clientRepo, notificador, time.UTC, 24*time.Hour)
 
@@ -61,10 +65,12 @@ func novoAmbienteAgendamento(t *testing.T) *ambienteAgendamento {
 		solicitar:          solicitar,
 		solicitarConvidado: solicitarConvidado,
 		transicionar:       transicionar,
+		cancelarPorToken:   cancelarPorToken,
 		listar:             listar,
 		lembrar:            lembrar,
 		appointments:       appointments,
 		clients:            clientRepo,
+		cancelamentos:      cancelamentos,
 		prestador:          p,
 		mailer:             mailer,
 	}

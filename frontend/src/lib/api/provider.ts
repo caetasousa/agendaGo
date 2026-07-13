@@ -6,6 +6,7 @@ import { apiGet, apiPost } from './client';
 export interface CadastrarProviderRequest {
 	nome: string;
 	email: string;
+	telefone: string;
 	senha: string;
 }
 

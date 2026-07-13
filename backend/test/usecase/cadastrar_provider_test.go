@@ -5,20 +5,22 @@ import (
 
 	"agendago/internal/adapter/repository"
 	"agendago/internal/adapter/security"
+	"agendago/internal/domain/client"
 	ucprovider "agendago/internal/usecase/provider"
 )
 
 func novoUseCase() *ucprovider.CadastrarUseCase {
-	return ucprovider.NovoCadastrarUseCase(repository.NovoProviderMemoria(), security.NovoHasherArgon2id())
+	return ucprovider.NovoCadastrarUseCase(repository.NovoProviderMemoria(), repository.NovoClientMemoria(), security.NovoHasherArgon2id())
 }
 
 func TestCadastrarProvider(t *testing.T) {
 	t.Run("cadastra provider com dados válidos e retorna ID gerado", func(t *testing.T) {
 		uc := novoUseCase()
 		out, err := uc.Executar(ucprovider.CadastrarInput{
-			Nome:  "João Silva",
-			Email: "joao@email.com",
-			Senha: "12345678",
+			Nome:     "João Silva",
+			Email:    "joao@email.com",
+			Telefone: "11999998888",
+			Senha:    "12345678",
 		})
 		if err != nil {
 			t.Fatalf("esperava sucesso, got: %v", err)
@@ -34,9 +36,10 @@ func TestCadastrarProvider(t *testing.T) {
 	t.Run("retorna erro quando email já está cadastrado", func(t *testing.T) {
 		uc := novoUseCase()
 		input := ucprovider.CadastrarInput{
-			Nome:  "João Silva",
-			Email: "joao@email.com",
-			Senha: "12345678",
+			Nome:     "João Silva",
+			Email:    "joao@email.com",
+			Telefone: "11999998888",
+			Senha:    "12345678",
 		}
 		uc.Executar(input)
 
@@ -49,9 +52,10 @@ func TestCadastrarProvider(t *testing.T) {
 	t.Run("retorna erro quando nome é vazio", func(t *testing.T) {
 		uc := novoUseCase()
 		_, err := uc.Executar(ucprovider.CadastrarInput{
-			Nome:  "",
-			Email: "joao@email.com",
-			Senha: "12345678",
+			Nome:     "",
+			Email:    "joao@email.com",
+			Telefone: "11999998888",
+			Senha:    "12345678",
 		})
 		if err == nil {
 			t.Error("esperava erro para nome vazio")
@@ -60,11 +64,12 @@ func TestCadastrarProvider(t *testing.T) {
 
 	t.Run("persiste a senha com hash, nunca em texto puro", func(t *testing.T) {
 		repo := repository.NovoProviderMemoria()
-		uc := ucprovider.NovoCadastrarUseCase(repo, security.NovoHasherArgon2id())
+		uc := ucprovider.NovoCadastrarUseCase(repo, repository.NovoClientMemoria(), security.NovoHasherArgon2id())
 		uc.Executar(ucprovider.CadastrarInput{
-			Nome:  "João Silva",
-			Email: "joao@email.com",
-			Senha: "12345678",
+			Nome:     "João Silva",
+			Email:    "joao@email.com",
+			Telefone: "11999998888",
+			Senha:    "12345678",
 		})
 
 		p, _ := repo.BuscarPorEmail("joao@email.com")
@@ -73,6 +78,21 @@ func TestCadastrarProvider(t *testing.T) {
 		}
 		if p.SenhaHash == "" {
 			t.Error("hash de senha não deveria ser vazio")
+		}
+	})
+
+	t.Run("rejeita email que já pertence a um cliente/convidado", func(t *testing.T) {
+		providers := repository.NovoProviderMemoria()
+		clients := repository.NovoClientMemoria()
+		convidado, _ := client.NovoConvidado("c-1", "Maria", "maria@email.com", "11999998888")
+		clients.Salvar(convidado)
+		uc := ucprovider.NovoCadastrarUseCase(providers, clients, security.NovoHasherArgon2id())
+
+		_, err := uc.Executar(ucprovider.CadastrarInput{
+			Nome: "Maria", Email: "maria@email.com", Telefone: "11999998888", Senha: "12345678",
+		})
+		if err != ucprovider.ErrEmailJaCadastrado {
+			t.Errorf("esperava ErrEmailJaCadastrado para email de cliente, got: %v", err)
 		}
 	})
 }

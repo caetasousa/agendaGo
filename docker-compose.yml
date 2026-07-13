@@ -61,6 +61,7 @@ services:
       SMTP_STARTTLS: ${SMTP_STARTTLS:-false}
       EMAIL_REMETENTE: ${EMAIL_REMETENTE:-nao-responda@agendago.dev}
       EMAIL_REMETENTE_NOME: ${EMAIL_REMETENTE_NOME:-agendaGo}
+      EMAIL_REPLY_TO: ${EMAIL_REPLY_TO}
     volumes:
       - ./backend:/app
     depends_on:

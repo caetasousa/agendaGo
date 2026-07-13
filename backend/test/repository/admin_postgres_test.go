@@ -62,7 +62,7 @@ func TestModeracaoPostgres(t *testing.T) {
 	clientRepo := repository.NovoClientPostgres(pool)
 
 	t.Run("prestador nasce ativo e o banimento persiste", func(t *testing.T) {
-		p, _ := provider.Novo("cccccccc-1111-1111-1111-111111111111", "Prestador Mod", "mod-prov@email.com", "hash")
+		p, _ := provider.Novo("cccccccc-1111-1111-1111-111111111111", "Prestador Mod", "mod-prov@email.com", "11999998888", "hash")
 		providerRepo.Salvar(p)
 
 		encontrado, _ := providerRepo.BuscarPorID(p.ID)

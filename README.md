@@ -64,7 +64,8 @@ e cai no painel de moderação (`/admin`), onde bane/reativa prestadores e clien
 |--------|------|-----------|
 | `GET` | [`/health`](http://localhost:8080/swagger/index.html#/infra/get_health) | Status do servidor |
 | `POST` | [`/providers`](http://localhost:8080/swagger/index.html#/providers/post_providers) | Cadastrar prestador |
-| `POST` | [`/clients`](http://localhost:8080/swagger/index.html#/clients/post_clients) | Cadastrar cliente (com conta) |
+| `POST` | [`/clients`](http://localhost:8080/swagger/index.html#/clients/post_clients) | Solicitar cadastro de cliente (envia email de confirmação) |
+| `POST` | [`/clients/confirmar-cadastro`](http://localhost:8080/swagger/index.html#/clients/post_clients_confirmar_cadastro) | Confirmar cadastro pelo token do email |
 | `POST` | [`/auth/provider/login`](http://localhost:8080/swagger/index.html#/auth/post_auth_provider_login) | Login do prestador |
 | `POST` | [`/auth/client/login`](http://localhost:8080/swagger/index.html#/auth/post_auth_client_login) | Login do cliente |
 | `POST` | [`/auth/admin/login`](http://localhost:8080/swagger/index.html#/auth/post_auth_admin_login) | Login do administrador |
@@ -81,6 +82,8 @@ e cai no painel de moderação (`/admin`), onde bane/reativa prestadores e clien
 | `GET` | [`/providers/{id}/slots`](http://localhost:8080/swagger/index.html#/appointments/get_providers__id__slots) | Consultar horários livres de um prestador (por período) |
 | `POST` | [`/agendamentos`](http://localhost:8080/swagger/index.html#/appointments/post_agendamentos) | Solicitar um agendamento (cliente) |
 | `POST` | [`/agendamentos/convidado`](http://localhost:8080/swagger/index.html#/appointments/post_agendamentos_convidado) | Solicitar um agendamento sem cadastro (nome/e-mail/telefone) |
+| `GET` | [`/agendamentos/cancelar/{token}`](http://localhost:8080/swagger/index.html#/appointments/get_agendamentos_cancelar__token_) | Detalhar um agendamento pelo token de cancelamento (convidado) |
+| `POST` | [`/agendamentos/cancelar/{token}`](http://localhost:8080/swagger/index.html#/appointments/post_agendamentos_cancelar__token_) | Cancelar um agendamento pelo token do email (convidado) |
 | `GET` | [`/clients/me/agendamentos`](http://localhost:8080/swagger/index.html#/appointments/get_clients_me_agendamentos) | Listar agendamentos do cliente |
 | `GET` | [`/providers/me/agendamentos`](http://localhost:8080/swagger/index.html#/appointments/get_providers_me_agendamentos) | Listar agendamentos recebidos pelo prestador |
 | `POST` | [`/agendamentos/{id}/confirmar`](http://localhost:8080/swagger/index.html#/appointments/post_agendamentos__id__confirmar) | Confirmar uma solicitação (prestador) |

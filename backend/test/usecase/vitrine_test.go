@@ -14,14 +14,14 @@ func TestVitrine(t *testing.T) {
 		t.Helper()
 		repo := repository.NovoProviderMemoria()
 
-		ativo, _ := provider.Novo("p-ativo", "Ana Ativa", "ana@email.com", "hash")
+		ativo, _ := provider.Novo("p-ativo", "Ana Ativa", "ana@email.com", "11999998888", "hash")
 		ativo.AtivarAgenda()
 		repo.Salvar(ativo)
 
-		fechado, _ := provider.Novo("p-fechado", "Fabio Fechado", "fabio@email.com", "hash")
+		fechado, _ := provider.Novo("p-fechado", "Fabio Fechado", "fabio@email.com", "11999998888", "hash")
 		repo.Salvar(fechado)
 
-		banido, _ := provider.Novo("p-banido", "Bruno Banido", "bruno@email.com", "hash")
+		banido, _ := provider.Novo("p-banido", "Bruno Banido", "bruno@email.com", "11999998888", "hash")
 		banido.AtivarAgenda()
 		banido.Banir()
 		repo.Salvar(banido)

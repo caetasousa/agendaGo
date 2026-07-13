@@ -120,3 +120,36 @@ func (n *Notificador) EnviarRecuperacaoSenha(email, nome, token string, expiraEm
 	}
 	n.enviar(email, nome, "Redefinição de senha — agendaGo", "recuperacao_senha.html", dados)
 }
+
+// EnviarConfirmacaoCadastro envia o link de confirmação de cadastro. Implementa
+// parte da interface enviadorCadastro de usecase/client.
+func (n *Notificador) EnviarConfirmacaoCadastro(email, nome, token string, expiraEm time.Time) {
+	link := fmt.Sprintf("%s/confirmar-cadastro?token=%s", n.urlFrontend, token)
+	dados := struct {
+		Nome          string
+		Link          string
+		ExpiraEmHoras int
+	}{
+		Nome:          nome,
+		Link:          link,
+		ExpiraEmHoras: int(time.Until(expiraEm).Hours()),
+	}
+	n.enviar(email, nome, "Confirme seu cadastro — agendaGo", "confirmacao_cadastro.html", dados)
+}
+
+// EnviarAvisoContaExistente avisa que o email já tem conta, no lugar do link de
+// confirmação — enviado quando alguém tenta se cadastrar com um email já
+// registrado, sem que a resposta HTTP revele isso.
+func (n *Notificador) EnviarAvisoContaExistente(email, nome string) {
+	link := fmt.Sprintf("%s/login", n.urlFrontend)
+	dados := struct {
+		Nome            string
+		Link            string
+		LinkRecuperacao string
+	}{
+		Nome:            nome,
+		Link:            link,
+		LinkRecuperacao: n.urlFrontend + "/recuperar-senha",
+	}
+	n.enviar(email, nome, "Você já tem uma conta — agendaGo", "conta_existente.html", dados)
+}

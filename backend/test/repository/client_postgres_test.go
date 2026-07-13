@@ -109,4 +109,29 @@ func TestClientPostgres(t *testing.T) {
 			t.Errorf("esperava nil para ID inexistente, got: %v", encontrado)
 		}
 	})
+
+	t.Run("ConverterEmConta transforma convidado em conta preservando o ID", func(t *testing.T) {
+		convidado, _ := client.NovoConvidado("77777777-7777-7777-7777-777777777777", "Ex Convidado", "ex-convidado@email.com", "11988887777")
+		if err := repo.Salvar(convidado); err != nil {
+			t.Fatalf("esperava sucesso ao salvar convidado, got: %v", err)
+		}
+
+		if err := repo.ConverterEmConta(convidado.ID, "novo-hash", "11999990000"); err != nil {
+			t.Fatalf("esperava sucesso ao converter, got: %v", err)
+		}
+
+		encontrado, err := repo.BuscarPorID(convidado.ID)
+		if err != nil {
+			t.Fatalf("esperava sucesso na busca, got: %v", err)
+		}
+		if !encontrado.TemConta() {
+			t.Error("esperava que o ex-convidado tivesse conta após converter")
+		}
+		if encontrado.Telefone != "11999990000" {
+			t.Errorf("esperava telefone atualizado, got: %s", encontrado.Telefone)
+		}
+		if encontrado.ID != convidado.ID {
+			t.Error("o ID deveria ser preservado na conversão")
+		}
+	})
 }

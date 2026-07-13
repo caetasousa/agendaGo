@@ -19,6 +19,7 @@ type BlocoInput struct {
 // da identidade da sessão autenticada, nunca do corpo da requisição.
 type AtualizarPreferenciasInput struct {
 	ProviderID                string
+	Telefone                  string
 	AceitaAgendamentos        bool
 	DescansoMinutos           int
 	DuracaoAtendimentoMinutos int
@@ -27,6 +28,7 @@ type AtualizarPreferenciasInput struct {
 
 // AtualizarPreferenciasOutput contém as preferências após a atualização.
 type AtualizarPreferenciasOutput struct {
+	Telefone                  string
 	AceitaAgendamentos        bool
 	DescansoMinutos           int
 	DuracaoAtendimentoMinutos int
@@ -53,6 +55,10 @@ func (uc *AtualizarPreferenciasUseCase) Executar(in AtualizarPreferenciasInput) 
 	}
 	if p == nil {
 		return nil, ErrProviderNaoEncontrado
+	}
+
+	if err := p.DefinirTelefone(in.Telefone); err != nil {
+		return nil, err
 	}
 
 	if in.AceitaAgendamentos {
@@ -86,6 +92,7 @@ func (uc *AtualizarPreferenciasUseCase) Executar(in AtualizarPreferenciasInput) 
 	}
 
 	return &AtualizarPreferenciasOutput{
+		Telefone:                  p.Telefone,
 		AceitaAgendamentos:        p.AceitaAgendamentos,
 		DescansoMinutos:           p.DescansoMinutos,
 		DuracaoAtendimentoMinutos: p.DuracaoAtendimentoMinutos,

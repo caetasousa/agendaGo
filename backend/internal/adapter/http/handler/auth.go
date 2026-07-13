@@ -172,6 +172,7 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 		ID:                        perfil.ID,
 		Nome:                      perfil.Nome,
 		Email:                     perfil.Email,
+		Telefone:                  perfil.Telefone,
 		Tipo:                      perfil.Tipo,
 		AceitaAgendamentos:        perfil.AceitaAgendamentos,
 		DescansoMinutos:           perfil.DescansoMinutos,

@@ -22,7 +22,7 @@ func TestAppointmentPostgres(t *testing.T) {
 
 	providerID := "dddddddd-0000-0000-0000-000000000001"
 	clientID := "dddddddd-0000-0000-0000-000000000002"
-	p, _ := provider.Novo(providerID, "Prestador Agendamento", "prestador-ag@email.com", "hash")
+	p, _ := provider.Novo(providerID, "Prestador Agendamento", "prestador-ag@email.com", "11999998888", "hash")
 	if err := providerRepo.Salvar(p); err != nil {
 		t.Fatalf("salvar prestador: %v", err)
 	}

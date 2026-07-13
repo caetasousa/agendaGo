@@ -11,6 +11,8 @@
 	// Estado local editável inicializado a partir do load — intencional: o
 	// usuário edita os campos independentemente do valor original do servidor.
 	// svelte-ignore state_referenced_locally
+	let telefone = $state(data.telefone);
+	// svelte-ignore state_referenced_locally
 	let aceitaAgendamentos = $state(data.aceitaAgendamentos);
 	// svelte-ignore state_referenced_locally
 	let descansoMinutos = $state(data.descansoMinutos);
@@ -62,11 +64,13 @@
 
 		try {
 			const salvo = await atualizarPreferencias({
+				telefone,
 				aceitaAgendamentos,
 				descansoMinutos,
 				duracaoAtendimentoMinutos,
 				horariosPadrao
 			});
+			telefone = salvo.telefone;
 			aceitaAgendamentos = salvo.aceitaAgendamentos;
 			descansoMinutos = salvo.descansoMinutos;
 			duracaoAtendimentoMinutos = salvo.duracaoAtendimentoMinutos;
@@ -114,6 +118,25 @@
 					class="relative mt-0.5 h-6 w-11 shrink-0 rounded-full border border-hairline-strong bg-surface-elevated transition-colors peer-checked:border-accent-green peer-checked:bg-accent-green/30 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-link after:absolute after:top-0.5 after:left-0.5 after:h-5 after:w-5 after:rounded-full after:bg-mute after:transition-transform after:content-[''] peer-checked:after:translate-x-5 peer-checked:after:bg-accent-green"
 				></span>
 			</label>
+		</div>
+
+		<!-- Contato -->
+		<div class="rounded-xl border border-hairline-strong bg-surface-card p-6">
+			<h2 class="text-sm font-semibold text-ink">Contato</h2>
+			<div class="mt-4">
+				<label for="telefone" class="block text-sm font-medium text-ink">Telefone</label>
+				<input
+					id="telefone"
+					type="tel"
+					bind:value={telefone}
+					onchange={() => (sucesso = false)}
+					required
+					minlength="8"
+					placeholder="(11) 99999-8888"
+					class="mt-2 h-10 w-full rounded-md border border-hairline-strong bg-surface-card px-3.5 text-sm text-ink outline-none transition placeholder:text-mute focus:border-ink"
+				/>
+				<p class="mt-1.5 text-xs text-mute">Como os clientes entram em contato com você.</p>
+			</div>
 		</div>
 
 		<!-- Duração e descanso -->

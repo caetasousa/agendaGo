@@ -30,7 +30,7 @@ func novoRouterAuth(t *testing.T) (*chi.Mux, *provider.Provider, *client.Client)
 	sessionRepo := repository.NovoSessionMemoria()
 
 	senhaHash, _ := hasher.Gerar("12345678")
-	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", senhaHash)
+	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
 	providerRepo.Salvar(p)
 
 	c, _ := client.NovoComConta("client-1", "Maria Silva", "maria@email.com", senhaHash)

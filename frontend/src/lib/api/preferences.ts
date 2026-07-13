@@ -5,6 +5,7 @@ import { apiPut } from './client';
 import type { Bloco } from './availability';
 
 export interface AtualizarPreferenciasRequest {
+	telefone: string;
 	aceitaAgendamentos: boolean;
 	descansoMinutos: number;
 	duracaoAtendimentoMinutos: number;
@@ -12,6 +13,7 @@ export interface AtualizarPreferenciasRequest {
 }
 
 export interface AtualizarPreferenciasResponse {
+	telefone: string;
 	aceitaAgendamentos: boolean;
 	descansoMinutos: number;
 	duracaoAtendimentoMinutos: number;

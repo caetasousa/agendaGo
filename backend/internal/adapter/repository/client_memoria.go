@@ -41,6 +41,18 @@ func (r *ClientMemoria) AtualizarSenha(id, senhaHash string) error {
 	return nil
 }
 
+// ConverterEmConta define senha e telefone num convidado sem trocar o ID,
+// espelhando o contrato do Postgres.
+func (r *ClientMemoria) ConverterEmConta(id, senhaHash, telefone string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if c, ok := r.dados[id]; ok {
+		c.SenhaHash = senhaHash
+		c.Telefone = telefone
+	}
+	return nil
+}
+
 // Listar devolve os clientes com conta, para o painel de moderação do admin.
 func (r *ClientMemoria) Listar() ([]*client.Client, error) {
 	r.mu.RLock()

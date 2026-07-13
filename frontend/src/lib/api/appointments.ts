@@ -33,6 +33,15 @@ export interface ListarAgendamentosResponse {
 	agendamentos: Agendamento[];
 }
 
+export interface DetalheCancelamento {
+	nomePrestador: string;
+	data: string;
+	inicioMinutos: number;
+	fimMinutos: number;
+	status: StatusAgendamento;
+	podeCancelar: boolean;
+}
+
 export interface SolicitarAgendamentoRequest {
 	providerId: string;
 	data: string;
@@ -114,4 +123,16 @@ export function marcarRealizado(id: string): Promise<void> {
 // marcarNaoCompareceu registra a ausência do cliente (prestador).
 export function marcarNaoCompareceu(id: string): Promise<void> {
 	return apiPostVazio(`/agendamentos/${id}/nao-compareceu`);
+}
+
+// buscarCancelamento devolve os detalhes do agendamento apontado por um token
+// de cancelamento, para a página pública do convidado — rota pública.
+export function buscarCancelamento(token: string): Promise<DetalheCancelamento> {
+	return apiGet<DetalheCancelamento>(`/agendamentos/cancelar/${token}`);
+}
+
+// cancelarPorToken cancela o agendamento pelo token do email, sem login —
+// respeita a antecedência mínima de 24h (rota pública).
+export function cancelarPorToken(token: string): Promise<void> {
+	return apiPostVazio(`/agendamentos/cancelar/${token}`);
 }

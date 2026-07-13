@@ -18,17 +18,18 @@ describe('atualizarPreferencias', () => {
 	it('devolve o corpo JSON em caso de sucesso', async () => {
 		mockFetch(
 			new Response(
-				JSON.stringify({ aceitaAgendamentos: true, descansoMinutos: 15, horariosPadrao }),
+				JSON.stringify({ telefone: '11999998888', aceitaAgendamentos: true, descansoMinutos: 15, horariosPadrao }),
 				{ status: 200 }
 			)
 		);
 		const resultado = await atualizarPreferencias({
+			telefone: '11999998888',
 			aceitaAgendamentos: true,
 			descansoMinutos: 15,
 			duracaoAtendimentoMinutos: 60,
 			horariosPadrao
 		});
-		expect(resultado).toEqual({ aceitaAgendamentos: true, descansoMinutos: 15, horariosPadrao });
+		expect(resultado).toEqual({ telefone: '11999998888', aceitaAgendamentos: true, descansoMinutos: 15, horariosPadrao });
 	});
 
 	it('envia o método PUT com credentials include e os horários padrão', async () => {
@@ -38,13 +39,14 @@ describe('atualizarPreferencias', () => {
 				{ status: 200 }
 			)
 		);
-		await atualizarPreferencias({ aceitaAgendamentos: false, descansoMinutos: 0, duracaoAtendimentoMinutos: 60, horariosPadrao: [] });
+		await atualizarPreferencias({ telefone: "11999998888", aceitaAgendamentos: false, descansoMinutos: 0, duracaoAtendimentoMinutos: 60, horariosPadrao: [] });
 
 		expect(fn.mock.calls[0][0]).toContain('/providers/me/preferencias');
 		expect(fn.mock.calls[0][1]).toMatchObject({
 			method: 'PUT',
 			credentials: 'include',
 			body: JSON.stringify({
+				telefone: '11999998888',
 				aceitaAgendamentos: false,
 				descansoMinutos: 0,
 				duracaoAtendimentoMinutos: 60,
@@ -65,7 +67,7 @@ describe('atualizarPreferencias', () => {
 				{ status: 200 }
 			)
 		);
-		await atualizarPreferencias({ aceitaAgendamentos: true, descansoMinutos: 10, duracaoAtendimentoMinutos: 60, horariosPadrao: tresBlocos });
+		await atualizarPreferencias({ telefone: "11999998888", aceitaAgendamentos: true, descansoMinutos: 10, duracaoAtendimentoMinutos: 60, horariosPadrao: tresBlocos });
 
 		const corpoEnviado = JSON.parse(fn.mock.calls[0][1].body);
 		expect(corpoEnviado.horariosPadrao).toHaveLength(3);
@@ -74,7 +76,7 @@ describe('atualizarPreferencias', () => {
 	it('lança ApiError com a mensagem do campo erro em caso de falha', async () => {
 		mockFetch(new Response(JSON.stringify({ erro: 'descanso não pode ser negativo' }), { status: 400 }));
 		await expect(
-			atualizarPreferencias({ aceitaAgendamentos: true, descansoMinutos: -1, duracaoAtendimentoMinutos: 60, horariosPadrao: [] })
+			atualizarPreferencias({ telefone: "11999998888", aceitaAgendamentos: true, descansoMinutos: -1, duracaoAtendimentoMinutos: 60, horariosPadrao: [] })
 		).rejects.toBeInstanceOf(ApiError);
 	});
 
@@ -85,7 +87,7 @@ describe('atualizarPreferencias', () => {
 			})
 		);
 		await expect(
-			atualizarPreferencias({ aceitaAgendamentos: true, descansoMinutos: 0, duracaoAtendimentoMinutos: 60, horariosPadrao: [] })
+			atualizarPreferencias({ telefone: "11999998888", aceitaAgendamentos: true, descansoMinutos: 0, duracaoAtendimentoMinutos: 60, horariosPadrao: [] })
 		).rejects.toMatchObject({ status: 403 });
 	});
 });

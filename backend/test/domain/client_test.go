@@ -107,3 +107,32 @@ func TestNovoAdmin(t *testing.T) {
 		t.Errorf("esperava ErrSenhaObrigatoria, got: %v", err)
 	}
 }
+
+func TestDefinirConta(t *testing.T) {
+	t.Run("converte convidado em conta com senha e telefone", func(t *testing.T) {
+		c, _ := client.NovoConvidado("g-1", "Maria", "maria@email.com", "11999998888")
+		if err := c.DefinirConta("hash-nova", "11988887777"); err != nil {
+			t.Fatalf("esperava sucesso, got: %v", err)
+		}
+		if !c.TemConta() {
+			t.Error("esperava que o convidado virasse conta")
+		}
+		if c.Telefone != "11988887777" {
+			t.Errorf("esperava telefone atualizado, got: %s", c.Telefone)
+		}
+	})
+
+	t.Run("rejeita senha vazia", func(t *testing.T) {
+		c, _ := client.NovoConvidado("g-1", "Maria", "maria@email.com", "11999998888")
+		if err := c.DefinirConta("", "11988887777"); err != client.ErrSenhaObrigatoria {
+			t.Errorf("esperava ErrSenhaObrigatoria, got: %v", err)
+		}
+	})
+
+	t.Run("rejeita telefone curto", func(t *testing.T) {
+		c, _ := client.NovoConvidado("g-1", "Maria", "maria@email.com", "11999998888")
+		if err := c.DefinirConta("hash-nova", "123"); err != client.ErrTelefoneObrigatorio {
+			t.Errorf("esperava ErrTelefoneObrigatorio, got: %v", err)
+		}
+	})
+}

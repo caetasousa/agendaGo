@@ -32,7 +32,7 @@ func novoRouterAvailability(t *testing.T) *chi.Mux {
 	availabilityRepo := repository.NovoAvailabilityMemoria()
 
 	senhaHash, _ := hasher.Gerar("12345678")
-	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", senhaHash)
+	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
 	p.AtivarAgenda()
 	providerRepo.Salvar(p)
 

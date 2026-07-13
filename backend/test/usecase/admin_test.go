@@ -74,7 +74,7 @@ func TestModerar(t *testing.T) {
 	}
 	novoAmbiente := func() ambiente {
 		providers := repository.NovoProviderMemoria()
-		p, _ := provider.Novo("p-1", "João Prestador", "joao@email.com", "hash")
+		p, _ := provider.Novo("p-1", "João Prestador", "joao@email.com", "11999998888", "hash")
 		p.AtivarAgenda()
 		providers.Salvar(p)
 
@@ -113,7 +113,7 @@ func TestModerar(t *testing.T) {
 
 		// re-cria o prestador com senha real para testar o login
 		senhaHash, _ := hasher.Gerar("12345678")
-		p, _ := provider.Novo("p-1", "João Prestador", "joao@email.com", senhaHash)
+		p, _ := provider.Novo("p-1", "João Prestador", "joao@email.com", "11999998888", senhaHash)
 		p.AtivarAgenda()
 		providers.Salvar(p)
 		login := ucauth.NovoLoginProviderUseCase(providers, sessionRepo, hasher)
@@ -209,7 +209,7 @@ func TestDetalhar(t *testing.T) {
 	// prestador ativo e um convidado que agendou um horário com ele.
 	novoAmbiente := func() (*ucadmin.DetalharUseCase, *provider.Provider, *client.Client) {
 		providers := repository.NovoProviderMemoria()
-		p, _ := provider.Novo("p-1", "João Prestador", "joao@email.com", "hash")
+		p, _ := provider.Novo("p-1", "João Prestador", "joao@email.com", "11999998888", "hash")
 		p.AtivarAgenda()
 		providers.Salvar(p)
 

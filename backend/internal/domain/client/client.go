@@ -90,6 +90,24 @@ func (c *Client) TemConta() bool {
 	return c.SenhaHash != ""
 }
 
+// DefinirConta converte um convidado em conta, definindo a senha (hash já
+// calculado) e o telefone. Usado quando alguém confirma o cadastro com um
+// email que já usou como convidado — o histórico de agendamentos é preservado
+// porque o mesmo Client (mesmo ID) passa a ter conta. Retorna erro se a senha
+// estiver vazia ou o telefone for inválido.
+func (c *Client) DefinirConta(senhaHash, telefone string) error {
+	if senhaHash == "" {
+		return ErrSenhaObrigatoria
+	}
+	if !telefoneValido(telefone) {
+		return ErrTelefoneObrigatorio
+	}
+	c.SenhaHash = senhaHash
+	c.Telefone = telefone
+	c.AtualizadoEm = time.Now()
+	return nil
+}
+
 // Banir desativa o cliente (moderação pelo admin): ele deixa de logar. Reversível por Reativar.
 func (c *Client) Banir() {
 	c.Ativo = false

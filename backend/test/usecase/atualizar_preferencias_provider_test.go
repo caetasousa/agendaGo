@@ -10,7 +10,7 @@ import (
 )
 
 func novoProviderComPreferencias(repo *repository.ProviderMemoria) *provider.Provider {
-	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "hash-da-senha")
+	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", "hash-da-senha")
 	repo.Salvar(p)
 	return p
 }
@@ -23,9 +23,10 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 
 		out, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
 			ProviderID:                "provider-1",
+			Telefone:                  "11999998888",
 			DuracaoAtendimentoMinutos: 60,
-			AceitaAgendamentos: true,
-			DescansoMinutos:    15,
+			AceitaAgendamentos:        true,
+			DescansoMinutos:           15,
 		})
 		if err != nil {
 			t.Fatalf("esperava sucesso, got: %v", err)
@@ -51,9 +52,10 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 
 		out, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
 			ProviderID:                "provider-1",
+			Telefone:                  "11999998888",
 			DuracaoAtendimentoMinutos: 60,
-			AceitaAgendamentos: false,
-			DescansoMinutos:    0,
+			AceitaAgendamentos:        false,
+			DescansoMinutos:           0,
 		})
 		if err != nil {
 			t.Fatalf("esperava sucesso, got: %v", err)
@@ -70,9 +72,10 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 
 		_, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
 			ProviderID:                "provider-1",
+			Telefone:                  "11999998888",
 			DuracaoAtendimentoMinutos: 60,
-			AceitaAgendamentos: true,
-			DescansoMinutos:    -1,
+			AceitaAgendamentos:        true,
+			DescansoMinutos:           -1,
 		})
 		if err != provider.ErrDescansoInvalido {
 			t.Errorf("esperava ErrDescansoInvalido, got: %v", err)
@@ -86,8 +89,8 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 		_, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
 			ProviderID:                "id-inexistente",
 			DuracaoAtendimentoMinutos: 60,
-			AceitaAgendamentos: true,
-			DescansoMinutos:    0,
+			AceitaAgendamentos:        true,
+			DescansoMinutos:           0,
 		})
 		if err != ucprovider.ErrProviderNaoEncontrado {
 			t.Errorf("esperava ErrProviderNaoEncontrado, got: %v", err)
@@ -101,9 +104,10 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 
 		out, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
 			ProviderID:                "provider-1",
+			Telefone:                  "11999998888",
 			DuracaoAtendimentoMinutos: 60,
-			AceitaAgendamentos: true,
-			DescansoMinutos:    15,
+			AceitaAgendamentos:        true,
+			DescansoMinutos:           15,
 			HorariosPadrao: []ucprovider.BlocoInput{
 				{InicioMinutos: 8 * 60, FimMinutos: 10 * 60},
 				{InicioMinutos: 11 * 60, FimMinutos: 13 * 60},
@@ -130,10 +134,11 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 
 		out, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
 			ProviderID:                "provider-1",
+			Telefone:                  "11999998888",
 			DuracaoAtendimentoMinutos: 60,
-			AceitaAgendamentos: false,
-			DescansoMinutos:    0,
-			HorariosPadrao:     nil,
+			AceitaAgendamentos:        false,
+			DescansoMinutos:           0,
+			HorariosPadrao:            nil,
 		})
 		if err != nil {
 			t.Fatalf("esperava sucesso, got: %v", err)
@@ -150,10 +155,11 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 
 		_, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
 			ProviderID:                "provider-1",
+			Telefone:                  "11999998888",
 			DuracaoAtendimentoMinutos: 60,
-			AceitaAgendamentos: true,
-			DescansoMinutos:    0,
-			HorariosPadrao:     []ucprovider.BlocoInput{{InicioMinutos: 12 * 60, FimMinutos: 8 * 60}},
+			AceitaAgendamentos:        true,
+			DescansoMinutos:           0,
+			HorariosPadrao:            []ucprovider.BlocoInput{{InicioMinutos: 12 * 60, FimMinutos: 8 * 60}},
 		})
 		if err != availability.ErrFimAntesDoInicio {
 			t.Errorf("esperava ErrFimAntesDoInicio, got: %v", err)
@@ -167,9 +173,10 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 
 		_, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
 			ProviderID:                "provider-1",
+			Telefone:                  "11999998888",
 			DuracaoAtendimentoMinutos: 60,
-			AceitaAgendamentos: true,
-			DescansoMinutos:    0,
+			AceitaAgendamentos:        true,
+			DescansoMinutos:           0,
 			HorariosPadrao: []ucprovider.BlocoInput{
 				{InicioMinutos: 8 * 60, FimMinutos: 13 * 60},
 				{InicioMinutos: 12 * 60, FimMinutos: 14 * 60},

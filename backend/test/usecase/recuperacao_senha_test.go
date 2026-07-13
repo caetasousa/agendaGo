@@ -35,7 +35,7 @@ func novoAmbienteRecuperacao(t *testing.T) *ambienteRecuperacao {
 	senhaHash, _ := hasher.Gerar("senha-antiga")
 
 	providers := repository.NovoProviderMemoria()
-	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", senhaHash)
+	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
 	providers.Salvar(p)
 
 	clients := repository.NovoClientMemoria()

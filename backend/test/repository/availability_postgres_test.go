@@ -13,7 +13,7 @@ import (
 
 func novoProviderParaDisponibilidade(t *testing.T, repo *repository.ProviderPostgres, id string) {
 	t.Helper()
-	p, _ := provider.Novo(id, "Prestador Disponibilidade", id+"@email.com", "hash-da-senha")
+	p, _ := provider.Novo(id, "Prestador Disponibilidade", id+"@email.com", "11999998888", "hash-da-senha")
 	if err := repo.Salvar(p); err != nil {
 		t.Fatalf("esperava sucesso ao salvar provider, got: %v", err)
 	}

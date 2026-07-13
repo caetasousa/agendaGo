@@ -30,7 +30,7 @@ func novoRouterPasswordReset(t *testing.T) (r *chi.Mux, mailer *email.MailerMemo
 	sessionRepo := repository.NovoSessionMemoria()
 
 	senhaHash, _ := hasher.Gerar("12345678")
-	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", senhaHash)
+	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
 	providerRepo.Salvar(p)
 
 	mailer = email.NovaMailerMemoria()

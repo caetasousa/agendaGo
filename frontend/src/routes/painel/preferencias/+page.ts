@@ -9,6 +9,7 @@ import { sessao } from '$lib/stores/session.svelte';
 export const ssr = false;
 
 export async function load(): Promise<{
+	telefone: string;
 	aceitaAgendamentos: boolean;
 	descansoMinutos: number;
 	duracaoAtendimentoMinutos: number;
@@ -32,6 +33,7 @@ export async function load(): Promise<{
 	}
 
 	return {
+		telefone: usuario.telefone ?? '',
 		aceitaAgendamentos: usuario.aceitaAgendamentos ?? false,
 		descansoMinutos: usuario.descansoMinutos ?? 0,
 		duracaoAtendimentoMinutos: usuario.duracaoAtendimentoMinutos ?? 60,
