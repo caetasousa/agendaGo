@@ -299,7 +299,7 @@
 								{diaSelecionado === celula.chave
 								? 'border-ink bg-surface-elevated'
 								: disponivel
-									? 'border-accent-green/40 bg-accent-green/10 hover:border-accent-green/80'
+									? 'border-hairline-strong bg-surface-elevated hover:border-ink'
 									: 'border-hairline'}
 								{celula.passado ? 'cursor-not-allowed opacity-35' : ''}
 								{!disponivel && !celula.passado ? 'cursor-not-allowed opacity-60' : ''}"
@@ -323,9 +323,12 @@
 							{/if}
 
 							{#if disponivel}
-								<span class="mt-auto hidden text-[10px] leading-tight text-mute sm:block">
-									{celula.slots.length}
-									{celula.slots.length === 1 ? 'horário' : 'horários'}
+								<span class="mt-auto flex items-center gap-1 text-[10px] leading-tight text-mute">
+									<span class="h-1.5 w-1.5 shrink-0 rounded-full bg-accent-green"></span>
+									<span class="hidden sm:block">
+										{celula.slots.length}
+										{celula.slots.length === 1 ? 'horário' : 'horários'}
+									</span>
 								</span>
 							{/if}
 						</button>

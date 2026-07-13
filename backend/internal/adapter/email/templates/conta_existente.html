@@ -1,30 +1,31 @@
 <!doctype html>
 <html lang="pt-BR">
-<body style="margin: 0; padding: 0; background-color: #f4f4f5;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f5; padding: 24px 0;">
+<body style="margin: 0; padding: 0; background-color: #f1f7fe;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f1f7fe; padding: 24px 0;">
     <tr>
       <td align="center">
-        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width: 480px; width: 100%; background-color: #ffffff; border-radius: 12px; overflow: hidden; font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width: 480px; width: 100%; background-color: #ffffff; border: 1px solid #e4e9f0; border-radius: 12px; overflow: hidden; font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;">
           <tr>
-            <td style="background-color: #2563eb; padding: 20px 32px;">
-              <span style="color: #ffffff; font-size: 18px; font-weight: 700; letter-spacing: -0.02em;">agendaGo</span>
+            <td style="background-color: #0a0a0c; padding: 20px 32px;">
+              <span style="display: inline-block; width: 8px; height: 8px; border-radius: 999px; background-color: #11ff99;"></span>
+              <span style="color: #ffffff; font-size: 18px; font-weight: 700; letter-spacing: -0.02em;">&nbsp;agendaGo</span>
             </td>
           </tr>
           <tr>
             <td style="padding: 32px;">
-              <h1 style="margin: 0 0 8px; font-size: 20px; color: #18181b;">Você já tem uma conta</h1>
-              <p style="margin: 0 0 24px; font-size: 15px; line-height: 1.5; color: #52525b;">
+              <h1 style="margin: 0 0 8px; font-family: Georgia, 'Times New Roman', serif; font-weight: 400; font-size: 26px; letter-spacing: -0.02em; color: #0a0a0c;">Você já tem uma conta</h1>
+              <p style="margin: 0 0 24px; font-size: 15px; line-height: 1.5; color: #33363f;">
                 Olá, {{.Nome}}. Recebemos uma tentativa de cadastro com este email, mas ele já tem uma conta no agendaGo. É só entrar normalmente.
               </p>
-              <a href="{{.Link}}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 15px; font-weight: 600; text-decoration: none; padding: 12px 24px; border-radius: 8px;">Entrar</a>
-              <p style="margin: 24px 0 0; font-size: 13px; line-height: 1.5; color: #71717a;">
-                Esqueceu a senha? <a href="{{.LinkRecuperacao}}" style="color: #2563eb;">Redefina aqui</a>. Se não foi você que tentou se cadastrar, pode ignorar este email.
+              <a href="{{.Link}}" style="display: inline-block; background-color: #0a0a0c; color: #ffffff; font-size: 15px; font-weight: 600; text-decoration: none; padding: 12px 24px; border-radius: 8px;">Entrar</a>
+              <p style="margin: 24px 0 0; font-size: 13px; line-height: 1.5; color: #5b6266;">
+                Esqueceu a senha? <a href="{{.LinkRecuperacao}}" style="color: #0075ff;">Redefina aqui</a>. Se não foi você que tentou se cadastrar, pode ignorar este email.
               </p>
             </td>
           </tr>
           <tr>
-            <td style="padding: 20px 32px; border-top: 1px solid #f4f4f5;">
-              <p style="margin: 0; font-size: 12px; color: #a1a1aa;">Este é um email automático do agendaGo. Não responda.</p>
+            <td style="padding: 20px 32px; border-top: 1px solid #edf1f6;">
+              <p style="margin: 0; font-size: 12px; color: #6b7175;">Este é um email automático do agendaGo. Não responda.</p>
             </td>
           </tr>
         </table>
