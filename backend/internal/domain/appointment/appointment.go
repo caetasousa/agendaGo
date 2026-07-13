@@ -174,6 +174,19 @@ func (a *Appointment) Cancelar(agora time.Time, antecedenciaMinima time.Duration
 	return nil
 }
 
+// Cancelavel informa se Cancelar teria sucesso agora, sem alterar o estado.
+// Útil para exibir na interface se o cancelamento ainda é possível.
+func (a *Appointment) Cancelavel(agora time.Time, antecedenciaMinima time.Duration, loc *time.Location) bool {
+	switch a.Status {
+	case StatusSolicitado:
+		return true
+	case StatusConfirmado:
+		return a.InicioEm(loc).Sub(agora) >= antecedenciaMinima
+	default:
+		return false
+	}
+}
+
 // MarcarRealizado conclui um agendamento confirmado cujo horário já chegou.
 func (a *Appointment) MarcarRealizado(agora time.Time, loc *time.Location) error {
 	return a.concluir(StatusRealizado, agora, loc)

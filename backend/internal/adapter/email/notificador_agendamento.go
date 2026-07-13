@@ -20,12 +20,19 @@ func (n *Notificador) NotificarSolicitacao(evento ucappointment.NotificacaoAgend
 }
 
 // NotificarConfirmacao avisa o cliente que o prestador confirmou o horário.
+// Quando há token de cancelamento (agendamento de convidado), inclui o link
+// para o convidado poder cancelar sem conta.
 func (n *Notificador) NotificarConfirmacao(evento ucappointment.NotificacaoAgendamento) {
-	dados := struct{ NomeCliente, NomePrestador, Data, Horario string }{
-		NomeCliente:   evento.NomeCliente,
-		NomePrestador: evento.NomePrestador,
-		Data:          formatarData(evento.Data),
-		Horario:       formatarHorario(evento.InicioMinutos),
+	linkCancelamento := ""
+	if evento.TokenCancelamento != "" {
+		linkCancelamento = n.urlFrontend + "/cancelar-agendamento/" + evento.TokenCancelamento
+	}
+	dados := struct{ NomeCliente, NomePrestador, Data, Horario, LinkCancelamento string }{
+		NomeCliente:      evento.NomeCliente,
+		NomePrestador:    evento.NomePrestador,
+		Data:             formatarData(evento.Data),
+		Horario:          formatarHorario(evento.InicioMinutos),
+		LinkCancelamento: linkCancelamento,
 	}
 	n.enviar(evento.EmailCliente, evento.NomeCliente, "Agendamento confirmado — agendaGo", "confirmado_cliente.html", dados)
 }

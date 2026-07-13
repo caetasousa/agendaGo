@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"agendago/internal/domain/appointment"
+	"agendago/internal/domain/cancellation"
 	"agendago/internal/domain/client"
 	"agendago/internal/domain/provider"
 )
@@ -27,6 +28,9 @@ var (
 	ErrHorarioIndisponivel = errors.New("horário indisponível")
 	// ErrPeriodoInvalido é retornado quando o período consultado é vazio ou longo demais.
 	ErrPeriodoInvalido = errors.New("período inválido")
+	// ErrTokenCancelamentoInvalido é retornado quando o token de cancelamento
+	// não corresponde a nenhum agendamento — genérico de propósito.
+	ErrTokenCancelamentoInvalido = errors.New("link de cancelamento inválido")
 )
 
 // repositorioAppointment persiste e consulta agendamentos. SalvarSeLivre é a
@@ -53,4 +57,12 @@ type repositorioClient interface {
 	BuscarPorID(id string) (*client.Client, error)
 	BuscarPorEmail(email string) (*client.Client, error)
 	Salvar(c *client.Client) error
+}
+
+// repositorioCancelamento persiste e consulta os tokens de cancelamento
+// entregues aos convidados. BuscarPorTokenHash não apaga o token na leitura —
+// a página de cancelamento lê os detalhes e depois cancela com o mesmo token.
+type repositorioCancelamento interface {
+	Salvar(t *cancellation.Token) error
+	BuscarPorTokenHash(hash string) (*cancellation.Token, error)
 }

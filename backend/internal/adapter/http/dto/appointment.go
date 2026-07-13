@@ -46,6 +46,17 @@ type ListarAgendamentosResponse struct {
 	Agendamentos []AgendamentoResponse `json:"agendamentos"`
 }
 
+// DetalheCancelamentoResponse descreve o agendamento apontado por um token de
+// cancelamento, para a página pública de confirmação do convidado.
+type DetalheCancelamentoResponse struct {
+	NomePrestador string `json:"nomePrestador"`
+	Data          string `json:"data"`
+	InicioMinutos int    `json:"inicioMinutos"`
+	FimMinutos    int    `json:"fimMinutos"`
+	Status        string `json:"status"`
+	PodeCancelar  bool   `json:"podeCancelar"`
+}
+
 // SlotDTO é um horário livre ofertável.
 type SlotDTO struct {
 	InicioMinutos int `json:"inicioMinutos"`

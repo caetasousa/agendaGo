@@ -12,13 +12,13 @@
           </tr>
           <tr>
             <td style="padding: 32px;">
-              <h1 style="margin: 0 0 8px; font-size: 20px; color: #18181b;">Redefinição de senha</h1>
+              <h1 style="margin: 0 0 8px; font-size: 20px; color: #18181b;">Você já tem uma conta</h1>
               <p style="margin: 0 0 24px; font-size: 15px; line-height: 1.5; color: #52525b;">
-                Olá, {{.Nome}}. Recebemos um pedido para redefinir a senha da sua conta. Clique no botão abaixo para escolher uma nova senha.
+                Olá, {{.Nome}}. Recebemos uma tentativa de cadastro com este email, mas ele já tem uma conta no agendaGo. É só entrar normalmente.
               </p>
-              <a href="{{.Link}}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 15px; font-weight: 600; text-decoration: none; padding: 12px 24px; border-radius: 8px;">Redefinir senha</a>
+              <a href="{{.Link}}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 15px; font-weight: 600; text-decoration: none; padding: 12px 24px; border-radius: 8px;">Entrar</a>
               <p style="margin: 24px 0 0; font-size: 13px; line-height: 1.5; color: #71717a;">
-                Este link expira em {{.ExpiraEmMinutos}} minutos e só pode ser usado uma vez. Se você não pediu isso, ignore este email — sua senha continua a mesma.
+                Esqueceu a senha? <a href="{{.LinkRecuperacao}}" style="color: #2563eb;">Redefina aqui</a>. Se não foi você que tentou se cadastrar, pode ignorar este email.
               </p>
             </td>
           </tr>

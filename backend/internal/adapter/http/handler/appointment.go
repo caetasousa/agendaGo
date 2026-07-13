@@ -23,6 +23,7 @@ type AppointmentHandler struct {
 	solicitar            *ucappointment.SolicitarUseCase
 	solicitarConvidado   *ucappointment.SolicitarConvidadoUseCase
 	transicionar         *ucappointment.TransicionarUseCase
+	cancelarPorToken     *ucappointment.CancelarPorTokenUseCase
 	listar               *ucappointment.ListarUseCase
 	identidadeDoContexto func(r *http.Request) (ucauth.Identidade, bool)
 }
@@ -33,6 +34,7 @@ func NovoAppointmentHandler(
 	solicitar *ucappointment.SolicitarUseCase,
 	solicitarConvidado *ucappointment.SolicitarConvidadoUseCase,
 	transicionar *ucappointment.TransicionarUseCase,
+	cancelarPorToken *ucappointment.CancelarPorTokenUseCase,
 	listar *ucappointment.ListarUseCase,
 	identidadeDoContexto func(r *http.Request) (ucauth.Identidade, bool),
 ) *AppointmentHandler {
@@ -41,6 +43,7 @@ func NovoAppointmentHandler(
 		solicitar:            solicitar,
 		solicitarConvidado:   solicitarConvidado,
 		transicionar:         transicionar,
+		cancelarPorToken:     cancelarPorToken,
 		listar:               listar,
 		identidadeDoContexto: identidadeDoContexto,
 	}
@@ -332,6 +335,52 @@ func (h *AppointmentHandler) Cancelar(w http.ResponseWriter, r *http.Request) {
 	h.transicionarAgendamento(w, r, h.transicionar.Cancelar)
 }
 
+// DetalharCancelamento godoc
+//
+//	@Summary		Detalhar um agendamento por token de cancelamento
+//	@Description	Rota pública: devolve os dados do agendamento apontado pelo token enviado ao convidado, para a página de cancelamento
+//	@Tags			appointments
+//	@Produce		json
+//	@Param			token	path		string	true	"Token de cancelamento"
+//	@Success		200		{object}	dto.DetalheCancelamentoResponse
+//	@Failure		404		{object}	map[string]string
+//	@Router			/agendamentos/cancelar/{token} [get]
+func (h *AppointmentHandler) DetalharCancelamento(w http.ResponseWriter, r *http.Request) {
+	out, err := h.cancelarPorToken.Detalhar(chi.URLParam(r, "token"), time.Now())
+	if err != nil {
+		responderErroAgendamento(w, err)
+		return
+	}
+
+	responderJSON(w, http.StatusOK, dto.DetalheCancelamentoResponse{
+		NomePrestador: out.NomePrestador,
+		Data:          out.Data.Format(layoutData),
+		InicioMinutos: out.InicioMinutos,
+		FimMinutos:    out.FimMinutos,
+		Status:        string(out.Status),
+		PodeCancelar:  out.PodeCancelar,
+	})
+}
+
+// CancelarPorToken godoc
+//
+//	@Summary		Cancelar um agendamento por token
+//	@Description	Rota pública: o convidado cancela o agendamento pelo token do email. Respeita a antecedência mínima (24h para confirmados)
+//	@Tags			appointments
+//	@Param			token	path	string	true	"Token de cancelamento"
+//	@Success		204
+//	@Failure		404	{object}	map[string]string
+//	@Failure		409	{object}	map[string]string
+//	@Router			/agendamentos/cancelar/{token} [post]
+func (h *AppointmentHandler) CancelarPorToken(w http.ResponseWriter, r *http.Request) {
+	err := h.cancelarPorToken.Executar(chi.URLParam(r, "token"), time.Now())
+	if err != nil {
+		responderErroAgendamento(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // MarcarRealizado godoc
 //
 //	@Summary		Marcar atendimento como realizado
@@ -396,7 +445,8 @@ func responderErroAgendamento(w http.ResponseWriter, err error) {
 		responderErro(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, ucappointment.ErrProviderNaoEncontrado),
 		errors.Is(err, ucappointment.ErrClientNaoEncontrado),
-		errors.Is(err, ucappointment.ErrAgendamentoNaoEncontrado):
+		errors.Is(err, ucappointment.ErrAgendamentoNaoEncontrado),
+		errors.Is(err, ucappointment.ErrTokenCancelamentoInvalido):
 		responderErro(w, http.StatusNotFound, err.Error())
 	case errors.Is(err, ucappointment.ErrClientInativo):
 		responderErro(w, http.StatusForbidden, err.Error())

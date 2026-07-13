@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"agendago/internal/domain/appointment"
+	"agendago/internal/domain/cancellation"
 	"agendago/internal/domain/session"
+	"agendago/internal/pkg/token"
 )
 
 // TransicionarInput identifica o agendamento e quem está agindo sobre ele.
@@ -23,12 +25,13 @@ type TransicionarInput struct {
 // existente. As regras de cada transição vivem no domínio; aqui ficam a
 // autorização (dono do recurso), a expiração lazy e a persistência.
 type TransicionarUseCase struct {
-	repo         repositorioAppointment
-	providerRepo repositorioProvider
-	clientRepo   repositorioClient
-	notificador  notificadorAgendamento
-	antecedencia time.Duration
-	fuso         *time.Location
+	repo             repositorioAppointment
+	providerRepo     repositorioProvider
+	clientRepo       repositorioClient
+	cancelamentoRepo repositorioCancelamento
+	notificador      notificadorAgendamento
+	antecedencia     time.Duration
+	fuso             *time.Location
 }
 
 // NovoTransicionarUseCase cria uma instância de TransicionarUseCase com as dependências injetadas.
@@ -36,21 +39,25 @@ func NovoTransicionarUseCase(
 	repo repositorioAppointment,
 	providerRepo repositorioProvider,
 	clientRepo repositorioClient,
+	cancelamentoRepo repositorioCancelamento,
 	notificador notificadorAgendamento,
 	antecedencia time.Duration,
 	fuso *time.Location,
 ) *TransicionarUseCase {
 	return &TransicionarUseCase{
-		repo:         repo,
-		providerRepo: providerRepo,
-		clientRepo:   clientRepo,
-		notificador:  notificador,
-		antecedencia: antecedencia,
-		fuso:         fuso,
+		repo:             repo,
+		providerRepo:     providerRepo,
+		clientRepo:       clientRepo,
+		cancelamentoRepo: cancelamentoRepo,
+		notificador:      notificador,
+		antecedencia:     antecedencia,
+		fuso:             fuso,
 	}
 }
 
-// Confirmar aceita uma solicitação pendente do prestador autenticado.
+// Confirmar aceita uma solicitação pendente do prestador autenticado. Ao
+// confirmar um agendamento de convidado, gera um token de cancelamento para
+// ele receber no email — sua única via de cancelamento, já que não tem conta.
 func (uc *TransicionarUseCase) Confirmar(in TransicionarInput) error {
 	a, err := uc.transicionarComoPrestador(in, func(a *appointment.Appointment) error {
 		return a.Confirmar(in.Agora)
@@ -58,7 +65,7 @@ func (uc *TransicionarUseCase) Confirmar(in TransicionarInput) error {
 	if err != nil {
 		return err
 	}
-	uc.notificar(a, uc.notificador.NotificarConfirmacao, false)
+	uc.notificarConfirmacao(a)
 	return nil
 }
 
@@ -170,6 +177,41 @@ func (uc *TransicionarUseCase) notificar(a *appointment.Appointment, evento func
 		InicioMinutos:         a.InicioMinutos,
 		FimMinutos:            a.FimMinutos,
 		CanceladoPorPrestador: canceladoPorPrestador,
+	})
+}
+
+// notificarConfirmacao avisa o cliente da confirmação. Para um convidado (sem
+// conta), gera e persiste um token de cancelamento e o inclui no email — é a
+// única forma de ele cancelar. Best-effort: falha ao gerar/persistir o token
+// não bloqueia a confirmação (só sai sem link de cancelamento).
+func (uc *TransicionarUseCase) notificarConfirmacao(a *appointment.Appointment) {
+	p, err := uc.providerRepo.BuscarPorID(a.ProviderID)
+	if err != nil || p == nil {
+		return
+	}
+	c, err := uc.clientRepo.BuscarPorID(a.ClientID)
+	if err != nil || c == nil {
+		return
+	}
+
+	var tokenCancelamento string
+	if !c.TemConta() {
+		if t, err := token.Gerar(); err == nil {
+			if err := uc.cancelamentoRepo.Salvar(cancellation.Novo(token.Hash(t), a.ID)); err == nil {
+				tokenCancelamento = t
+			}
+		}
+	}
+
+	uc.notificador.NotificarConfirmacao(NotificacaoAgendamento{
+		NomePrestador:     p.Nome,
+		EmailPrestador:    p.Email,
+		NomeCliente:       c.Nome,
+		EmailCliente:      c.Email,
+		Data:              a.Data,
+		InicioMinutos:     a.InicioMinutos,
+		FimMinutos:        a.FimMinutos,
+		TokenCancelamento: tokenCancelamento,
 	})
 }
 
