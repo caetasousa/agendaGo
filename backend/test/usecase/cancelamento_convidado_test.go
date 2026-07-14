@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"agendago/internal/domain/appointment"
+	"agendago/internal/domain/cancellation"
+	"agendago/internal/pkg/token"
 	ucappointment "agendago/internal/usecase/appointment"
 )
 
@@ -203,6 +205,51 @@ func TestCancelamentoConvidado(t *testing.T) {
 			t.Errorf("esperava ErrTokenCancelamentoInvalido no Detalhar, got: %v", err)
 		}
 		if err := amb.cancelarPorToken.Executar("token-que-nunca-existiu", agoraDoTeste); err != ucappointment.ErrTokenCancelamentoInvalido {
+			t.Errorf("esperava ErrTokenCancelamentoInvalido no Executar, got: %v", err)
+		}
+	})
+
+	t.Run("token de cancelamento é consumido: usá-lo de novo falha", func(t *testing.T) {
+		amb := novoAmbienteAgendamento(t)
+		id, token := agendarConvidadoConfirmado(t, amb)
+
+		if err := amb.cancelarPorToken.Executar(token, agoraDoTeste); err != nil {
+			t.Fatalf("esperava sucesso no primeiro cancelamento, got: %v", err)
+		}
+		a, _ := amb.appointments.BuscarPorID(id)
+		if a.Status != appointment.StatusCancelado {
+			t.Fatalf("esperava CANCELADO, got: %s", a.Status)
+		}
+
+		// o mesmo link não cancela de novo — o token já foi consumido
+		if err := amb.cancelarPorToken.Executar(token, agoraDoTeste); err != ucappointment.ErrTokenCancelamentoInvalido {
+			t.Errorf("esperava ErrTokenCancelamentoInvalido no reuso do token, got: %v", err)
+		}
+	})
+
+	t.Run("token de cancelamento expirado é rejeitado", func(t *testing.T) {
+		amb := novoAmbienteAgendamento(t)
+
+		out, err := amb.solicitarConvidado.Executar(ucappointment.SolicitarConvidadoInput{
+			ProviderID: "provider-1", Data: segundaFutura, InicioMinutos: 8 * 60,
+			Nome: "Convidado Teste", Email: "convidado@email.com", Telefone: "11999998888",
+			Agora: agoraDoTeste,
+		})
+		if err != nil {
+			t.Fatalf("solicitação de convidado falhou: %v", err)
+		}
+
+		tokenPuro := "token-cancelamento-vencido"
+		// TTL negativo: já nasce expirado, sem precisar esperar ou injetar "agora"
+		expirado := cancellation.Novo(token.Hash(tokenPuro), out.ID, -time.Hour)
+		if err := amb.cancelamentos.Salvar(expirado); err != nil {
+			t.Fatalf("esperava salvar sem erro, got: %v", err)
+		}
+
+		if _, err := amb.cancelarPorToken.Detalhar(tokenPuro, agoraDoTeste); err != ucappointment.ErrTokenCancelamentoInvalido {
+			t.Errorf("esperava ErrTokenCancelamentoInvalido no Detalhar, got: %v", err)
+		}
+		if err := amb.cancelarPorToken.Executar(tokenPuro, agoraDoTeste); err != ucappointment.ErrTokenCancelamentoInvalido {
 			t.Errorf("esperava ErrTokenCancelamentoInvalido no Executar, got: %v", err)
 		}
 	})

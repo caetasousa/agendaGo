@@ -32,6 +32,7 @@ type ambienteAgendamento struct {
 	appointments         *repository.AppointmentMemoria
 	clients              *repository.ClientMemoria
 	cancelamentos        *repository.CancellationMemoria
+	preCadastros         *repository.PreCadastroMemoria
 	prestador            *provider.Provider
 	mailer               *email.MailerMemoria
 }
@@ -81,6 +82,7 @@ func novoAmbienteAgendamento(t *testing.T) *ambienteAgendamento {
 		appointments:         appointments,
 		clients:              clientRepo,
 		cancelamentos:        cancelamentos,
+		preCadastros:         preCadastros,
 		prestador:            p,
 		mailer:               mailer,
 	}

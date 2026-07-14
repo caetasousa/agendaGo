@@ -11,7 +11,10 @@ import (
 // Compartilhado por ConfirmarCadastroUseCase (segunda prova por email) e
 // ConcluirPreCadastroUseCase (a posse do email já foi provada pelo token de
 // pré-cadastro). Retorna ErrCadastroInvalido se o email já é conta ativa —
-// alguém confirmou antes, ou foi cadastrado por outro caminho nesse meio-tempo.
+// alguém confirmou antes, ou foi cadastrado por outro caminho nesse meio-tempo
+// — e também se o convidado está banido: banimento não é revertido por
+// cadastro, mesmo que o dono do email tenha provado posse (mesma regra de
+// SolicitarCadastroUseCase para o caminho por email).
 func materializarConta(clients repositorioClient, nome, email, telefone, senhaHash string) (*client.Client, error) {
 	existente, err := clients.BuscarPorEmail(email)
 	if err != nil {
@@ -20,6 +23,9 @@ func materializarConta(clients repositorioClient, nome, email, telefone, senhaHa
 
 	if existente != nil {
 		if existente.TemConta() {
+			return nil, ErrCadastroInvalido
+		}
+		if !existente.Ativo {
 			return nil, ErrCadastroInvalido
 		}
 		if err := clients.ConverterEmConta(existente.ID, senhaHash, telefone); err != nil {

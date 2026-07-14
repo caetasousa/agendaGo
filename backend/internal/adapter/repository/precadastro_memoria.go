@@ -2,6 +2,7 @@ package repository
 
 import (
 	"sync"
+	"time"
 
 	"agendago/internal/domain/precadastro"
 )
@@ -48,4 +49,17 @@ func (r *PreCadastroMemoria) Consumir(tokenHash string) (*precadastro.PreCadastr
 	}
 	delete(r.dados, tokenHash)
 	return p, nil
+}
+
+// RemoverExpirados apaga os tokens de pré-cadastro cuja expira_em já passou.
+func (r *PreCadastroMemoria) RemoverExpirados() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	agora := time.Now()
+	for hash, p := range r.dados {
+		if p.Expirado(agora) {
+			delete(r.dados, hash)
+		}
+	}
+	return nil
 }

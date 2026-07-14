@@ -7,24 +7,31 @@ package precadastro
 import "time"
 
 // PreCadastro liga um token aos dados de contato de um convidado, para
-// pré-preencher o formulário de cadastro sem redigitá-los. Não tem
-// expiração própria: vale enquanto o token de cancelamento do mesmo email
-// valer (mesmo padrão de cancellation.Token) — a proteção é o uso único.
+// pré-preencher o formulário de cadastro sem redigitá-los.
 type PreCadastro struct {
 	TokenHash string
 	Nome      string
 	Email     string
 	Telefone  string
 	CriadoEm  time.Time
+	ExpiraEm  time.Time
 }
 
-// Novo cria um PreCadastro para o convidado informado, com o momento atual.
-func Novo(tokenHash, nome, email, telefone string) *PreCadastro {
+// Novo cria um PreCadastro para o convidado informado, com validade de ttl a
+// partir do momento atual.
+func Novo(tokenHash, nome, email, telefone string, ttl time.Duration) *PreCadastro {
+	agora := time.Now()
 	return &PreCadastro{
 		TokenHash: tokenHash,
 		Nome:      nome,
 		Email:     email,
 		Telefone:  telefone,
-		CriadoEm:  time.Now(),
+		CriadoEm:  agora,
+		ExpiraEm:  agora.Add(ttl),
 	}
+}
+
+// Expirado informa se o token já passou da validade.
+func (p *PreCadastro) Expirado(agora time.Time) bool {
+	return agora.After(p.ExpiraEm)
 }

@@ -3,7 +3,11 @@ package usecase_test
 import (
 	"strings"
 	"testing"
+	"time"
 
+	"agendago/internal/domain/client"
+	"agendago/internal/domain/precadastro"
+	"agendago/internal/pkg/token"
 	ucappointment "agendago/internal/usecase/appointment"
 	ucclient "agendago/internal/usecase/client"
 )
@@ -164,6 +168,52 @@ func TestPreCadastroConvidado(t *testing.T) {
 
 		if _, err := amb.consultarPreCadastro.Executar("token-que-nunca-existiu"); err != ucclient.ErrPreCadastroInvalido {
 			t.Errorf("esperava ErrPreCadastroInvalido, got: %v", err)
+		}
+	})
+
+	t.Run("token de pré-cadastro expirado é rejeitado na consulta e na conclusão", func(t *testing.T) {
+		amb := novoAmbienteAgendamento(t)
+
+		tokenPuro := "token-vencido-precadastro"
+		// TTL negativo: já nasce expirado, sem precisar esperar ou injetar "agora"
+		expirado := precadastro.Novo(token.Hash(tokenPuro), "Convidado Vencido", "vencido@email.com", "11999998888", -time.Hour)
+		if err := amb.preCadastros.Salvar(expirado); err != nil {
+			t.Fatalf("esperava salvar sem erro, got: %v", err)
+		}
+
+		if _, err := amb.consultarPreCadastro.Executar(tokenPuro); err != ucclient.ErrPreCadastroInvalido {
+			t.Errorf("esperava ErrPreCadastroInvalido na consulta, got: %v", err)
+		}
+
+		if _, err := amb.concluirPreCadastro.Executar(ucclient.ConcluirPreCadastroInput{
+			Token: tokenPuro, Senha: "SenhaForte123",
+		}); err != ucclient.ErrPreCadastroInvalido {
+			t.Errorf("esperava ErrPreCadastroInvalido na conclusão, got: %v", err)
+		}
+	})
+
+	t.Run("materializarConta rejeita convidado banido, mesmo com token de pré-cadastro válido", func(t *testing.T) {
+		amb := novoAmbienteAgendamento(t)
+
+		banido, err := client.NovoConvidado("convidado-banido", "Convidado Banido", "banido@email.com", "11999998888")
+		if err != nil {
+			t.Fatalf("esperava criar convidado, got: %v", err)
+		}
+		banido.Ativo = false
+		if err := amb.clients.Salvar(banido); err != nil {
+			t.Fatalf("esperava salvar convidado banido, got: %v", err)
+		}
+
+		tokenPuro := "token-convidado-banido"
+		pc := precadastro.Novo(token.Hash(tokenPuro), banido.Nome, banido.Email, banido.Telefone, time.Hour)
+		if err := amb.preCadastros.Salvar(pc); err != nil {
+			t.Fatalf("esperava salvar pré-cadastro, got: %v", err)
+		}
+
+		if _, err := amb.concluirPreCadastro.Executar(ucclient.ConcluirPreCadastroInput{
+			Token: tokenPuro, Senha: "SenhaForte123",
+		}); err != ucclient.ErrCadastroInvalido {
+			t.Errorf("esperava ErrCadastroInvalido (banimento não é revertido por cadastro), got: %v", err)
 		}
 	})
 }

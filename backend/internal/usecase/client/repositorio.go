@@ -56,4 +56,5 @@ type hasherSenha interface {
 type repositorioPreCadastro interface {
 	BuscarPorTokenHash(tokenHash string) (*precadastro.PreCadastro, error)
 	Consumir(tokenHash string) (*precadastro.PreCadastro, error)
+	RemoverExpirados() error
 }

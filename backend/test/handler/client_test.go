@@ -165,7 +165,7 @@ func TestHandlerConfirmarCadastro(t *testing.T) {
 func TestHandlerConsultarPreCadastro(t *testing.T) {
 	t.Run("retorna os dados do convidado para um token válido", func(t *testing.T) {
 		h, _, preCadastros := novoClientHandler()
-		preCadastros.Salvar(precadastro.Novo(token.Hash("token-valido"), "Convidada Silva", "convidada@email.com", "11999998888"))
+		preCadastros.Salvar(precadastro.Novo(token.Hash("token-valido"), "Convidada Silva", "convidada@email.com", "11999998888", time.Hour))
 
 		req := requisicaoComToken(http.MethodGet, "/clients/pre-cadastro/token-valido", "token-valido")
 		rr := httptest.NewRecorder()
@@ -183,7 +183,7 @@ func TestHandlerConsultarPreCadastro(t *testing.T) {
 
 	t.Run("consultar o mesmo token mais de uma vez continua funcionando (não consome)", func(t *testing.T) {
 		h, _, preCadastros := novoClientHandler()
-		preCadastros.Salvar(precadastro.Novo(token.Hash("token-repetido"), "Convidada", "convidada@email.com", "11999998888"))
+		preCadastros.Salvar(precadastro.Novo(token.Hash("token-repetido"), "Convidada", "convidada@email.com", "11999998888", time.Hour))
 
 		req1 := requisicaoComToken(http.MethodGet, "/clients/pre-cadastro/token-repetido", "token-repetido")
 		rr1 := httptest.NewRecorder()
@@ -214,7 +214,7 @@ func TestHandlerConsultarPreCadastro(t *testing.T) {
 func TestHandlerConcluirPreCadastro(t *testing.T) {
 	t.Run("cria a conta direto, sem segunda confirmação por email", func(t *testing.T) {
 		h, clients, preCadastros := novoClientHandler()
-		preCadastros.Salvar(precadastro.Novo(token.Hash("token-conclusao"), "Convidada Silva", "convidada@email.com", "11999998888"))
+		preCadastros.Salvar(precadastro.Novo(token.Hash("token-conclusao"), "Convidada Silva", "convidada@email.com", "11999998888", time.Hour))
 
 		req := requisicaoComTokenEBody(http.MethodPost, "/clients/pre-cadastro/token-conclusao", "token-conclusao", map[string]string{"senha": "SenhaForte123"})
 		rr := httptest.NewRecorder()
@@ -237,7 +237,7 @@ func TestHandlerConcluirPreCadastro(t *testing.T) {
 
 	t.Run("token de pré-cadastro é consumido: segunda conclusão falha", func(t *testing.T) {
 		h, _, preCadastros := novoClientHandler()
-		preCadastros.Salvar(precadastro.Novo(token.Hash("token-unico"), "Convidada", "convidada2@email.com", "11999998888"))
+		preCadastros.Salvar(precadastro.Novo(token.Hash("token-unico"), "Convidada", "convidada2@email.com", "11999998888", time.Hour))
 
 		corpo := map[string]string{"senha": "SenhaForte123"}
 		req1 := requisicaoComTokenEBody(http.MethodPost, "/clients/pre-cadastro/token-unico", "token-unico", corpo)
@@ -263,7 +263,7 @@ func TestHandlerConcluirPreCadastro(t *testing.T) {
 
 	t.Run("retorna 400 para senha curta", func(t *testing.T) {
 		h, _, preCadastros := novoClientHandler()
-		preCadastros.Salvar(precadastro.Novo(token.Hash("token-senha-curta"), "Convidada", "convidada3@email.com", "11999998888"))
+		preCadastros.Salvar(precadastro.Novo(token.Hash("token-senha-curta"), "Convidada", "convidada3@email.com", "11999998888", time.Hour))
 
 		req := requisicaoComTokenEBody(http.MethodPost, "/clients/pre-cadastro/token-senha-curta", "token-senha-curta", map[string]string{"senha": "123"})
 		rr := httptest.NewRecorder()

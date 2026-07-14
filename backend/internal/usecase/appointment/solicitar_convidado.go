@@ -110,14 +110,14 @@ func (uc *SolicitarConvidadoUseCase) notificarConvidado(out *SolicitarOutput, co
 
 	var tokenCancelamento string
 	if t, err := token.Gerar(); err == nil {
-		if err := uc.cancelamentos.Salvar(cancellation.Novo(token.Hash(t), out.ID)); err == nil {
+		if err := uc.cancelamentos.Salvar(cancellation.Novo(token.Hash(t), out.ID, TTLCancelamento)); err == nil {
 			tokenCancelamento = t
 		}
 	}
 
 	var tokenPreCadastro string
 	if t, err := token.Gerar(); err == nil {
-		pc := precadastro.Novo(token.Hash(t), convidado.Nome, convidado.Email, convidado.Telefone)
+		pc := precadastro.Novo(token.Hash(t), convidado.Nome, convidado.Email, convidado.Telefone, TTLPreCadastro)
 		if err := uc.preCadastros.Salvar(pc); err == nil {
 			tokenPreCadastro = t
 		}

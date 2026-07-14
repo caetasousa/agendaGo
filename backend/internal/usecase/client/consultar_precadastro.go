@@ -2,6 +2,7 @@ package client
 
 import (
 	"errors"
+	"time"
 
 	"agendago/internal/pkg/token"
 )
@@ -33,13 +34,13 @@ func NovoConsultarPreCadastroUseCase(preCadastro repositorioPreCadastro) *Consul
 }
 
 // Executar devolve os dados do convidado a partir do token. Retorna
-// ErrPreCadastroInvalido para token inexistente.
+// ErrPreCadastroInvalido para token inexistente ou expirado.
 func (uc *ConsultarPreCadastroUseCase) Executar(tokenPuro string) (*ConsultarPreCadastroOutput, error) {
 	p, err := uc.preCadastro.BuscarPorTokenHash(token.Hash(tokenPuro))
 	if err != nil {
 		return nil, err
 	}
-	if p == nil {
+	if p == nil || p.Expirado(time.Now()) {
 		return nil, ErrPreCadastroInvalido
 	}
 	return &ConsultarPreCadastroOutput{Nome: p.Nome, Email: p.Email, Telefone: p.Telefone}, nil

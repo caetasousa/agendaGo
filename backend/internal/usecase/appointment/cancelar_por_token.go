@@ -59,7 +59,7 @@ func NovoCancelarPorTokenUseCase(
 // confirmação. Retorna ErrTokenCancelamentoInvalido se o token ou o
 // agendamento não existir.
 func (uc *CancelarPorTokenUseCase) Detalhar(tokenPuro string, agora time.Time) (*DetalheCancelamento, error) {
-	a, err := uc.buscarAgendamento(tokenPuro)
+	a, err := uc.buscarAgendamento(token.Hash(tokenPuro), agora)
 	if err != nil {
 		return nil, err
 	}
@@ -86,9 +86,11 @@ func (uc *CancelarPorTokenUseCase) Detalhar(tokenPuro string, agora time.Time) (
 // Executar cancela o agendamento apontado pelo token. Passa pelo mesmo método
 // de domínio Cancelar, então a regra de antecedência mínima e os status
 // canceláveis são respeitados — o token não burla a regra de negócio, só a
-// sessão. Notifica o prestador do cancelamento (feito pelo cliente).
+// sessão. Consome o token ao cancelar com sucesso (uso único: o mesmo link
+// não cancela duas vezes) e notifica o prestador do cancelamento.
 func (uc *CancelarPorTokenUseCase) Executar(tokenPuro string, agora time.Time) error {
-	a, err := uc.buscarAgendamento(tokenPuro)
+	tokenHash := token.Hash(tokenPuro)
+	a, err := uc.buscarAgendamento(tokenHash, agora)
 	if err != nil {
 		return err
 	}
@@ -107,18 +109,20 @@ func (uc *CancelarPorTokenUseCase) Executar(tokenPuro string, agora time.Time) e
 		return err
 	}
 
+	uc.cancelamento.Remover(tokenHash)
 	uc.notificarPrestador(a)
 	return nil
 }
 
-// buscarAgendamento resolve o agendamento a partir do token puro, tratando
-// token inexistente e agendamento inexistente como o mesmo erro genérico.
-func (uc *CancelarPorTokenUseCase) buscarAgendamento(tokenPuro string) (*appointment.Appointment, error) {
-	t, err := uc.cancelamento.BuscarPorTokenHash(token.Hash(tokenPuro))
+// buscarAgendamento resolve o agendamento a partir do hash do token, tratando
+// token inexistente/expirado e agendamento inexistente como o mesmo erro
+// genérico.
+func (uc *CancelarPorTokenUseCase) buscarAgendamento(tokenHash string, agora time.Time) (*appointment.Appointment, error) {
+	t, err := uc.cancelamento.BuscarPorTokenHash(tokenHash)
 	if err != nil {
 		return nil, err
 	}
-	if t == nil {
+	if t == nil || t.Expirado(agora) {
 		return nil, ErrTokenCancelamentoInvalido
 	}
 

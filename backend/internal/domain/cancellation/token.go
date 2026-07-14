@@ -5,20 +5,27 @@ package cancellation
 
 import "time"
 
-// Token liga um token de cancelamento ao agendamento correspondente. Não tem
-// expiração própria: vale enquanto o agendamento for cancelável, o que é
-// decidido pelo domínio do agendamento (regra de antecedência).
+// Token liga um token de cancelamento ao agendamento correspondente.
 type Token struct {
 	TokenHash     string
 	AppointmentID string
 	CriadoEm      time.Time
+	ExpiraEm      time.Time
 }
 
-// Novo cria um Token para o agendamento informado, com o momento atual.
-func Novo(tokenHash, appointmentID string) *Token {
+// Novo cria um Token para o agendamento informado, com validade de ttl a
+// partir do momento atual.
+func Novo(tokenHash, appointmentID string, ttl time.Duration) *Token {
+	agora := time.Now()
 	return &Token{
 		TokenHash:     tokenHash,
 		AppointmentID: appointmentID,
-		CriadoEm:      time.Now(),
+		CriadoEm:      agora,
+		ExpiraEm:      agora.Add(ttl),
 	}
+}
+
+// Expirado informa se o token já passou da validade.
+func (t *Token) Expirado(agora time.Time) bool {
+	return agora.After(t.ExpiraEm)
 }

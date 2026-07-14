@@ -34,6 +34,19 @@ var (
 	ErrTokenCancelamentoInvalido = errors.New("link de cancelamento inválido")
 )
 
+// TTLPreCadastro é o prazo de validade do token de pré-cadastro entregue ao
+// convidado no email — depois disso, o link "Criar minha conta" deixa de
+// funcionar e a pessoa precisa se cadastrar pelo caminho normal (com
+// confirmação por email).
+const TTLPreCadastro = 24 * time.Hour
+
+// TTLCancelamento é o prazo de validade do token de cancelamento entregue ao
+// convidado no email. Generoso (cobre o horizonte de agendamento futuro do
+// sistema, hoje ~2 meses) porque o link precisa continuar útil até perto do
+// horário do atendimento — o token também é consumido (uso único) assim que
+// o cancelamento de fato acontece.
+const TTLCancelamento = 90 * 24 * time.Hour
+
 // repositorioAppointment persiste e consulta agendamentos. SalvarSeLivre é a
 // barreira anti-overbooking: checagem de conflito e escrita atômicas.
 type repositorioAppointment interface {
@@ -62,10 +75,14 @@ type repositorioClient interface {
 
 // repositorioCancelamento persiste e consulta os tokens de cancelamento
 // entregues aos convidados. BuscarPorTokenHash não apaga o token na leitura —
-// a página de cancelamento lê os detalhes e depois cancela com o mesmo token.
+// a página de cancelamento lê os detalhes antes de decidir cancelar. Remover
+// invalida o token (uso único), chamado só depois que o cancelamento de fato
+// acontece.
 type repositorioCancelamento interface {
 	Salvar(t *cancellation.Token) error
 	BuscarPorTokenHash(hash string) (*cancellation.Token, error)
+	Remover(hash string) error
+	RemoverExpirados() error
 }
 
 // repositorioPreCadastro persiste os tokens de pré-cadastro entregues aos

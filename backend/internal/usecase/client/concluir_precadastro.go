@@ -1,6 +1,10 @@
 package client
 
-import "agendago/internal/pkg/token"
+import (
+	"time"
+
+	"agendago/internal/pkg/token"
+)
 
 // ConcluirPreCadastroInput contém o token de pré-cadastro e a senha escolhida.
 type ConcluirPreCadastroInput struct {
@@ -35,15 +39,15 @@ func NovoConcluirPreCadastroUseCase(clients repositorioClient, providers buscado
 }
 
 // Executar consome o token de pré-cadastro (uso único) e cria a conta com a
-// senha informada. Retorna ErrPreCadastroInvalido para token inexistente, e
-// ErrCadastroInvalido se o email já virou conta (prestador ou cliente) no
-// meio-tempo.
+// senha informada. Retorna ErrPreCadastroInvalido para token inexistente ou
+// expirado, e ErrCadastroInvalido se o email já virou conta (prestador ou
+// cliente) no meio-tempo.
 func (uc *ConcluirPreCadastroUseCase) Executar(in ConcluirPreCadastroInput) (*ConcluirPreCadastroOutput, error) {
 	p, err := uc.preCadastro.Consumir(token.Hash(in.Token))
 	if err != nil {
 		return nil, err
 	}
-	if p == nil {
+	if p == nil || p.Expirado(time.Now()) {
 		return nil, ErrPreCadastroInvalido
 	}
 
@@ -66,5 +70,6 @@ func (uc *ConcluirPreCadastroUseCase) Executar(in ConcluirPreCadastroInput) (*Co
 		return nil, err
 	}
 
+	uc.preCadastro.RemoverExpirados()
 	return &ConcluirPreCadastroOutput{ID: c.ID, Nome: c.Nome, Email: c.Email}, nil
 }

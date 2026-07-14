@@ -202,12 +202,12 @@ func (uc *TransicionarUseCase) notificarConfirmacao(a *appointment.Appointment) 
 	var tokenCancelamento, tokenPreCadastro string
 	if !c.TemConta() {
 		if t, err := token.Gerar(); err == nil {
-			if err := uc.cancelamentoRepo.Salvar(cancellation.Novo(token.Hash(t), a.ID)); err == nil {
+			if err := uc.cancelamentoRepo.Salvar(cancellation.Novo(token.Hash(t), a.ID, TTLCancelamento)); err == nil {
 				tokenCancelamento = t
 			}
 		}
 		if t, err := token.Gerar(); err == nil {
-			pc := precadastro.Novo(token.Hash(t), c.Nome, c.Email, c.Telefone)
+			pc := precadastro.Novo(token.Hash(t), c.Nome, c.Email, c.Telefone, TTLPreCadastro)
 			if err := uc.preCadastroRepo.Salvar(pc); err == nil {
 				tokenPreCadastro = t
 			}

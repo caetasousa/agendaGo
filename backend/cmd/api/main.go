@@ -77,6 +77,13 @@ func main() {
 		log.Fatalf("erro ao semear admin: %v", err)
 	}
 
+	// aviso alto-visibilidade: rate limit desligado (RATE_LIMIT_*=0) some com
+	// o teto de login, cadastro e brute-force de token — fácil de esquecer
+	// ligado numa env de deploy copiada de dev
+	if config.RateLimitLoginPorMinuto() == 0 || config.RateLimitConvidadoPorMinuto() == 0 {
+		log.Println("ATENÇÃO: rate limiting desligado (RATE_LIMIT_LOGIN_POR_MINUTO=0 ou RATE_LIMIT_CONVIDADO_POR_MINUTO=0) — login, cadastro e tokens ficam sem teto por IP")
+	}
+
 	// usecases
 	cadastrarProvider := ucprovider.NovoCadastrarUseCase(providerRepo, clientRepo, hasher)
 	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(providerRepo)
@@ -140,13 +147,14 @@ func main() {
 		r.Get("/agendamentos/cancelar/{token}", appointmentHandler.DetalharCancelamento)
 		r.Post("/agendamentos/cancelar/{token}", appointmentHandler.CancelarPorToken)
 	})
-	r.Post("/providers", providerHandler.Cadastrar)
-	// cadastro de cliente dispara email (confirmação/aviso) e roda Argon2id:
-	// teto por IP mitiga spam de emails e força bruta de token de confirmação
+	// cadastro (prestador e cliente) roda Argon2id (custo de CPU/memória por
+	// request) e o de cliente ainda dispara email: teto por IP mitiga DoS de
+	// hashing, spam de emails e força bruta de token de confirmação
 	r.Group(func(r chi.Router) {
 		if limite := config.RateLimitLoginPorMinuto(); limite > 0 {
 			r.Use(httprate.LimitByIP(limite, time.Minute))
 		}
+		r.Post("/providers", providerHandler.Cadastrar)
 		r.Post("/clients", clientHandler.Cadastrar)
 		r.Post("/clients/confirmar-cadastro", clientHandler.ConfirmarCadastro)
 		r.Get("/clients/pre-cadastro/{token}", clientHandler.ConsultarPreCadastro)
@@ -217,6 +225,14 @@ func main() {
 	go func() {
 		defer tarefasEmFundo.Done()
 		reminderWorker.Executar(ctx)
+	}()
+
+	// worker de limpeza: apaga tokens expirados que ninguém mais vai consumir
+	cleanupWorker := worker.NovoCleanupWorker(config.IntervaloLimpezaTokens, signupRepo, passwordResetRepo, preCadastroRepo, cancelamentoRepo)
+	tarefasEmFundo.Add(1)
+	go func() {
+		defer tarefasEmFundo.Done()
+		cleanupWorker.Executar(ctx)
 	}()
 
 	// servidor com desligamento gracioso: SIGINT/SIGTERM param de aceitar

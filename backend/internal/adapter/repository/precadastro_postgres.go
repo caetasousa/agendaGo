@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"agendago/internal/domain/precadastro"
 
@@ -21,9 +22,9 @@ func NovoPreCadastroPostgres(pool *pgxpool.Pool) *PreCadastroPostgres {
 // Salvar persiste um novo token de pré-cadastro.
 func (r *PreCadastroPostgres) Salvar(p *precadastro.PreCadastro) error {
 	_, err := r.pool.Exec(context.Background(),
-		`INSERT INTO pre_cadastro_tokens (token_hash, nome, email, telefone, criado_em)
-		 VALUES ($1, $2, $3, $4, $5)`,
-		p.TokenHash, p.Nome, p.Email, p.Telefone, p.CriadoEm,
+		`INSERT INTO pre_cadastro_tokens (token_hash, nome, email, telefone, criado_em, expira_em)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		p.TokenHash, p.Nome, p.Email, p.Telefone, p.CriadoEm, p.ExpiraEm,
 	)
 	return err
 }
@@ -34,9 +35,9 @@ func (r *PreCadastroPostgres) Salvar(p *precadastro.PreCadastro) error {
 func (r *PreCadastroPostgres) BuscarPorTokenHash(tokenHash string) (*precadastro.PreCadastro, error) {
 	var p precadastro.PreCadastro
 	err := r.pool.QueryRow(context.Background(),
-		`SELECT token_hash, nome, email, telefone, criado_em
+		`SELECT token_hash, nome, email, telefone, criado_em, expira_em
 		 FROM pre_cadastro_tokens WHERE token_hash = $1`, tokenHash,
-	).Scan(&p.TokenHash, &p.Nome, &p.Email, &p.Telefone, &p.CriadoEm)
+	).Scan(&p.TokenHash, &p.Nome, &p.Email, &p.Telefone, &p.CriadoEm, &p.ExpiraEm)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -53,8 +54,8 @@ func (r *PreCadastroPostgres) Consumir(tokenHash string) (*precadastro.PreCadast
 	var p precadastro.PreCadastro
 	err := r.pool.QueryRow(context.Background(),
 		`DELETE FROM pre_cadastro_tokens WHERE token_hash = $1
-		 RETURNING token_hash, nome, email, telefone, criado_em`, tokenHash,
-	).Scan(&p.TokenHash, &p.Nome, &p.Email, &p.Telefone, &p.CriadoEm)
+		 RETURNING token_hash, nome, email, telefone, criado_em, expira_em`, tokenHash,
+	).Scan(&p.TokenHash, &p.Nome, &p.Email, &p.Telefone, &p.CriadoEm, &p.ExpiraEm)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -62,4 +63,12 @@ func (r *PreCadastroPostgres) Consumir(tokenHash string) (*precadastro.PreCadast
 		return nil, err
 	}
 	return &p, nil
+}
+
+// RemoverExpirados apaga os tokens de pré-cadastro cuja expira_em já passou.
+func (r *PreCadastroPostgres) RemoverExpirados() error {
+	_, err := r.pool.Exec(context.Background(),
+		`DELETE FROM pre_cadastro_tokens WHERE expira_em < $1`, time.Now(),
+	)
+	return err
 }

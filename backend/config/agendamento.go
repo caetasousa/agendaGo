@@ -22,6 +22,11 @@ const AntecedenciaLembrete = 24 * time.Hour
 // lembretes por agendamentos confirmados ainda não lembrados.
 const IntervaloVerificacaoLembrete = 10 * time.Minute
 
+// IntervaloLimpezaTokens é o período entre cada rodada de limpeza dos tokens
+// expirados (cadastro pendente, recuperação de senha, pré-cadastro,
+// cancelamento). Não é urgente — só evita acúmulo indefinido de PII/lixo.
+const IntervaloLimpezaTokens = 6 * time.Hour
+
 // FusoHorario é o fuso único do sistema (America/Sao_Paulo). Falha no boot se
 // o tzdata não estiver disponível — melhor que operar em fuso errado.
 var FusoHorario = carregarFuso()
