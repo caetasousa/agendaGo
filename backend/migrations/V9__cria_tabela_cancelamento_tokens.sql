@@ -4,7 +4,7 @@
 -- da criação — cobre o horizonte de agendamento futuro do sistema.
 CREATE TABLE cancelamento_tokens (
     token_hash     CHAR(64)    PRIMARY KEY,
-    appointment_id UUID        NOT NULL,
+    appointment_id UUID        NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
     criado_em      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     expira_em      TIMESTAMPTZ NOT NULL
 );
