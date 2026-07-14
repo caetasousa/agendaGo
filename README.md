@@ -66,6 +66,8 @@ e cai no painel de moderação (`/admin`), onde bane/reativa prestadores e clien
 | `POST` | [`/providers`](http://localhost:8080/swagger/index.html#/providers/post_providers) | Cadastrar prestador |
 | `POST` | [`/clients`](http://localhost:8080/swagger/index.html#/clients/post_clients) | Solicitar cadastro de cliente (envia email de confirmação) |
 | `POST` | [`/clients/confirmar-cadastro`](http://localhost:8080/swagger/index.html#/clients/post_clients_confirmar_cadastro) | Confirmar cadastro pelo token do email |
+| `GET` | [`/clients/pre-cadastro/{token}`](http://localhost:8080/swagger/index.html#/clients/get_clients_pre_cadastro__token_) | Consultar dados de pré-cadastro (nome/email/telefone) para pré-preencher o cadastro |
+| `POST` | [`/clients/pre-cadastro/{token}`](http://localhost:8080/swagger/index.html#/clients/post_clients_pre_cadastro__token_) | Concluir o cadastro a partir do pré-cadastro, sem uma segunda confirmação por email |
 | `POST` | [`/auth/provider/login`](http://localhost:8080/swagger/index.html#/auth/post_auth_provider_login) | Login do prestador |
 | `POST` | [`/auth/client/login`](http://localhost:8080/swagger/index.html#/auth/post_auth_client_login) | Login do cliente |
 | `POST` | [`/auth/admin/login`](http://localhost:8080/swagger/index.html#/auth/post_auth_admin_login) | Login do administrador |

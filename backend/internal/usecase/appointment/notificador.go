@@ -18,6 +18,10 @@ type NotificacaoAgendamento struct {
 	// convidado (um token novo em cada email — ambos valem). Vazio para
 	// cliente com conta (que cancela pelo painel).
 	TokenCancelamento string
+	// TokenPreCadastro leva direto à tela de cadastro com nome/email/telefone
+	// pré-preenchidos — gerado junto do token de cancelamento, mesma
+	// preenchimento e mesma condição (só para convidado sem conta).
+	TokenPreCadastro string
 }
 
 // notificadorAgendamento envia os emails dos eventos do ciclo de vida do

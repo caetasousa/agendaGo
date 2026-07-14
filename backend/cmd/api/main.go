@@ -61,6 +61,7 @@ func main() {
 	passwordResetRepo := repository.NovoPasswordResetPostgres(pool)
 	cancelamentoRepo := repository.NovoCancellationPostgres(pool)
 	signupRepo := repository.NovoSignupPostgres(pool)
+	preCadastroRepo := repository.NovoPreCadastroPostgres(pool)
 
 	// segurança
 	hasher := security.NovoHasherArgon2id()
@@ -81,6 +82,8 @@ func main() {
 	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(providerRepo)
 	solicitarCadastroClient := ucclient.NovoSolicitarCadastroUseCase(clientRepo, providerRepo, signupRepo, notificador, hasher)
 	confirmarCadastroClient := ucclient.NovoConfirmarCadastroUseCase(clientRepo, providerRepo, signupRepo)
+	consultarPreCadastro := ucclient.NovoConsultarPreCadastroUseCase(preCadastroRepo)
+	concluirPreCadastro := ucclient.NovoConcluirPreCadastroUseCase(clientRepo, providerRepo, preCadastroRepo, hasher)
 	loginProvider := ucauth.NovoLoginProviderUseCase(providerRepo, sessionRepo, hasher)
 	loginClient := ucauth.NovoLoginClientUseCase(clientRepo, sessionRepo, hasher)
 	loginAdmin := ucauth.NovoLoginAdminUseCase(adminRepo, sessionRepo, hasher)
@@ -98,8 +101,8 @@ func main() {
 	buscarPrestador := ucprovider.NovoBuscarResumoUseCase(providerRepo)
 	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(consultarDisponibilidade, appointmentRepo, providerRepo, config.FusoHorario)
 	solicitarAgendamento := ucappointment.NovoSolicitarUseCase(consultarSlots, appointmentRepo, clientRepo, providerRepo, notificador, config.TTLSolicitacao)
-	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitarAgendamento, clientRepo, providerRepo, cancelamentoRepo, notificador)
-	transicionarAgendamento := ucappointment.NovoTransicionarUseCase(appointmentRepo, providerRepo, clientRepo, cancelamentoRepo, notificador, config.AntecedenciaMinimaCancelamento, config.FusoHorario)
+	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitarAgendamento, clientRepo, providerRepo, cancelamentoRepo, preCadastroRepo, notificador)
+	transicionarAgendamento := ucappointment.NovoTransicionarUseCase(appointmentRepo, providerRepo, clientRepo, cancelamentoRepo, preCadastroRepo, notificador, config.AntecedenciaMinimaCancelamento, config.FusoHorario)
 	cancelarPorToken := ucappointment.NovoCancelarPorTokenUseCase(appointmentRepo, cancelamentoRepo, providerRepo, clientRepo, notificador, config.AntecedenciaMinimaCancelamento, config.FusoHorario)
 	listarAgendamentos := ucappointment.NovoListarUseCase(appointmentRepo, providerRepo, clientRepo)
 	detalharUsuario := ucadmin.NovoDetalharUseCase(providerRepo, clientRepo, listarAgendamentos)
@@ -110,7 +113,7 @@ func main() {
 		return middleware.IdentidadeDoContexto(r.Context())
 	}
 	providerHandler := handler.NovoProviderHandler(cadastrarProvider, atualizarPreferencias, listarPrestadores, buscarPrestador, identidadeDoContexto)
-	clientHandler := handler.NovoClientHandler(solicitarCadastroClient, confirmarCadastroClient)
+	clientHandler := handler.NovoClientHandler(solicitarCadastroClient, confirmarCadastroClient, consultarPreCadastro, concluirPreCadastro)
 	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, loginAdmin, logout, perfil, config.CookieSeguro(), identidadeDoContexto)
 	passwordResetHandler := handler.NovoPasswordResetHandler(solicitarRecuperacao, redefinirSenha)
 	availabilityHandler := handler.NovoAvailabilityHandler(consultarAgenda, definirDia, removerDia, identidadeDoContexto)
@@ -146,6 +149,8 @@ func main() {
 		}
 		r.Post("/clients", clientHandler.Cadastrar)
 		r.Post("/clients/confirmar-cadastro", clientHandler.ConfirmarCadastro)
+		r.Get("/clients/pre-cadastro/{token}", clientHandler.ConsultarPreCadastro)
+		r.Post("/clients/pre-cadastro/{token}", clientHandler.ConcluirPreCadastro)
 	})
 	// logins têm teto por IP: mitiga brute-force e rajadas de Argon2id (CPU)
 	r.Group(func(r chi.Router) {

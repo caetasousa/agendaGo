@@ -6,30 +6,34 @@ import (
 
 	"agendago/internal/adapter/email"
 	"agendago/internal/adapter/repository"
+	"agendago/internal/adapter/security"
 	"agendago/internal/domain/appointment"
 	"agendago/internal/domain/client"
 	"agendago/internal/domain/provider"
 	"agendago/internal/domain/session"
 	ucappointment "agendago/internal/usecase/appointment"
 	ucavailability "agendago/internal/usecase/availability"
+	ucclient "agendago/internal/usecase/client"
 )
 
 // ambienteAgendamento monta o conjunto de usecases de agendamento sobre
 // repositórios em memória, com um prestador ativo (expediente 08–12/14–18,
 // atendimento de 60min, sem descanso) e um cliente cadastrados.
 type ambienteAgendamento struct {
-	consultarSlots     *ucappointment.ConsultarSlotsUseCase
-	solicitar          *ucappointment.SolicitarUseCase
-	solicitarConvidado *ucappointment.SolicitarConvidadoUseCase
-	transicionar       *ucappointment.TransicionarUseCase
-	cancelarPorToken   *ucappointment.CancelarPorTokenUseCase
-	listar             *ucappointment.ListarUseCase
-	lembrar            *ucappointment.LembrarUseCase
-	appointments       *repository.AppointmentMemoria
-	clients            *repository.ClientMemoria
-	cancelamentos      *repository.CancellationMemoria
-	prestador          *provider.Provider
-	mailer             *email.MailerMemoria
+	consultarSlots       *ucappointment.ConsultarSlotsUseCase
+	solicitar            *ucappointment.SolicitarUseCase
+	solicitarConvidado   *ucappointment.SolicitarConvidadoUseCase
+	transicionar         *ucappointment.TransicionarUseCase
+	cancelarPorToken     *ucappointment.CancelarPorTokenUseCase
+	consultarPreCadastro *ucclient.ConsultarPreCadastroUseCase
+	concluirPreCadastro  *ucclient.ConcluirPreCadastroUseCase
+	listar               *ucappointment.ListarUseCase
+	lembrar              *ucappointment.LembrarUseCase
+	appointments         *repository.AppointmentMemoria
+	clients              *repository.ClientMemoria
+	cancelamentos        *repository.CancellationMemoria
+	prestador            *provider.Provider
+	mailer               *email.MailerMemoria
 }
 
 func novoAmbienteAgendamento(t *testing.T) *ambienteAgendamento {
@@ -54,25 +58,31 @@ func novoAmbienteAgendamento(t *testing.T) *ambienteAgendamento {
 	resolvedor := ucavailability.NovoConsultarDisponibilidadeUseCase(availabilityRepo, providerRepo)
 	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointments, providerRepo, time.UTC)
 	solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointments, clientRepo, providerRepo, notificador, 24*time.Hour)
-	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitar, clientRepo, providerRepo, cancelamentos, notificador)
-	transicionar := ucappointment.NovoTransicionarUseCase(appointments, providerRepo, clientRepo, cancelamentos, notificador, 24*time.Hour, time.UTC)
+	preCadastros := repository.NovoPreCadastroMemoria()
+	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitar, clientRepo, providerRepo, cancelamentos, preCadastros, notificador)
+	transicionar := ucappointment.NovoTransicionarUseCase(appointments, providerRepo, clientRepo, cancelamentos, preCadastros, notificador, 24*time.Hour, time.UTC)
 	cancelarPorToken := ucappointment.NovoCancelarPorTokenUseCase(appointments, cancelamentos, providerRepo, clientRepo, notificador, 24*time.Hour, time.UTC)
+	hasher := security.NovoHasherArgon2id()
+	consultarPreCadastro := ucclient.NovoConsultarPreCadastroUseCase(preCadastros)
+	concluirPreCadastro := ucclient.NovoConcluirPreCadastroUseCase(clientRepo, providerRepo, preCadastros, hasher)
 	listar := ucappointment.NovoListarUseCase(appointments, providerRepo, clientRepo)
 	lembrar := ucappointment.NovoLembrarUseCase(appointments, providerRepo, clientRepo, notificador, time.UTC, 24*time.Hour)
 
 	return &ambienteAgendamento{
-		consultarSlots:     consultarSlots,
-		solicitar:          solicitar,
-		solicitarConvidado: solicitarConvidado,
-		transicionar:       transicionar,
-		cancelarPorToken:   cancelarPorToken,
-		listar:             listar,
-		lembrar:            lembrar,
-		appointments:       appointments,
-		clients:            clientRepo,
-		cancelamentos:      cancelamentos,
-		prestador:          p,
-		mailer:             mailer,
+		consultarSlots:       consultarSlots,
+		solicitar:            solicitar,
+		solicitarConvidado:   solicitarConvidado,
+		transicionar:         transicionar,
+		cancelarPorToken:     cancelarPorToken,
+		consultarPreCadastro: consultarPreCadastro,
+		concluirPreCadastro:  concluirPreCadastro,
+		listar:               listar,
+		lembrar:              lembrar,
+		appointments:         appointments,
+		clients:              clientRepo,
+		cancelamentos:        cancelamentos,
+		prestador:            p,
+		mailer:               mailer,
 	}
 }
 

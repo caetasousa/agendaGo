@@ -81,8 +81,10 @@ func TestCancelamentoConvidado(t *testing.T) {
 		if !strings.Contains(emailConvidado, "/cancelar-agendamento/") {
 			t.Error("esperava link de cancelamento no email da solicitação")
 		}
-		if !strings.Contains(emailConvidado, "/cadastro") {
-			t.Error("esperava convite para criar conta no email da solicitação")
+		// o link de cadastro é independente do de cancelamento: leva direto à
+		// tela de cadastro, sem passar pela página de cancelamento
+		if !strings.Contains(emailConvidado, "/cadastro?pre=") {
+			t.Error("esperava link direto de cadastro no email da solicitação")
 		}
 	})
 

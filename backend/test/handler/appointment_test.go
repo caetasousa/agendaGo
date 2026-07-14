@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,7 +24,7 @@ import (
 
 // novoRouterAgendamento monta um router chi com um prestador ativo e um
 // cliente cadastrados e as rotas de agendamento, espelhando o wiring de main.go.
-func novoRouterAgendamento(t *testing.T) (r *chi.Mux, providerID string) {
+func novoRouterAgendamento(t *testing.T) (r *chi.Mux, providerID string, mailer *email.MailerMemoria) {
 	t.Helper()
 	hasher := security.NovoHasherArgon2id()
 
@@ -49,13 +50,15 @@ func novoRouterAgendamento(t *testing.T) (r *chi.Mux, providerID string) {
 		return middleware.IdentidadeDoContexto(req.Context())
 	}
 
-	notificador := email.NovoNotificador(email.NovaMailerMemoria(), "http://localhost:5173", time.UTC, email.ExecutorSincrono)
+	mailer = email.NovaMailerMemoria()
+	notificador := email.NovoNotificador(mailer, "http://localhost:5173", time.UTC, email.ExecutorSincrono)
 	cancelamentoRepo := repository.NovoCancellationMemoria()
+	preCadastroRepo := repository.NovoPreCadastroMemoria()
 	resolvedor := ucavailability.NovoConsultarDisponibilidadeUseCase(availabilityRepo, providerRepo)
 	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointmentRepo, providerRepo, time.UTC)
 	solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointmentRepo, clientRepo, providerRepo, notificador, 24*time.Hour)
-	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitar, clientRepo, providerRepo, cancelamentoRepo, notificador)
-	transicionar := ucappointment.NovoTransicionarUseCase(appointmentRepo, providerRepo, clientRepo, cancelamentoRepo, notificador, 24*time.Hour, time.UTC)
+	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitar, clientRepo, providerRepo, cancelamentoRepo, preCadastroRepo, notificador)
+	transicionar := ucappointment.NovoTransicionarUseCase(appointmentRepo, providerRepo, clientRepo, cancelamentoRepo, preCadastroRepo, notificador, 24*time.Hour, time.UTC)
 	cancelarPorToken := ucappointment.NovoCancelarPorTokenUseCase(appointmentRepo, cancelamentoRepo, providerRepo, clientRepo, notificador, 24*time.Hour, time.UTC)
 	listar := ucappointment.NovoListarUseCase(appointmentRepo, providerRepo, clientRepo)
 
@@ -90,7 +93,7 @@ func novoRouterAgendamento(t *testing.T) (r *chi.Mux, providerID string) {
 		router.Post("/agendamentos/{id}/nao-compareceu", appointmentHandler.MarcarNaoCompareceu)
 	})
 
-	return router, p.ID
+	return router, p.ID, mailer
 }
 
 // dataFutura devolve uma segunda-feira ao menos 30 dias à frente, para os
@@ -106,7 +109,7 @@ func dataFutura(t *testing.T) string {
 
 func TestHandlerAgendamento(t *testing.T) {
 	t.Run("fluxo completo: slots públicos, solicitação do cliente e confirmação do prestador", func(t *testing.T) {
-		r, providerID := novoRouterAgendamento(t)
+		r, providerID, _ := novoRouterAgendamento(t)
 		data := dataFutura(t)
 
 		// slots são públicos: prestador ativo oferta o expediente padrão fatiado
@@ -181,7 +184,7 @@ func TestHandlerAgendamento(t *testing.T) {
 	})
 
 	t.Run("prestador recusa solicitação; concluir antes da hora leva 409", func(t *testing.T) {
-		r, providerID := novoRouterAgendamento(t)
+		r, providerID, _ := novoRouterAgendamento(t)
 		data := dataFutura(t)
 
 		cookieCliente := loginEObterCookie(t, r, "/auth/client/login", "maria@email.com", "12345678")
@@ -214,7 +217,7 @@ func TestHandlerAgendamento(t *testing.T) {
 	})
 
 	t.Run("prestador não solicita agendamento (rota exige cliente)", func(t *testing.T) {
-		r, providerID := novoRouterAgendamento(t)
+		r, providerID, _ := novoRouterAgendamento(t)
 		cookiePrestador := loginEObterCookie(t, r, "/auth/provider/login", "joao@email.com", "12345678")
 
 		corpo := map[string]any{"providerId": providerID, "data": dataFutura(t), "inicioMinutos": 480}
@@ -225,7 +228,7 @@ func TestHandlerAgendamento(t *testing.T) {
 	})
 
 	t.Run("solicitação sem sessão leva 401 e com corpo inválido 400", func(t *testing.T) {
-		r, providerID := novoRouterAgendamento(t)
+		r, providerID, _ := novoRouterAgendamento(t)
 
 		corpo := map[string]any{"providerId": providerID, "data": dataFutura(t), "inicioMinutos": 480}
 		rr := requisicaoComCookie(t, r, http.MethodPost, "/agendamentos", corpo, nil)
@@ -242,7 +245,7 @@ func TestHandlerAgendamento(t *testing.T) {
 	})
 
 	t.Run("slots de prestador inexistente leva 404 e período inválido 400", func(t *testing.T) {
-		r, _ := novoRouterAgendamento(t)
+		r, _, _ := novoRouterAgendamento(t)
 		data := dataFutura(t)
 
 		rr := requisicaoComCookie(t, r, http.MethodGet,
@@ -261,7 +264,7 @@ func TestHandlerAgendamento(t *testing.T) {
 
 func TestHandlerAgendamentoConvidado(t *testing.T) {
 	t.Run("convidado agenda sem login e o prestador enxerga nome/email/telefone", func(t *testing.T) {
-		r, providerID := novoRouterAgendamento(t)
+		r, providerID, _ := novoRouterAgendamento(t)
 		data := dataFutura(t)
 
 		// sem cookie: a rota de convidado é pública
@@ -294,7 +297,7 @@ func TestHandlerAgendamentoConvidado(t *testing.T) {
 	})
 
 	t.Run("e-mail de conta registrada leva 409 e orienta a entrar", func(t *testing.T) {
-		r, providerID := novoRouterAgendamento(t)
+		r, providerID, _ := novoRouterAgendamento(t)
 		corpo := map[string]any{
 			"providerId":    providerID,
 			"data":          dataFutura(t),
@@ -311,7 +314,7 @@ func TestHandlerAgendamentoConvidado(t *testing.T) {
 	})
 
 	t.Run("telefone curto é rejeitado com 400", func(t *testing.T) {
-		r, providerID := novoRouterAgendamento(t)
+		r, providerID, _ := novoRouterAgendamento(t)
 		corpo := map[string]any{
 			"providerId":    providerID,
 			"data":          dataFutura(t),
@@ -329,7 +332,7 @@ func TestHandlerAgendamentoConvidado(t *testing.T) {
 
 func TestCancelamentoPorTokenHandler(t *testing.T) {
 	t.Run("detalhar com token inexistente retorna 404", func(t *testing.T) {
-		r, _ := novoRouterAgendamento(t)
+		r, _, _ := novoRouterAgendamento(t)
 		rr := requisicaoComCookie(t, r, http.MethodGet, "/agendamentos/cancelar/token-inexistente", nil, nil)
 		if rr.Code != http.StatusNotFound {
 			t.Errorf("esperava 404, got: %d, body: %s", rr.Code, rr.Body.String())
@@ -337,10 +340,58 @@ func TestCancelamentoPorTokenHandler(t *testing.T) {
 	})
 
 	t.Run("cancelar com token inexistente retorna 404", func(t *testing.T) {
-		r, _ := novoRouterAgendamento(t)
+		r, _, _ := novoRouterAgendamento(t)
 		rr := requisicaoComCookie(t, r, http.MethodPost, "/agendamentos/cancelar/token-inexistente", nil, nil)
 		if rr.Code != http.StatusNotFound {
 			t.Errorf("esperava 404, got: %d, body: %s", rr.Code, rr.Body.String())
+		}
+	})
+}
+
+// tokenDoLinkNoMailer extrai o token de um link "marcador+TOKEN" presente no
+// primeiro email capturado (via MailerMemoria) que o contém.
+func tokenDoLinkNoMailer(t *testing.T, mailer *email.MailerMemoria, marcador string) string {
+	t.Helper()
+	for _, msg := range mailer.Enviadas() {
+		i := strings.Index(msg.HTML, marcador)
+		if i < 0 {
+			continue
+		}
+		resto := msg.HTML[i+len(marcador):]
+		fim := strings.IndexAny(resto, "\"' ")
+		if fim < 0 {
+			fim = len(resto)
+		}
+		return resto[:fim]
+	}
+	t.Fatalf("nenhum email com link %q foi enviado", marcador)
+	return ""
+}
+
+func tokenDoLinkCancelamento(t *testing.T, mailer *email.MailerMemoria) string {
+	t.Helper()
+	return tokenDoLinkNoMailer(t, mailer, "/cancelar-agendamento/")
+}
+
+func TestSolicitarConvidadoEnviaLinkDeCadastro(t *testing.T) {
+	t.Run("solicitação de convidado já traz o link de cadastro pré-preenchido, sem endpoint extra", func(t *testing.T) {
+		r, providerID, mailer := novoRouterAgendamento(t)
+		corpo := map[string]any{
+			"providerId":    providerID,
+			"data":          dataFutura(t),
+			"inicioMinutos": 8 * 60,
+			"nome":          "Convidada Silva",
+			"email":         "convidada-pre@email.com",
+			"telefone":      "(11) 99999-8888",
+		}
+		rr := requisicaoComCookie(t, r, http.MethodPost, "/agendamentos/convidado", corpo, nil)
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("esperava 201 na solicitação, got: %d, body: %s", rr.Code, rr.Body.String())
+		}
+
+		tokenPreCadastro := tokenDoLinkNoMailer(t, mailer, "/cadastro?pre=")
+		if tokenPreCadastro == "" {
+			t.Fatal("esperava um token de pré-cadastro não vazio")
 		}
 	})
 }

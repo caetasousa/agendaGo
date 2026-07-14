@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"agendago/internal/domain/client"
+	"agendago/internal/domain/precadastro"
 	"agendago/internal/domain/provider"
 	"agendago/internal/domain/signup"
 )
@@ -45,4 +46,14 @@ type enviadorCadastro interface {
 // hasherSenha gera o hash da senha em texto puro para persistência.
 type hasherSenha interface {
 	Gerar(senha string) (string, error)
+}
+
+// repositorioPreCadastro consulta e consome os tokens de pré-cadastro gerados
+// a partir do token de cancelamento do convidado. BuscarPorTokenHash só lê —
+// serve o pré-preenchimento do formulário, que pode acontecer mais de uma
+// vez. Consumir apaga o registro ao lê-lo (uso único de verdade), chamado só
+// no submit final que materializa a conta.
+type repositorioPreCadastro interface {
+	BuscarPorTokenHash(tokenHash string) (*precadastro.PreCadastro, error)
+	Consumir(tokenHash string) (*precadastro.PreCadastro, error)
 }

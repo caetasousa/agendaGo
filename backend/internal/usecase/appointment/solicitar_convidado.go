@@ -5,6 +5,7 @@ import (
 
 	"agendago/internal/domain/cancellation"
 	"agendago/internal/domain/client"
+	"agendago/internal/domain/precadastro"
 	"agendago/internal/pkg/token"
 
 	"github.com/google/uuid"
@@ -25,13 +26,14 @@ type SolicitarConvidadoInput struct {
 // SolicitarConvidadoUseCase cria (ou reusa) um cliente convidado a partir dos
 // dados informados e solicita o agendamento. Reaproveita a barreira
 // anti-overbooking de SolicitarUseCase. Como o convidado não tem conta, ele
-// recebe na hora um email com o link de cancelamento por token e o convite
-// para criar a conta.
+// recebe na hora um email com o link de cancelamento por token e o link
+// direto para criar a conta (pré-preenchido).
 type SolicitarConvidadoUseCase struct {
 	solicitar     *SolicitarUseCase
 	clientRepo    repositorioClient
 	providerRepo  repositorioProvider
 	cancelamentos repositorioCancelamento
+	preCadastros  repositorioPreCadastro
 	notificador   notificadorAgendamento
 }
 
@@ -41,6 +43,7 @@ func NovoSolicitarConvidadoUseCase(
 	clientRepo repositorioClient,
 	providerRepo repositorioProvider,
 	cancelamentos repositorioCancelamento,
+	preCadastros repositorioPreCadastro,
 	notificador notificadorAgendamento,
 ) *SolicitarConvidadoUseCase {
 	return &SolicitarConvidadoUseCase{
@@ -48,6 +51,7 @@ func NovoSolicitarConvidadoUseCase(
 		clientRepo:    clientRepo,
 		providerRepo:  providerRepo,
 		cancelamentos: cancelamentos,
+		preCadastros:  preCadastros,
 		notificador:   notificador,
 	}
 }
@@ -94,9 +98,10 @@ func (uc *SolicitarConvidadoUseCase) Executar(in SolicitarConvidadoInput) (*Soli
 }
 
 // notificarConvidado envia ao convidado o resumo da solicitação com o link de
-// cancelamento por token — sua única via de cancelar sem conta — e o convite
-// para criar a conta. Best-effort: falha ao gerar/persistir o token só omite
-// o link, e nada aqui falha a reserva já persistida.
+// cancelamento por token — sua única via de cancelar sem conta — e o link
+// direto para criar a conta, já pré-preenchido. Best-effort: falha ao
+// gerar/persistir qualquer um dos tokens só omite o link correspondente, e
+// nada aqui falha a reserva já persistida.
 func (uc *SolicitarConvidadoUseCase) notificarConvidado(out *SolicitarOutput, convidado *client.Client) {
 	p, err := uc.providerRepo.BuscarPorID(out.ProviderID)
 	if err != nil || p == nil {
@@ -110,6 +115,14 @@ func (uc *SolicitarConvidadoUseCase) notificarConvidado(out *SolicitarOutput, co
 		}
 	}
 
+	var tokenPreCadastro string
+	if t, err := token.Gerar(); err == nil {
+		pc := precadastro.Novo(token.Hash(t), convidado.Nome, convidado.Email, convidado.Telefone)
+		if err := uc.preCadastros.Salvar(pc); err == nil {
+			tokenPreCadastro = t
+		}
+	}
+
 	uc.notificador.NotificarSolicitacaoConvidado(NotificacaoAgendamento{
 		NomePrestador:     p.Nome,
 		EmailPrestador:    p.Email,
@@ -120,5 +133,6 @@ func (uc *SolicitarConvidadoUseCase) notificarConvidado(out *SolicitarOutput, co
 		FimMinutos:        out.FimMinutos,
 		ExpiraEm:          out.ExpiraEm,
 		TokenCancelamento: tokenCancelamento,
+		TokenPreCadastro:  tokenPreCadastro,
 	})
 }

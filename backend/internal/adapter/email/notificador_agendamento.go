@@ -21,12 +21,17 @@ func (n *Notificador) NotificarSolicitacao(evento ucappointment.NotificacaoAgend
 
 // NotificarSolicitacaoConvidado envia ao convidado o resumo do pedido que ele
 // acabou de fazer: o horário aguarda a confirmação do prestador, com o link
-// para cancelar por token (sua única via, já que não tem conta) e o convite
-// para criar uma conta e acompanhar o agendamento.
+// para cancelar por token (sua única via, já que não tem conta) e o link
+// direto para criar uma conta — já pré-preenchida, ação independente do
+// cancelamento.
 func (n *Notificador) NotificarSolicitacaoConvidado(evento ucappointment.NotificacaoAgendamento) {
 	linkCancelamento := ""
 	if evento.TokenCancelamento != "" {
 		linkCancelamento = n.urlFrontend + "/cancelar-agendamento/" + evento.TokenCancelamento
+	}
+	linkCadastro := ""
+	if evento.TokenPreCadastro != "" {
+		linkCadastro = n.urlFrontend + "/cadastro?pre=" + evento.TokenPreCadastro
 	}
 	dados := struct {
 		NomeCliente, NomePrestador, Data, Horario, ExpiraEm, LinkCancelamento, LinkCadastro string
@@ -37,25 +42,31 @@ func (n *Notificador) NotificarSolicitacaoConvidado(evento ucappointment.Notific
 		Horario:          formatarHorario(evento.InicioMinutos),
 		ExpiraEm:         evento.ExpiraEm.In(n.fuso).Format("02/01/2006 15:04"),
 		LinkCancelamento: linkCancelamento,
-		LinkCadastro:     n.urlFrontend + "/cadastro",
+		LinkCadastro:     linkCadastro,
 	}
 	n.enviar(evento.EmailCliente, evento.NomeCliente, "Recebemos sua solicitação — agendaGo", "solicitacao_convidado.html", dados)
 }
 
 // NotificarConfirmacao avisa o cliente que o prestador confirmou o horário.
 // Quando há token de cancelamento (agendamento de convidado), inclui o link
-// para o convidado poder cancelar sem conta.
+// para o convidado poder cancelar sem conta, e o link direto para criar
+// conta já pré-preenchida.
 func (n *Notificador) NotificarConfirmacao(evento ucappointment.NotificacaoAgendamento) {
 	linkCancelamento := ""
 	if evento.TokenCancelamento != "" {
 		linkCancelamento = n.urlFrontend + "/cancelar-agendamento/" + evento.TokenCancelamento
 	}
-	dados := struct{ NomeCliente, NomePrestador, Data, Horario, LinkCancelamento string }{
+	linkCadastro := ""
+	if evento.TokenPreCadastro != "" {
+		linkCadastro = n.urlFrontend + "/cadastro?pre=" + evento.TokenPreCadastro
+	}
+	dados := struct{ NomeCliente, NomePrestador, Data, Horario, LinkCancelamento, LinkCadastro string }{
 		NomeCliente:      evento.NomeCliente,
 		NomePrestador:    evento.NomePrestador,
 		Data:             formatarData(evento.Data),
 		Horario:          formatarHorario(evento.InicioMinutos),
 		LinkCancelamento: linkCancelamento,
+		LinkCadastro:     linkCadastro,
 	}
 	n.enviar(evento.EmailCliente, evento.NomeCliente, "Agendamento confirmado — agendaGo", "confirmado_cliente.html", dados)
 }

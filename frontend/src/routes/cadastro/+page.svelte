@@ -1,11 +1,22 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import type { PageData } from './$types';
 	import { ApiError } from '$lib/api/client';
 	import { cadastrarProvider } from '$lib/api/provider';
-	import { cadastrarClient } from '$lib/api/customer';
+	import { cadastrarClient, concluirPreCadastro } from '$lib/api/customer';
 	import { login, me } from '$lib/api/auth';
 	import { sessao } from '$lib/stores/session.svelte';
+
+	let { data }: { data: PageData } = $props();
+
+	// Veio do link "Criar minha conta" do email: os dados do convidado
+	// (nome/email/telefone) já chegam prontos, então o formulário só pede a
+	// senha — e a conta nasce direto no submit, sem uma segunda confirmação
+	// por email (quem tem esse token já provou posse do email).
+	// svelte-ignore state_referenced_locally
+	const preCadastro = data.preCadastro;
+	const tokenPreCadastro = page.url.searchParams.get('pre');
 
 	// destinoAposCadastro honra ?voltar= (ex: link público de agendamento), mas
 	// só para caminhos internos — nunca URLs absolutas, para evitar open redirect.
@@ -16,15 +27,15 @@
 
 	type TipoConta = 'provider' | 'client';
 
-	// Quem chega pelo link público de agendamento veio para agendar: a conta
-	// certa é a de cliente.
+	// Quem chega pelo link público de agendamento, ou com dados de
+	// pré-cadastro, veio para agendar: a conta certa é a de cliente.
 	// svelte-ignore state_referenced_locally
 	let tipo = $state<TipoConta>(
-		page.url.searchParams.get('voltar')?.startsWith('/agendar') ? 'client' : 'provider'
+		preCadastro || page.url.searchParams.get('voltar')?.startsWith('/agendar') ? 'client' : 'provider'
 	);
-	let nome = $state('');
-	let email = $state('');
-	let telefone = $state('');
+	let nome = $state(preCadastro?.nome ?? '');
+	let email = $state(preCadastro?.email ?? '');
+	let telefone = $state(preCadastro?.telefone ?? '');
 	let senha = $state('');
 	let confirmarSenha = $state('');
 
@@ -47,7 +58,14 @@
 		enviando = true;
 
 		try {
-			if (tipo === 'provider') {
+			if (preCadastro && tokenPreCadastro) {
+				// já provou posse do email pelo link recebido: cria a conta direto
+				// e loga, sem uma segunda confirmação por email
+				await concluirPreCadastro(tokenPreCadastro, senha);
+				await login({ email, senha });
+				sessao.definir(await me());
+				goto(destinoAposCadastro());
+			} else if (tipo === 'provider') {
 				// prestador entra logado direto (sem verificação por email)
 				await cadastrarProvider({ nome, email, telefone, senha });
 				await login({ email, senha });
@@ -80,7 +98,11 @@
 	<a href="/" class="text-sm text-mute transition hover:text-ink">← Voltar</a>
 
 	<h1 class="display mt-4 text-4xl text-ink sm:text-5xl">Criar conta</h1>
-	<p class="mt-3 text-body">Escolha o tipo de conta para começar.</p>
+	<p class="mt-3 text-body">
+		{preCadastro
+			? 'Falta só a senha — já reaproveitamos seus dados do agendamento.'
+			: 'Escolha o tipo de conta para começar.'}
+	</p>
 
 	<div class="mt-8 rounded-xl border border-hairline-strong bg-surface-card p-8">
 		{#if aguardandoConfirmacao}
@@ -94,16 +116,18 @@
 			</p>
 		{:else}
 		<form class="space-y-5" novalidate onsubmit={enviar}>
-			<div role="radiogroup" aria-label="Tipo de conta" class="flex gap-3">
-				<label class="{opcaoBaseClasse} {tipo === 'provider' ? opcaoAtivaClasse : opcaoInativaClasse}">
-					<input type="radio" name="tipo" value="provider" bind:group={tipo} class="sr-only" />
-					Prestador
-				</label>
-				<label class="{opcaoBaseClasse} {tipo === 'client' ? opcaoAtivaClasse : opcaoInativaClasse}">
-					<input type="radio" name="tipo" value="client" bind:group={tipo} class="sr-only" />
-					Cliente
-				</label>
-			</div>
+			{#if !preCadastro}
+				<div role="radiogroup" aria-label="Tipo de conta" class="flex gap-3">
+					<label class="{opcaoBaseClasse} {tipo === 'provider' ? opcaoAtivaClasse : opcaoInativaClasse}">
+						<input type="radio" name="tipo" value="provider" bind:group={tipo} class="sr-only" />
+						Prestador
+					</label>
+					<label class="{opcaoBaseClasse} {tipo === 'client' ? opcaoAtivaClasse : opcaoInativaClasse}">
+						<input type="radio" name="tipo" value="client" bind:group={tipo} class="sr-only" />
+						Cliente
+					</label>
+				</div>
+			{/if}
 
 			{#if erro}
 				<div
@@ -114,44 +138,52 @@
 				</div>
 			{/if}
 
-			<div>
-				<label for="nome" class="block text-sm font-medium text-ink">Nome</label>
-				<input
-					id="nome"
-					type="text"
-					bind:value={nome}
-					required
-					minlength="2"
-					maxlength="100"
-					placeholder="Seu nome"
-					class={inputClasse}
-				/>
-			</div>
+			{#if preCadastro}
+				<div class="rounded-md border border-hairline bg-surface-elevated p-4">
+					<p class="text-sm text-body">
+						<span class="font-medium text-ink">{nome}</span> · {email} · {telefone}
+					</p>
+				</div>
+			{:else}
+				<div>
+					<label for="nome" class="block text-sm font-medium text-ink">Nome</label>
+					<input
+						id="nome"
+						type="text"
+						bind:value={nome}
+						required
+						minlength="2"
+						maxlength="100"
+						placeholder="Seu nome"
+						class={inputClasse}
+					/>
+				</div>
 
-			<div>
-				<label for="email" class="block text-sm font-medium text-ink">E-mail</label>
-				<input
-					id="email"
-					type="email"
-					bind:value={email}
-					required
-					placeholder="voce@exemplo.com"
-					class={inputClasse}
-				/>
-			</div>
+				<div>
+					<label for="email" class="block text-sm font-medium text-ink">E-mail</label>
+					<input
+						id="email"
+						type="email"
+						bind:value={email}
+						required
+						placeholder="voce@exemplo.com"
+						class={inputClasse}
+					/>
+				</div>
 
-			<div>
-				<label for="telefone" class="block text-sm font-medium text-ink">Telefone</label>
-				<input
-					id="telefone"
-					type="tel"
-					bind:value={telefone}
-					required
-					minlength="8"
-					placeholder="(11) 99999-8888"
-					class={inputClasse}
-				/>
-			</div>
+				<div>
+					<label for="telefone" class="block text-sm font-medium text-ink">Telefone</label>
+					<input
+						id="telefone"
+						type="tel"
+						bind:value={telefone}
+						required
+						minlength="8"
+						placeholder="(11) 99999-8888"
+						class={inputClasse}
+					/>
+				</div>
+			{/if}
 
 			<div>
 				<label for="senha" class="block text-sm font-medium text-ink">Senha</label>

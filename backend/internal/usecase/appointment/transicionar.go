@@ -8,6 +8,7 @@ import (
 
 	"agendago/internal/domain/appointment"
 	"agendago/internal/domain/cancellation"
+	"agendago/internal/domain/precadastro"
 	"agendago/internal/domain/session"
 	"agendago/internal/pkg/token"
 )
@@ -29,6 +30,7 @@ type TransicionarUseCase struct {
 	providerRepo     repositorioProvider
 	clientRepo       repositorioClient
 	cancelamentoRepo repositorioCancelamento
+	preCadastroRepo  repositorioPreCadastro
 	notificador      notificadorAgendamento
 	antecedencia     time.Duration
 	fuso             *time.Location
@@ -40,6 +42,7 @@ func NovoTransicionarUseCase(
 	providerRepo repositorioProvider,
 	clientRepo repositorioClient,
 	cancelamentoRepo repositorioCancelamento,
+	preCadastroRepo repositorioPreCadastro,
 	notificador notificadorAgendamento,
 	antecedencia time.Duration,
 	fuso *time.Location,
@@ -49,6 +52,7 @@ func NovoTransicionarUseCase(
 		providerRepo:     providerRepo,
 		clientRepo:       clientRepo,
 		cancelamentoRepo: cancelamentoRepo,
+		preCadastroRepo:  preCadastroRepo,
 		notificador:      notificador,
 		antecedencia:     antecedencia,
 		fuso:             fuso,
@@ -181,9 +185,10 @@ func (uc *TransicionarUseCase) notificar(a *appointment.Appointment, evento func
 }
 
 // notificarConfirmacao avisa o cliente da confirmação. Para um convidado (sem
-// conta), gera e persiste um token de cancelamento e o inclui no email — é a
-// única forma de ele cancelar. Best-effort: falha ao gerar/persistir o token
-// não bloqueia a confirmação (só sai sem link de cancelamento).
+// conta), gera e persiste um token de cancelamento — única forma de ele
+// cancelar — e um token de pré-cadastro, que leva direto à tela de cadastro
+// já preenchida. Best-effort: falha ao gerar/persistir qualquer um dos
+// tokens não bloqueia a confirmação, só omite o link correspondente.
 func (uc *TransicionarUseCase) notificarConfirmacao(a *appointment.Appointment) {
 	p, err := uc.providerRepo.BuscarPorID(a.ProviderID)
 	if err != nil || p == nil {
@@ -194,11 +199,17 @@ func (uc *TransicionarUseCase) notificarConfirmacao(a *appointment.Appointment) 
 		return
 	}
 
-	var tokenCancelamento string
+	var tokenCancelamento, tokenPreCadastro string
 	if !c.TemConta() {
 		if t, err := token.Gerar(); err == nil {
 			if err := uc.cancelamentoRepo.Salvar(cancellation.Novo(token.Hash(t), a.ID)); err == nil {
 				tokenCancelamento = t
+			}
+		}
+		if t, err := token.Gerar(); err == nil {
+			pc := precadastro.Novo(token.Hash(t), c.Nome, c.Email, c.Telefone)
+			if err := uc.preCadastroRepo.Salvar(pc); err == nil {
+				tokenPreCadastro = t
 			}
 		}
 	}
@@ -212,6 +223,7 @@ func (uc *TransicionarUseCase) notificarConfirmacao(a *appointment.Appointment) 
 		InicioMinutos:     a.InicioMinutos,
 		FimMinutos:        a.FimMinutos,
 		TokenCancelamento: tokenCancelamento,
+		TokenPreCadastro:  tokenPreCadastro,
 	})
 }
 

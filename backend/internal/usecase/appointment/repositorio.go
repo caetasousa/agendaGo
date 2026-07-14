@@ -7,6 +7,7 @@ import (
 	"agendago/internal/domain/appointment"
 	"agendago/internal/domain/cancellation"
 	"agendago/internal/domain/client"
+	"agendago/internal/domain/precadastro"
 	"agendago/internal/domain/provider"
 )
 
@@ -65,4 +66,11 @@ type repositorioClient interface {
 type repositorioCancelamento interface {
 	Salvar(t *cancellation.Token) error
 	BuscarPorTokenHash(hash string) (*cancellation.Token, error)
+}
+
+// repositorioPreCadastro persiste os tokens de pré-cadastro entregues aos
+// convidados junto do token de cancelamento — o link "Criar minha conta" leva
+// direto à tela de cadastro pré-preenchida.
+type repositorioPreCadastro interface {
+	Salvar(p *precadastro.PreCadastro) error
 }

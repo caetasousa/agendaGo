@@ -3,10 +3,7 @@ package client
 import (
 	"time"
 
-	"agendago/internal/domain/client"
 	"agendago/internal/pkg/token"
-
-	"github.com/google/uuid"
 )
 
 // ConfirmarCadastroOutput contém os dados da conta criada/convertida.
@@ -52,32 +49,8 @@ func (uc *ConfirmarCadastroUseCase) Executar(tokenPuro string) (*ConfirmarCadast
 		return nil, ErrCadastroInvalido
 	}
 
-	existente, err := uc.clients.BuscarPorEmail(pendente.Email)
+	c, err := materializarConta(uc.clients, pendente.Nome, pendente.Email, pendente.Telefone, pendente.SenhaHash)
 	if err != nil {
-		return nil, err
-	}
-
-	if existente != nil {
-		// já é conta (alguém confirmou antes, ou o email foi cadastrado por
-		// outro caminho): não sobrescreve — resposta genérica
-		if existente.TemConta() {
-			return nil, ErrCadastroInvalido
-		}
-		// convidado: converte preservando o ID (e o histórico de agendamentos)
-		if err := uc.clients.ConverterEmConta(existente.ID, pendente.SenhaHash, pendente.Telefone); err != nil {
-			return nil, err
-		}
-		uc.pendentes.RemoverExpirados()
-		return &ConfirmarCadastroOutput{ID: existente.ID, Nome: existente.Nome, Email: existente.Email}, nil
-	}
-
-	// email inédito: cria a conta do zero
-	c, err := client.NovoComConta(uuid.NewString(), pendente.Nome, pendente.Email, pendente.SenhaHash)
-	if err != nil {
-		return nil, err
-	}
-	c.Telefone = pendente.Telefone
-	if err := uc.clients.Salvar(c); err != nil {
 		return nil, err
 	}
 
