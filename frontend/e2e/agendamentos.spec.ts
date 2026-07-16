@@ -6,7 +6,7 @@ import { emailUnico, tokenDeConfirmacaoCadastro } from './helpers';
 // só é exigido na hora de solicitar.
 
 async function cadastrarPrestadorAtivo(page: Page, nome: string, email: string): Promise<string> {
-	await page.goto('/cadastro');
+	await page.goto('/cadastro?tipo=prestador');
 	await page.fill('#nome', nome);
 	await page.fill('#email', email);
 	await page.fill('#telefone', '(11) 99999-8888');
@@ -33,8 +33,7 @@ async function cadastrarPrestadorAtivo(page: Page, nome: string, email: string):
 // Mailpit), já que a conta de cliente só nasce após a confirmação — mas não
 // loga: quem precisa de sessão chama entrar() em seguida.
 async function cadastrarCliente(page: Page, request: APIRequestContext, nome: string, email: string) {
-	await page.goto('/cadastro');
-	await page.click('label:has-text("Cliente")');
+	await page.goto('/cadastro?tipo=cliente');
 	await page.fill('#nome', nome);
 	await page.fill('#email', email);
 	await page.fill('#telefone', '(11) 99999-8888');

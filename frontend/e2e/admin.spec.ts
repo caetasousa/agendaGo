@@ -6,7 +6,7 @@ const ADMIN_EMAIL = 'admin@agendago.dev';
 const ADMIN_SENHA = 'admin12345';
 
 async function cadastrarPrestador(page: Page, nome: string, email: string) {
-	await page.goto('/cadastro');
+	await page.goto('/cadastro?tipo=prestador');
 	await page.fill('#nome', nome);
 	await page.fill('#email', email);
 	await page.fill('#telefone', '(11) 99999-8888');
@@ -26,8 +26,7 @@ async function cadastrarClienteLogado(
 	nome: string,
 	email: string
 ) {
-	await page.goto('/cadastro');
-	await page.click('label:has-text("Cliente")');
+	await page.goto('/cadastro?tipo=cliente');
 	await page.fill('#nome', nome);
 	await page.fill('#email', email);
 	await page.fill('#telefone', '(11) 99999-8888');
@@ -146,7 +145,7 @@ test('prestador banido some da vitrine pública', async ({ page, request }) => {
 
 test('prestador logado não acessa /admin (é mandado ao painel)', async ({ page }) => {
 	// cadastro já deixa o prestador logado no /painel
-	await page.goto('/cadastro');
+	await page.goto('/cadastro?tipo=prestador');
 	await page.fill('#nome', 'Prestador Guard');
 	await page.fill('#email', emailUnico('guard'));
 	await page.fill('#telefone', '(11) 99999-8888');

@@ -6,8 +6,7 @@ test('login unificado autentica cliente e senha errada mostra erro', async ({ pa
 
 	// cadastra um cliente e confirma pelo link do email, para depois logar
 	// pela tela de login unificada
-	await page.goto('/cadastro');
-	await page.click('label:has-text("Cliente")');
+	await page.goto('/cadastro?tipo=cliente');
 	await page.fill('#nome', 'Cliente Login');
 	await page.fill('#email', email);
 	await page.fill('#telefone', '(11) 99999-8888');

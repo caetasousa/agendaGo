@@ -7,7 +7,7 @@ import { emailUnico, tokenDeRecuperacao } from './helpers';
 test('recupera a senha e loga com a nova', async ({ page, request }) => {
 	const email = emailUnico('recuperar');
 
-	await page.goto('/cadastro');
+	await page.goto('/cadastro?tipo=prestador');
 	await page.fill('#nome', 'Prestador Recuperar');
 	await page.fill('#email', email);
 	await page.fill('#telefone', '(11) 99999-8888');

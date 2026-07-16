@@ -7,7 +7,7 @@ test('acesso anônimo ao painel redireciona para login', async ({ page }) => {
 });
 
 test('logout pelo header volta para a home e mostra Entrar', async ({ page }) => {
-	await page.goto('/cadastro');
+	await page.goto('/cadastro?tipo=prestador');
 	await page.fill('#nome', 'Sessao Teste');
 	await page.fill('#email', emailUnico('sessao'));
 	await page.fill('#telefone', '(11) 99999-8888');

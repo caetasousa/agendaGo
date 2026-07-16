@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { emailUnico, tokenDeConfirmacaoCadastro } from './helpers';
 
 test('prestador acessa preferências, salva e vê o banner de sucesso', async ({ page }) => {
-	await page.goto('/cadastro');
+	await page.goto('/cadastro?tipo=prestador');
 	await page.fill('#nome', 'Preferencias Teste');
 	await page.fill('#email', emailUnico('preferencias'));
 	await page.fill('#telefone', '(11) 99999-8888');
@@ -24,7 +24,7 @@ test('prestador acessa preferências, salva e vê o banner de sucesso', async ({
 });
 
 test('prestador começa com o expediente comercial sugerido e pode editá-lo', async ({ page }) => {
-	await page.goto('/cadastro');
+	await page.goto('/cadastro?tipo=prestador');
 	await page.fill('#nome', 'Expediente Teste');
 	await page.fill('#email', emailUnico('expediente'));
 	await page.fill('#telefone', '(11) 99999-8888');
@@ -50,7 +50,7 @@ test('prestador começa com o expediente comercial sugerido e pode editá-lo', a
 });
 
 test('prestador define três períodos curtos no expediente padrão', async ({ page }) => {
-	await page.goto('/cadastro');
+	await page.goto('/cadastro?tipo=prestador');
 	await page.fill('#nome', 'Tres Periodos Teste');
 	await page.fill('#email', emailUnico('tres-periodos'));
 	await page.fill('#telefone', '(11) 99999-8888');
@@ -91,7 +91,7 @@ test('prestador define três períodos curtos no expediente padrão', async ({ p
 });
 
 test('expediente padrão configurado aparece no calendário de disponibilidade', async ({ page }) => {
-	await page.goto('/cadastro');
+	await page.goto('/cadastro?tipo=prestador');
 	await page.fill('#nome', 'Padrao Reflete Calendario');
 	await page.fill('#email', emailUnico('padrao-calendario'));
 	await page.fill('#telefone', '(11) 99999-8888');
@@ -134,8 +134,7 @@ test('expediente padrão configurado aparece no calendário de disponibilidade',
 test('cliente é redirecionado do painel de preferências para o painel', async ({ page, request }) => {
 	const email = emailUnico('cliente-preferencias');
 
-	await page.goto('/cadastro');
-	await page.click('label:has-text("Cliente")');
+	await page.goto('/cadastro?tipo=cliente');
 	await page.fill('#nome', 'Cliente Preferencias');
 	await page.fill('#email', email);
 	await page.fill('#telefone', '(11) 99999-8888');

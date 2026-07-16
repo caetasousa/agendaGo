@@ -10,7 +10,7 @@ function chaveLocal(data: Date): string {
 }
 
 async function cadastrarPrestador(page: Page, prefixo: string) {
-	await page.goto('/cadastro');
+	await page.goto('/cadastro?tipo=prestador');
 	await page.fill('#nome', 'Disponibilidade Teste');
 	await page.fill('#email', emailUnico(prefixo));
 	await page.fill('#telefone', '(11) 99999-8888');
@@ -158,8 +158,7 @@ test('restaurar padrão a partir de um bloqueio de hoje continua permitido', asy
 test('cliente é redirecionado do painel de disponibilidade para o painel', async ({ page, request }) => {
 	const email = emailUnico('cliente-disponibilidade');
 
-	await page.goto('/cadastro');
-	await page.click('label:has-text("Cliente")');
+	await page.goto('/cadastro?tipo=cliente');
 	await page.fill('#nome', 'Cliente Disponibilidade');
 	await page.fill('#email', email);
 	await page.fill('#telefone', '(11) 99999-8888');
