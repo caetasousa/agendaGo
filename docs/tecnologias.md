@@ -11,6 +11,8 @@ Este documento existe para quem quer entender **por que** cada peça do stack fo
 | Linguagem (backend) | [Go](https://go.dev) | API HTTP, domínio, persistência | 1.26 |
 | Arquitetura | Hexagonal (Ports & Adapters) | Organização do backend em `domain/usecase/adapter` | — |
 | Roteamento HTTP | [chi](https://github.com/go-chi/chi) | Router e middlewares da API | v5.3 |
+| CORS | [go-chi/cors](https://github.com/go-chi/cors) | Controle de origens permitidas nas respostas da API | v1.2 |
+| Rate limiting | [go-chi/httprate](https://github.com/go-chi/httprate) | Teto de requisições por IP (login, convidado, tokens) | v0.16 |
 | Banco de dados | [PostgreSQL](https://www.postgresql.org/) | Persistência relacional | 16 (alpine) |
 | Driver Postgres | [pgx](https://github.com/jackc/pgx) | Acesso ao banco a partir do Go | v5.10 |
 | Migrations | [Flyway](https://flywaydb.org/) | Versionamento de schema | 10 |
@@ -28,6 +30,7 @@ Este documento existe para quem quer entender **por que** cada peça do stack fo
 | Testes unitários (frontend) | [Vitest](https://vitest.dev/) | Testes do cliente HTTP e da store de sessão | 4.1 |
 | Testes E2E | [Playwright](https://playwright.dev/) | Fluxos de cadastro/login/sessão no browser real | 1.61 |
 | Orquestração local | [Docker Compose](https://docs.docker.com/compose/) | Sobe banco + migrations + API + web juntos | — |
+| Proxy reverso (produção) | [Caddy](https://caddyserver.com/) | HTTPS automático e origem única para frontend e API | 2 (alpine) |
 
 ---
 
@@ -41,6 +44,8 @@ Go é a linguagem escolhida pela simplicidade da sintaxe, tooling embutido (`go 
 - [A Tour of Go](https://go.dev/tour/) — interativo, cobre a sintaxe do zero
 - [Effective Go](https://go.dev/doc/effective_go) — como escrever Go idiomático (nomenclatura, erros, interfaces)
 - [Go by Example](https://gobyexample.com/) — referência rápida por tópico
+- [How to Write Go Code](https://go.dev/doc/code) — módulos, pacotes e a estrutura de um projeto Go
+- [Go Proverbs](https://go-proverbs.github.io/) — os princípios de design da linguagem, por Rob Pike
 
 ### Arquitetura Hexagonal (Ports & Adapters)
 
@@ -94,13 +99,14 @@ Esta é a parte mais rica para estudo — o agendaGo implementa autenticação s
 
 ### Hash de senha: Argon2id
 
-Senhas nunca são armazenadas em texto puro (ver a migration `V2__renomeia_coluna_senha_para_senha_hash.sql` e `internal/adapter/security/argon2id.go`). Argon2id é o algoritmo **recomendado atualmente** pela OWASP para hash de senha — venceu a Password Hashing Competition (2015) justamente por ser resistente a ataques com hardware especializado (GPU/ASIC), já que seu custo é dominado por acesso à memória, não só processamento.
+Senhas nunca são armazenadas em texto puro: a coluna `senha_hash` guarda só o hash (ver `internal/adapter/security/argon2id.go` e as migrations `V1__cria_tabela_providers.sql`/`V2__cria_tabela_clients.sql`, que já nascem com essa coluna). Argon2id é o algoritmo **recomendado atualmente** pela OWASP para hash de senha — venceu a Password Hashing Competition (2015) justamente por ser resistente a ataques com hardware especializado (GPU/ASIC), já que seu custo é dominado por acesso à memória, não só processamento.
 
 Os parâmetros usados (19 MiB, 2 iterações, salt de 16 bytes) seguem exatamente a recomendação mínima da OWASP para 2024+.
 
 **Para estudar:**
 - [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) (a referência prática nº 1)
 - [RFC 9106 — Argon2 Memory-Hard Function](https://www.rfc-editor.org/rfc/rfc9106.html) (a especificação formal do algoritmo)
+- [Password Hashing Competition](https://www.password-hashing.net/) (o concurso que elegeu o Argon2, com os finalistas e critérios)
 
 ### Sessões server-side + cookie HttpOnly
 
@@ -112,6 +118,20 @@ O atributo `HttpOnly` do cookie impede que JavaScript no browser leia o token �
 - [OWASP Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)
 - [MDN — Using HTTP cookies](https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies) (atributos `HttpOnly`, `Secure`, `SameSite`)
 - [Auth0 — Sessions vs. Tokens](https://auth0.com/blog/is-jwt-better-than-session-authentication/) (comparação prática dos dois modelos)
+
+### Tokens de uso único (recuperação de senha, confirmação de cadastro, cancelamento)
+
+O mesmo padrão da sessão — token opaco de 256 bits, guardado só como hash SHA-256 — reaparece em quatro fluxos por email, cada um numa tabela própria (`password_reset_tokens`, `cadastros_pendentes`, `pre_cadastro_tokens`, `cancelamento_tokens`). Três decisões de ciclo de vida se repetem em todos e valem o estudo:
+
+- **Expiração**: todo token tem prazo (`expira_em`) — 1h para recuperação de senha, 24h para confirmação/pré-cadastro. Um segredo que cria conta ou troca senha não pode valer para sempre.
+- **Uso único de verdade**: o consumo é atômico via `DELETE ... RETURNING` (ver `internal/adapter/repository/*_postgres.go`), então o token some no mesmo instante em que é usado, mesmo sob concorrência — não dá para reusar o link.
+- **Limpeza**: um worker em background (`internal/adapter/worker/cleanup.go`) remove periodicamente os tokens vencidos, para PII de contato não se acumular indefinidamente no banco.
+
+Repare também na postura **anti-enumeração**: o cadastro e a recuperação de senha respondem sempre igual, exista ou não o email (o aviso "você já tem conta" vai por email, não na resposta HTTP), para não revelar quais endereços estão cadastrados.
+
+**Para estudar:**
+- [OWASP Forgot Password Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html) (token de uso único, expiração, resposta genérica)
+- [OWASP Cryptographic Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html) (por que guardar o hash, não o token)
 
 ### Timing attacks e enumeração de usuários
 
@@ -140,6 +160,7 @@ Banco relacional open-source, escolhido pela maturidade, suporte a `UUID` nativo
 
 **Para estudar:**
 - [PostgreSQL — Tutorial oficial](https://www.postgresql.org/docs/current/tutorial.html)
+- [Use The Index, Luke!](https://use-the-index-luke.com/) — como índices funcionam (relevante para os índices em `expira_em`, `email` etc. das migrations)
 
 ### pgx
 
@@ -157,10 +178,20 @@ Cada mudança de schema é um arquivo SQL versionado (`backend/migrations/V1__..
 
 ### Docker Compose
 
-Orquestra Postgres + Flyway + API (com hot reload via [Air](https://github.com/air-verse/air)) + frontend em um único `docker compose up`, documentado no `docker-compose.yml` da raiz.
+Orquestra Postgres + Flyway + API (com hot reload via [Air](https://github.com/air-verse/air)) + frontend em um único `docker compose up`, documentado no `docker-compose.yml` da raiz. Produção tem um compose próprio (`docker-compose.prod.yml`) com as imagens `Dockerfile.prod` e o Caddy na frente — ver `docs/producao.md`.
 
 **Para estudar:**
 - [Docker Compose — visão geral](https://docs.docker.com/compose/)
+- [Docker — build multi-stage](https://docs.docker.com/build/building/multi-stage/) (como o `Dockerfile.prod` gera uma imagem final mínima)
+
+### Caddy (proxy reverso de produção)
+
+Em produção, um único Caddy termina o TLS (certificado Let's Encrypt **automático**) e serve frontend e API na **mesma origem**: `/api/*` vai para a API (o prefixo é removido antes de repassar) e o resto para o frontend. Origem única não é detalhe estético — é o que faz o cookie de sessão `SameSite=Lax` ser enviado nas chamadas do front para a API sem precisar mudar código nem afrouxar o cookie para `SameSite=None`. Ver `Caddyfile` e `docs/producao.md`.
+
+**Para estudar:**
+- [Caddy — Getting Started](https://caddyserver.com/docs/getting-started)
+- [Caddy — HTTPS automático](https://caddyserver.com/docs/automatic-https)
+- [MDN — SameSite cookies](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite) (por que a mesma origem importa)
 
 ---
 
@@ -170,7 +201,9 @@ Orquestra Postgres + Flyway + API (com hot reload via [Air](https://github.com/a
 
 Svelte se diferencia de React/Vue por ser um **compilador**: o código que você escreve vira JavaScript imperativo otimizado em build-time, sem Virtual DOM em runtime. A versão 5 introduziu **runes** (`$state`, `$derived`, `$effect`) — reatividade explícita via funções especiais, em vez de inferida pelo compilador a partir de atribuições. O agendaGo usa runes em todo o frontend, inclusive na store de sessão (`frontend/src/lib/stores/session.svelte.ts`), que é reatividade compartilhada fora de um componente `.svelte`.
 
-SvelteKit é o meta-framework por cima do Svelte: roteamento baseado em arquivos (`src/routes/`), SSR por padrão, e arquivos `+page.ts` para lógica de carregamento de dados (`load`). O projeto desabilita SSR explicitamente em `/login`, `/cadastro` e `/painel` (`export const ssr = false`) — o motivo está documentado no próprio código: o cookie de sessão é `HttpOnly` e a API roda em outra origem, então o servidor de SSR nunca teria acesso a ele.
+SvelteKit é o meta-framework por cima do Svelte: roteamento baseado em arquivos (`src/routes/`), SSR por padrão, e arquivos `+page.ts` para lógica de carregamento de dados (`load`). O projeto desabilita SSR explicitamente em páginas como `/login`, `/cadastro` e `/redefinir-senha` (`export const ssr = false`) — o motivo está no próprio código: com SSR existe uma janela em que o HTML já chegou mas o JavaScript ainda não hidratou os handlers, e um clique no formulário nesse instante dispararia o submit nativo (GET com os campos na URL) em vez do handler `onsubmit`. Renderizar só no cliente elimina essa janela. Além disso, esses fluxos dependem do cookie de sessão `HttpOnly`, que o servidor de SSR não enxerga.
+
+> Em **produção**, frontend e API ficam atrás do mesmo proxy (mesma origem — ver `docs/producao.md`), então o cookie `SameSite=Lax` é enviado normalmente nas chamadas do front para a API. Em desenvolvimento eles rodam em portas diferentes.
 
 **Para estudar:**
 - [Svelte 5 — documentação oficial](https://svelte.dev/docs/svelte/overview) (comece por "Runes")
