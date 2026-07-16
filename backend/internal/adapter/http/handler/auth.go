@@ -3,9 +3,11 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"agendago/internal/adapter/http/dto"
+	"agendago/internal/pkg/logging"
 	ucauth "agendago/internal/usecase/auth"
 
 	"github.com/go-playground/validator/v10"
@@ -67,7 +69,7 @@ func (h *AuthHandler) LoginProvider(w http.ResponseWriter, r *http.Request) {
 
 	out, err := h.loginProvider.Executar(ucauth.LoginInput{Email: req.Email, Senha: req.Senha})
 	if err != nil {
-		responderErroLogin(w, err)
+		responderErroLogin(w, r, "provider", req.Email, err)
 		return
 	}
 
@@ -95,7 +97,7 @@ func (h *AuthHandler) LoginClient(w http.ResponseWriter, r *http.Request) {
 
 	out, err := h.loginClient.Executar(ucauth.LoginInput{Email: req.Email, Senha: req.Senha})
 	if err != nil {
-		responderErroLogin(w, err)
+		responderErroLogin(w, r, "client", req.Email, err)
 		return
 	}
 
@@ -123,7 +125,7 @@ func (h *AuthHandler) LoginAdmin(w http.ResponseWriter, r *http.Request) {
 
 	out, err := h.loginAdmin.Executar(ucauth.LoginInput{Email: req.Email, Senha: req.Senha})
 	if err != nil {
-		responderErroLogin(w, err)
+		responderErroLogin(w, r, "admin", req.Email, err)
 		return
 	}
 
@@ -201,13 +203,21 @@ func decodificarLogin(w http.ResponseWriter, r *http.Request) (dto.LoginRequest,
 	return req, true
 }
 
-func responderErroLogin(w http.ResponseWriter, err error) {
+// responderErroLogin mapeia a falha de login para a resposta HTTP e registra
+// o evento de segurança: credenciais inválidas e usuário banido saem em WARN
+// (com tipo, email e IP) para permitir detectar brute-force e abuso; um erro
+// inesperado cai no 500 logado. A senha nunca é logada.
+func responderErroLogin(w http.ResponseWriter, r *http.Request, tipo, email string, err error) {
 	switch {
 	case errors.Is(err, ucauth.ErrCredenciaisInvalidas):
+		logging.RequisicaoLogger(r).Warn("falha de login: credenciais inválidas",
+			slog.String("tipo", tipo), slog.String("email", email), slog.String("ip", r.RemoteAddr))
 		responderErro(w, http.StatusUnauthorized, err.Error())
 	case errors.Is(err, ucauth.ErrUsuarioInativo):
+		logging.RequisicaoLogger(r).Warn("login bloqueado: usuário banido",
+			slog.String("tipo", tipo), slog.String("email", email), slog.String("ip", r.RemoteAddr))
 		responderErro(w, http.StatusForbidden, err.Error())
 	default:
-		responderErro(w, http.StatusInternalServerError, "erro interno")
+		responderErroInterno(w, r, err)
 	}
 }

@@ -5,7 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"html/template"
-	"log"
+	"log/slog"
 	"time"
 )
 
@@ -95,12 +95,14 @@ func (n *Notificador) enviar(destino, nomeDestino, assunto, nomeTemplate string,
 	n.executar(func() {
 		html, err := n.renderizar(nomeTemplate, dados)
 		if err != nil {
-			log.Printf("email: erro ao renderizar %s: %v", nomeTemplate, err)
+			slog.Error("email: erro ao renderizar template",
+				slog.String("template", nomeTemplate), slog.String("erro", err.Error()))
 			return
 		}
 		msg := Mensagem{Para: destino, NomePara: nomeDestino, Assunto: assunto, HTML: html}
 		if err := n.mailer.Enviar(msg); err != nil {
-			log.Printf("email: erro ao enviar %s para %s: %v", nomeTemplate, destino, err)
+			slog.Error("email: erro ao enviar",
+				slog.String("template", nomeTemplate), slog.String("para", destino), slog.String("erro", err.Error()))
 		}
 	})
 }

@@ -10,10 +10,20 @@
 # Sobe com:  docker compose -f docker-compose.prod.yml up -d --build
 # Consome as variáveis de um arquivo .env (veja .env.prod.example).
 
+# Rotação de log (driver json-file): sem isto, o log do Docker cresce sem
+# limite e enche o disco do host ao longo do tempo. Mantém no máximo 3 arquivos
+# de 10 MB por serviço.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '3'
+
 services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -50,6 +60,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile.prod
     restart: unless-stopped
+    logging: *logging
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
@@ -90,6 +101,7 @@ services:
         # API na mesma origem, sob o prefixo /api que o Caddy remove.
         PUBLIC_API_URL: https://${DOMINIO}/api
     restart: unless-stopped
+    logging: *logging
     environment:
       # adapter-node atrás de proxy: conhece a origem pública e confia nos
       # cabeçalhos X-Forwarded-* do Caddy.
@@ -100,6 +112,7 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    logging: *logging
     ports:
       - '80:80'
       - '443:443'

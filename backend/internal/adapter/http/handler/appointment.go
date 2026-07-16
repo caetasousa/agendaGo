@@ -81,7 +81,7 @@ func (h *AppointmentHandler) ConsultarSlots(w http.ResponseWriter, r *http.Reque
 		Agora:      time.Now(),
 	})
 	if err != nil {
-		responderErroAgendamento(w, err)
+		responderErroAgendamento(w, r, err)
 		return
 	}
 
@@ -147,7 +147,7 @@ func (h *AppointmentHandler) Solicitar(w http.ResponseWriter, r *http.Request) {
 		Agora:         time.Now(),
 	})
 	if err != nil {
-		responderErroAgendamento(w, err)
+		responderErroAgendamento(w, r, err)
 		return
 	}
 
@@ -206,7 +206,7 @@ func (h *AppointmentHandler) SolicitarConvidado(w http.ResponseWriter, r *http.R
 		Agora:         time.Now(),
 	})
 	if err != nil {
-		responderErroAgendamento(w, err)
+		responderErroAgendamento(w, r, err)
 		return
 	}
 
@@ -265,7 +265,7 @@ func (h *AppointmentHandler) listarAgendamentos(
 
 	out, err := listar(ucappointment.ListarInput{UsuarioID: id.UserID, Agora: time.Now()})
 	if err != nil {
-		responderErroAgendamento(w, err)
+		responderErroAgendamento(w, r, err)
 		return
 	}
 
@@ -348,7 +348,7 @@ func (h *AppointmentHandler) Cancelar(w http.ResponseWriter, r *http.Request) {
 func (h *AppointmentHandler) DetalharCancelamento(w http.ResponseWriter, r *http.Request) {
 	out, err := h.cancelarPorToken.Detalhar(chi.URLParam(r, "token"), time.Now())
 	if err != nil {
-		responderErroAgendamento(w, err)
+		responderErroAgendamento(w, r, err)
 		return
 	}
 
@@ -375,7 +375,7 @@ func (h *AppointmentHandler) DetalharCancelamento(w http.ResponseWriter, r *http
 func (h *AppointmentHandler) CancelarPorToken(w http.ResponseWriter, r *http.Request) {
 	err := h.cancelarPorToken.Executar(chi.URLParam(r, "token"), time.Now())
 	if err != nil {
-		responderErroAgendamento(w, err)
+		responderErroAgendamento(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -429,14 +429,14 @@ func (h *AppointmentHandler) transicionarAgendamento(
 		Agora:         time.Now(),
 	})
 	if err != nil {
-		responderErroAgendamento(w, err)
+		responderErroAgendamento(w, r, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func responderErroAgendamento(w http.ResponseWriter, err error) {
+func responderErroAgendamento(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, ucappointment.ErrPeriodoInvalido),
 		errors.Is(err, domclient.ErrTelefoneObrigatorio),
@@ -460,6 +460,6 @@ func responderErroAgendamento(w http.ResponseWriter, err error) {
 		errors.Is(err, domappointment.ErrAtendimentoNaoIniciado):
 		responderErro(w, http.StatusConflict, err.Error())
 	default:
-		responderErro(w, http.StatusInternalServerError, "erro interno")
+		responderErroInterno(w, r, err)
 	}
 }

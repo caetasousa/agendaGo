@@ -27,7 +27,13 @@
 		@swagger path /swagger /swagger/*
 		respond @swagger 404
 
-		reverse_proxy api:8080
+		reverse_proxy api:8080 {
+			# passa o IP real do cliente ({remote_host} é o peer da conexão,
+			# não forjável) para a API logar e limitar por IP corretamente —
+			# sem isto ela veria sempre o IP do container do Caddy. header_up
+			# substitui qualquer X-Real-IP que o cliente tente enviar.
+			header_up X-Real-IP {remote_host}
+		}
 	}
 
 	# Todo o resto é o frontend.

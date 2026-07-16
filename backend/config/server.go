@@ -7,6 +7,7 @@ import (
 	"time"
 
 	appmiddleware "agendago/internal/adapter/http/middleware"
+	"agendago/internal/pkg/logging"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -32,11 +33,17 @@ func OrigemFrontend() string {
 	return "http://localhost:5173"
 }
 
+// EhProducao informa se o processo roda em produção (env APP_ENV=production).
+// Decide o formato do log (JSON vs texto) e o atributo Secure do cookie.
+func EhProducao() bool {
+	return os.Getenv("APP_ENV") == "production"
+}
+
 // CookieSeguro informa se o cookie de sessão deve ter o atributo Secure.
 // Em desenvolvimento (http://localhost) o navegador nem sempre entrega
 // cookies Secure de forma confiável, por isso o atributo só é ativado em produção.
 func CookieSeguro() bool {
-	return os.Getenv("APP_ENV") == "production"
+	return EhProducao()
 }
 
 // AdminEmail e AdminSenha são as credenciais do administrador semeado no boot.
@@ -94,11 +101,17 @@ func NovoServidor(r *chi.Mux) *Servidor {
 // maxBytesCorpo limita o corpo de qualquer requisição — a API só troca JSONs pequenos.
 const maxBytesCorpo = 1 << 20 // 1 MiB
 
-// NovoRouter cria um roteador chi com middlewares de log, recuperação de
-// panics, limite de corpo e swagger.
+// NovoRouter cria um roteador chi com middlewares de request ID, IP real
+// (atrás do proxy), log estruturado de acesso, recuperação de panics, limite
+// de corpo, CORS e swagger. A ordem importa: RequestID primeiro (para o log e
+// os handlers terem o id); IPReal antes do log e do rate limit por IP (para
+// verem o cliente, não o proxy); o log de acesso por fora do Recoverer (para
+// registrar também os 500 que o Recoverer produz).
 func NovoRouter() *chi.Mux {
 	r := chi.NewRouter()
-	r.Use(middleware.Logger)
+	r.Use(middleware.RequestID)
+	r.Use(appmiddleware.IPReal)
+	r.Use(logging.Middleware)
 	r.Use(middleware.Recoverer)
 	r.Use(appmiddleware.LimitarCorpo(maxBytesCorpo))
 	r.Use(cors.Handler(cors.Options{

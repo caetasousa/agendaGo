@@ -4,7 +4,7 @@ package worker
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 )
 
@@ -47,6 +47,6 @@ func (w *ReminderWorker) Executar(ctx context.Context) {
 
 func (w *ReminderWorker) checar() {
 	if err := w.lembrar.Executar(time.Now()); err != nil {
-		log.Printf("worker de lembrete: erro ao checar agendamentos: %v", err)
+		slog.Error("worker de lembrete: erro ao checar agendamentos", slog.String("erro", err.Error()))
 	}
 }

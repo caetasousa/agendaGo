@@ -2,7 +2,7 @@ package worker
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 )
 
@@ -52,7 +52,7 @@ func (w *CleanupWorker) Executar(ctx context.Context) {
 func (w *CleanupWorker) limpar() {
 	for _, repo := range w.repos {
 		if err := repo.RemoverExpirados(); err != nil {
-			log.Printf("worker de limpeza: erro ao remover tokens expirados: %v", err)
+			slog.Error("worker de limpeza: erro ao remover tokens expirados", slog.String("erro", err.Error()))
 		}
 	}
 }

@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"reflect"
 
 	"agendago/internal/adapter/http/dto"
 	"agendago/internal/domain/availability"
 	"agendago/internal/domain/provider"
+	"agendago/internal/pkg/logging"
 	ucauth "agendago/internal/usecase/auth"
 	ucprovider "agendago/internal/usecase/provider"
 
@@ -85,7 +87,7 @@ func (h *ProviderHandler) Cadastrar(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, ucprovider.ErrEmailJaCadastrado):
 			responderErro(w, http.StatusConflict, err.Error())
 		default:
-			responderErro(w, http.StatusInternalServerError, "erro interno")
+			responderErroInterno(w, r, err)
 		}
 		return
 	}
@@ -160,7 +162,7 @@ func (h *ProviderHandler) AtualizarPreferencias(w http.ResponseWriter, r *http.R
 		case errors.Is(err, ucprovider.ErrProviderNaoEncontrado):
 			responderErro(w, http.StatusNotFound, err.Error())
 		default:
-			responderErro(w, http.StatusInternalServerError, "erro interno")
+			responderErroInterno(w, r, err)
 		}
 		return
 	}
@@ -206,6 +208,15 @@ func responderErro(w http.ResponseWriter, status int, msg string) {
 	responderJSON(w, status, map[string]string{"erro": msg})
 }
 
+// responderErroInterno loga o erro real (com request_id e rota, para
+// correlação e diagnóstico) e responde 500 genérico. O erro nunca vai para o
+// corpo da resposta — só para o log —, então em produção dá para descobrir
+// por que uma requisição falhou sem vazar detalhes internos ao cliente.
+func responderErroInterno(w http.ResponseWriter, r *http.Request, err error) {
+	logging.RequisicaoLogger(r).Error("erro interno no handler", slog.String("erro", err.Error()))
+	responderErro(w, http.StatusInternalServerError, "erro interno")
+}
+
 // Listar godoc
 //
 //	@Summary		Listar prestadores
@@ -217,7 +228,7 @@ func responderErro(w http.ResponseWriter, status int, msg string) {
 func (h *ProviderHandler) Listar(w http.ResponseWriter, r *http.Request) {
 	out, err := h.listar.Executar()
 	if err != nil {
-		responderErro(w, http.StatusInternalServerError, "erro interno")
+		responderErroInterno(w, r, err)
 		return
 	}
 
@@ -246,7 +257,7 @@ func (h *ProviderHandler) BuscarResumo(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, ucprovider.ErrProviderNaoEncontrado):
 			responderErro(w, http.StatusNotFound, err.Error())
 		default:
-			responderErro(w, http.StatusInternalServerError, "erro interno")
+			responderErroInterno(w, r, err)
 		}
 		return
 	}

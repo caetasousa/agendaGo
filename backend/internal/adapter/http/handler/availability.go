@@ -81,7 +81,7 @@ func (h *AvailabilityHandler) ConsultarAgenda(w http.ResponseWriter, r *http.Req
 		Ate:        ate,
 	})
 	if err != nil {
-		responderErroDisponibilidade(w, err)
+		responderErroDisponibilidade(w, r, err)
 		return
 	}
 
@@ -154,7 +154,7 @@ func (h *AvailabilityHandler) DefinirDia(w http.ResponseWriter, r *http.Request)
 		Blocos:     blocos,
 	})
 	if err != nil {
-		responderErroDisponibilidade(w, err)
+		responderErroDisponibilidade(w, r, err)
 		return
 	}
 
@@ -190,14 +190,14 @@ func (h *AvailabilityHandler) RemoverDia(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := h.removerDia.Executar(ucavailability.RemoverDiaInput{ProviderID: id.UserID, Data: data}); err != nil {
-		responderErroDisponibilidade(w, err)
+		responderErroDisponibilidade(w, r, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func responderErroDisponibilidade(w http.ResponseWriter, err error) {
+func responderErroDisponibilidade(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, availability.ErrFimAntesDoInicio),
 		errors.Is(err, availability.ErrForaDoDia),
@@ -214,7 +214,7 @@ func responderErroDisponibilidade(w http.ResponseWriter, err error) {
 	case errors.Is(err, ucavailability.ErrDiaNaoDefinido):
 		responderErro(w, http.StatusNotFound, err.Error())
 	default:
-		responderErro(w, http.StatusInternalServerError, "erro interno")
+		responderErroInterno(w, r, err)
 	}
 }
 

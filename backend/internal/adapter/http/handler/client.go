@@ -61,7 +61,7 @@ func (h *ClientHandler) Cadastrar(w http.ResponseWriter, r *http.Request) {
 		Telefone: req.Telefone,
 		Senha:    req.Senha,
 	}); err != nil {
-		responderErro(w, http.StatusInternalServerError, "erro interno")
+		responderErroInterno(w, r, err)
 		return
 	}
 
@@ -85,7 +85,7 @@ func (h *ClientHandler) ConsultarPreCadastro(w http.ResponseWriter, r *http.Requ
 			responderErro(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		responderErro(w, http.StatusInternalServerError, "erro interno")
+		responderErroInterno(w, r, err)
 		return
 	}
 
@@ -128,7 +128,7 @@ func (h *ClientHandler) ConcluirPreCadastro(w http.ResponseWriter, r *http.Reque
 			responderErro(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		responderErro(w, http.StatusInternalServerError, "erro interno")
+		responderErroInterno(w, r, err)
 		return
 	}
 
@@ -161,7 +161,7 @@ func (h *ClientHandler) ConfirmarCadastro(w http.ResponseWriter, r *http.Request
 			responderErro(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		responderErro(w, http.StatusInternalServerError, "erro interno")
+		responderErroInterno(w, r, err)
 		return
 	}
 

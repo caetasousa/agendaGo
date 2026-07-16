@@ -44,7 +44,7 @@ func (h *PasswordResetHandler) Solicitar(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := h.solicitar.Executar(req.Email); err != nil {
-		responderErro(w, http.StatusInternalServerError, "erro interno")
+		responderErroInterno(w, r, err)
 		return
 	}
 
@@ -77,7 +77,7 @@ func (h *PasswordResetHandler) Redefinir(w http.ResponseWriter, r *http.Request)
 			responderErro(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		responderErro(w, http.StatusInternalServerError, "erro interno")
+		responderErroInterno(w, r, err)
 		return
 	}
 

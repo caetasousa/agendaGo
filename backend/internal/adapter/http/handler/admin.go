@@ -36,7 +36,7 @@ func NovoAdminHandler(moderar *ucadmin.ModerarUseCase, detalhar *ucadmin.Detalha
 func (h *AdminHandler) ListarPrestadores(w http.ResponseWriter, r *http.Request) {
 	usuarios, err := h.moderar.ListarPrestadores()
 	if err != nil {
-		responderErro(w, http.StatusInternalServerError, "erro interno")
+		responderErroInterno(w, r, err)
 		return
 	}
 	responderJSON(w, http.StatusOK, dto.ListarUsuariosResponse{Usuarios: usuariosParaDTO(usuarios)})
@@ -55,7 +55,7 @@ func (h *AdminHandler) ListarPrestadores(w http.ResponseWriter, r *http.Request)
 func (h *AdminHandler) ListarClientes(w http.ResponseWriter, r *http.Request) {
 	usuarios, err := h.moderar.ListarClientes()
 	if err != nil {
-		responderErro(w, http.StatusInternalServerError, "erro interno")
+		responderErroInterno(w, r, err)
 		return
 	}
 	responderJSON(w, http.StatusOK, dto.ListarUsuariosResponse{Usuarios: usuariosParaDTO(usuarios)})
@@ -76,7 +76,7 @@ func (h *AdminHandler) ListarClientes(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) DetalharPrestador(w http.ResponseWriter, r *http.Request) {
 	d, err := h.detalhar.Prestador(chi.URLParam(r, "id"), time.Now())
 	if err != nil {
-		h.responder(w, err)
+		h.responder(w, r, err)
 		return
 	}
 
@@ -107,7 +107,7 @@ func (h *AdminHandler) DetalharPrestador(w http.ResponseWriter, r *http.Request)
 func (h *AdminHandler) DetalharCliente(w http.ResponseWriter, r *http.Request) {
 	d, err := h.detalhar.Cliente(chi.URLParam(r, "id"), time.Now())
 	if err != nil {
-		h.responder(w, err)
+		h.responder(w, r, err)
 		return
 	}
 
@@ -133,7 +133,7 @@ func (h *AdminHandler) DetalharCliente(w http.ResponseWriter, r *http.Request) {
 //	@Failure		404	{object}	map[string]string
 //	@Router			/admin/prestadores/{id}/banir [post]
 func (h *AdminHandler) BanirPrestador(w http.ResponseWriter, r *http.Request) {
-	h.responder(w, h.moderar.BanirPrestador(chi.URLParam(r, "id")))
+	h.responder(w, r, h.moderar.BanirPrestador(chi.URLParam(r, "id")))
 }
 
 // ReativarPrestador godoc
@@ -147,7 +147,7 @@ func (h *AdminHandler) BanirPrestador(w http.ResponseWriter, r *http.Request) {
 //	@Failure		404	{object}	map[string]string
 //	@Router			/admin/prestadores/{id}/reativar [post]
 func (h *AdminHandler) ReativarPrestador(w http.ResponseWriter, r *http.Request) {
-	h.responder(w, h.moderar.ReativarPrestador(chi.URLParam(r, "id")))
+	h.responder(w, r, h.moderar.ReativarPrestador(chi.URLParam(r, "id")))
 }
 
 // BanirCliente godoc
@@ -161,7 +161,7 @@ func (h *AdminHandler) ReativarPrestador(w http.ResponseWriter, r *http.Request)
 //	@Failure		404	{object}	map[string]string
 //	@Router			/admin/clientes/{id}/banir [post]
 func (h *AdminHandler) BanirCliente(w http.ResponseWriter, r *http.Request) {
-	h.responder(w, h.moderar.BanirCliente(chi.URLParam(r, "id")))
+	h.responder(w, r, h.moderar.BanirCliente(chi.URLParam(r, "id")))
 }
 
 // ReativarCliente godoc
@@ -175,17 +175,17 @@ func (h *AdminHandler) BanirCliente(w http.ResponseWriter, r *http.Request) {
 //	@Failure		404	{object}	map[string]string
 //	@Router			/admin/clientes/{id}/reativar [post]
 func (h *AdminHandler) ReativarCliente(w http.ResponseWriter, r *http.Request) {
-	h.responder(w, h.moderar.ReativarCliente(chi.URLParam(r, "id")))
+	h.responder(w, r, h.moderar.ReativarCliente(chi.URLParam(r, "id")))
 }
 
-func (h *AdminHandler) responder(w http.ResponseWriter, err error) {
+func (h *AdminHandler) responder(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case err == nil:
 		w.WriteHeader(http.StatusNoContent)
 	case errors.Is(err, ucadmin.ErrProviderNaoEncontrado), errors.Is(err, ucadmin.ErrClientNaoEncontrado):
 		responderErro(w, http.StatusNotFound, err.Error())
 	default:
-		responderErro(w, http.StatusInternalServerError, "erro interno")
+		responderErroInterno(w, r, err)
 	}
 }
 

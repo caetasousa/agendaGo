@@ -11,7 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -27,6 +27,7 @@ import (
 	"agendago/internal/adapter/repository"
 	"agendago/internal/adapter/security"
 	"agendago/internal/adapter/worker"
+	"agendago/internal/pkg/logging"
 	ucadmin "agendago/internal/usecase/admin"
 	ucappointment "agendago/internal/usecase/appointment"
 	ucauth "agendago/internal/usecase/auth"
@@ -39,6 +40,10 @@ import (
 )
 
 func main() {
+	// logger estruturado (slog): JSON em produção, texto legível em dev.
+	// Configurado antes de tudo, para todo log já sair no formato certo.
+	logging.Configurar(config.EhProducao())
+
 	// contexto de vida da aplicação: cancelado em SIGINT/SIGTERM, usado pelo
 	// desligamento gracioso do servidor HTTP e do worker de lembretes
 	ctx, parar := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -47,7 +52,8 @@ func main() {
 	// banco de dados
 	pool, err := config.NovoPool(context.Background())
 	if err != nil {
-		log.Fatalf("erro ao conectar no banco: %v", err)
+		slog.Error("erro ao conectar no banco", slog.String("erro", err.Error()))
+		os.Exit(1)
 	}
 	defer pool.Close()
 
@@ -74,14 +80,15 @@ func main() {
 
 	// semente do admin (idempotente): cria/atualiza a partir das env vars
 	if err := ucadmin.NovoSemearUseCase(adminRepo, hasher).Executar(config.AdminEmail(), config.AdminSenha()); err != nil {
-		log.Fatalf("erro ao semear admin: %v", err)
+		slog.Error("erro ao semear admin", slog.String("erro", err.Error()))
+		os.Exit(1)
 	}
 
 	// aviso alto-visibilidade: rate limit desligado (RATE_LIMIT_*=0) some com
 	// o teto de login, cadastro e brute-force de token — fácil de esquecer
 	// ligado numa env de deploy copiada de dev
 	if config.RateLimitLoginPorMinuto() == 0 || config.RateLimitConvidadoPorMinuto() == 0 {
-		log.Println("ATENÇÃO: rate limiting desligado (RATE_LIMIT_LOGIN_POR_MINUTO=0 ou RATE_LIMIT_CONVIDADO_POR_MINUTO=0) — login, cadastro e tokens ficam sem teto por IP")
+		slog.Warn("rate limiting desligado (RATE_LIMIT_LOGIN_POR_MINUTO=0 ou RATE_LIMIT_CONVIDADO_POR_MINUTO=0): login, cadastro e tokens ficam sem teto por IP")
 	}
 
 	// usecases
@@ -239,24 +246,25 @@ func main() {
 	// conexões novas e as requisições em andamento têm um prazo para concluir
 	srv := config.NovoServidor(r)
 	go func() {
-		log.Printf("servidor iniciado na porta %s", config.Porta())
+		slog.Info("servidor iniciado", slog.String("porta", config.Porta()))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("erro ao iniciar servidor: %v", err)
+			slog.Error("erro ao iniciar servidor", slog.String("erro", err.Error()))
+			os.Exit(1)
 		}
 	}()
 
 	<-ctx.Done()
 
-	log.Println("encerrando: aguardando requisições em andamento")
+	slog.Info("encerrando: aguardando requisições em andamento")
 	ctxDesligamento, cancelar := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelar()
 	if err := srv.Shutdown(ctxDesligamento); err != nil {
-		log.Printf("desligamento forçado: %v", err)
+		slog.Error("desligamento forçado", slog.String("erro", err.Error()))
 	}
 
 	// espera o worker parar e os emails assíncronos pendentes terminarem
 	tarefasEmFundo.Wait()
-	log.Println("servidor encerrado")
+	slog.Info("servidor encerrado")
 }
 
 // novoMailer cria o transporte de email: SMTP real quando configurado
@@ -271,7 +279,8 @@ func novoMailer() interface{ Enviar(email.Mensagem) error } {
 		config.SMTPStartTLS(), config.EmailRemetente(), config.EmailRemetenteNome(), config.EmailReplyTo(),
 	)
 	if err != nil {
-		log.Fatalf("erro ao configurar SMTP: %v", err)
+		slog.Error("erro ao configurar SMTP", slog.String("erro", err.Error()))
+		os.Exit(1)
 	}
 	return m
 }
