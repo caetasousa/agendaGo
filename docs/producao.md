@@ -125,7 +125,7 @@ O `docker-compose.prod.yml` já injeta na API os valores certos a partir do
 |---|---|---|---|
 | `DOMINIO` | sim | — | hostname público; usado pelo Caddy (TLS), pelo build do front (`PUBLIC_API_URL`) e como `FRONTEND_ORIGIN` |
 | `POSTGRES_DB/USER/PASSWORD` | sim | — | banco (a API recebe como `DB_*`) |
-| `APP_ENV` | sim | `production` (fixo no compose) | liga o `Secure` do cookie de sessão |
+| `APP_ENV` | sim | `production` (fixo no compose) | liga o `Secure` do cookie de sessão **e** o log em JSON |
 | `FRONTEND_ORIGIN` | sim | `https://${DOMINIO}` (fixo) | origem no CORS **e** base dos links dos emails |
 | `ADMIN_EMAIL/SENHA` | recomendado | — | semeiam o admin no boot (vazias = sem admin) |
 | `RATE_LIMIT_LOGIN_POR_MINUTO` | não | `10` | teto de logins por IP/min (0 desliga — **não use 0**) |
@@ -154,8 +154,30 @@ sair), então o redeploy não derruba requests no meio.
 ## Manutenção
 
 - **Backup do banco**: `docker compose -f docker-compose.prod.yml exec postgres pg_dump -U agendago agendago > backup.sql`. Agende via cron.
-- **Logs**: `docker compose -f docker-compose.prod.yml logs -f api` (ou `caddy`, `web`).
 - **Certificado TLS**: o Caddy renova sozinho; os certificados persistem no volume `caddy_data`.
+
+### Logs
+
+Em produção (`APP_ENV=production`) a API emite **JSON estruturado** em stdout —
+uma linha por evento, parseável por qualquer agregador (Loki, CloudWatch,
+Datadog). O compose já configura rotação (`json-file`, 3 arquivos de 10 MB por
+serviço), então o disco do host não enche.
+
+```bash
+docker compose -f docker-compose.prod.yml logs -f api      # segue o log da API
+docker compose -f docker-compose.prod.yml logs api | jq    # formata o JSON
+
+# só os erros (500 já trazem o erro real, com request_id):
+docker compose -f docker-compose.prod.yml logs api | jq 'select(.level=="ERROR")'
+
+# eventos de segurança (login falho, conta banida):
+docker compose -f docker-compose.prod.yml logs api | jq 'select(.level=="WARN")'
+```
+
+Cada requisição gera uma linha de acesso com `request_id`, `rota` (o padrão, não
+o caminho — tokens não aparecem no log), `status`, `duracao` e `ip` (o do
+cliente real, resolvido do `X-Real-IP` que o Caddy define). O mesmo `request_id`
+liga a linha de acesso ao log de erro/segurança da mesma requisição.
 
 ## Build manual das imagens (sem compose)
 

@@ -13,6 +13,7 @@ Este documento existe para quem quer entender **por que** cada peça do stack fo
 | Roteamento HTTP | [chi](https://github.com/go-chi/chi) | Router e middlewares da API | v5.3 |
 | CORS | [go-chi/cors](https://github.com/go-chi/cors) | Controle de origens permitidas nas respostas da API | v1.2 |
 | Rate limiting | [go-chi/httprate](https://github.com/go-chi/httprate) | Teto de requisições por IP (login, convidado, tokens) | v0.16 |
+| Logging | [log/slog](https://pkg.go.dev/log/slog) | Logs estruturados (JSON em produção) com correlação por requisição | stdlib |
 | Banco de dados | [PostgreSQL](https://www.postgresql.org/) | Persistência relacional | 16 (alpine) |
 | Driver Postgres | [pgx](https://github.com/jackc/pgx) | Acesso ao banco a partir do Go | v5.10 |
 | Migrations | [Flyway](https://flywaydb.org/) | Versionamento de schema | 10 |
@@ -192,6 +193,23 @@ Em produção, um único Caddy termina o TLS (certificado Let's Encrypt **autom�
 - [Caddy — Getting Started](https://caddyserver.com/docs/getting-started)
 - [Caddy — HTTPS automático](https://caddyserver.com/docs/automatic-https)
 - [MDN — SameSite cookies](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite) (por que a mesma origem importa)
+
+### Logging estruturado: log/slog
+
+O sistema usa o `log/slog` (structured logging da biblioteca padrão, Go 1.21+) em vez do `log` puro — configurado em `internal/pkg/logging/logging.go`. Em **produção** emite JSON (uma linha = um objeto, parseável campo a campo por agregadores como Loki/CloudWatch/Datadog); em **desenvolvimento**, texto legível no terminal. A escolha entre os dois é `APP_ENV=production`.
+
+Três decisões tornam o log útil em produção, não só ruído:
+
+- **Correlação por requisição**: um middleware (`middleware.RequestID` do chi) gera um `request_id` por requisição, e `logging.RequisicaoLogger(r)` anexa esse id (mais a rota) a todos os logs daquela requisição — inclusive o log de acesso e o log de erro, que passam a casar pelo mesmo id.
+- **O erro real nunca some**: o cliente recebe sempre `{"erro":"erro interno"}` num 500 (não vaza detalhes internos), mas `responderErroInterno` (`internal/adapter/http/handler/provider.go`) loga o erro de verdade (ex.: falha de conexão com o Postgres) em nível ERROR, com o request_id — sem isso, um 500 em produção seria uma caixa-preta.
+- **Rota, não caminho**: o log de acesso registra o padrão da rota (`/agendamentos/cancelar/{token}`), não o caminho real, para que tokens em path não vão parar nos logs.
+
+Eventos de segurança (login falho, tentativa de conta banida) saem em **WARN** com tipo/email/IP — a senha nunca é logada —, para permitir detectar brute-force. O IP real do cliente chega via `X-Real-IP` que o Caddy define de forma não-forjável (`internal/adapter/http/middleware/real_ip.go`); sem isso, atrás do proxy, tanto o log quanto o rate limit por IP veriam só o IP do container do Caddy.
+
+**Para estudar:**
+- [Go — pacote log/slog](https://pkg.go.dev/log/slog) (handlers, níveis, atributos estruturados)
+- [The Twelve-Factor App — Logs](https://12factor.net/logs) (por que logar para stdout como fluxo de eventos, não para arquivo)
+- [OWASP Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html) (o que logar — e o que nunca logar — em eventos de segurança)
 
 ---
 
