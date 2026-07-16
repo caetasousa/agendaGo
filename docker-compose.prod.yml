@@ -1,0 +1,119 @@
+# Stack de PRODUÇÃO: um único host rodando tudo atrás do Caddy, que termina o
+# TLS (HTTPS automático via Let's Encrypt) e serve frontend e API na MESMA
+# origem — Caddy roteia /api/* para a API e todo o resto para o frontend. Como
+# é uma origem só, o cookie de sessão (SameSite=Lax) funciona sem mudança de
+# código, e não há CORS entre front e API.
+#
+# Diferente do docker-compose.yml (dev): imagens de produção (Dockerfile.prod),
+# sem hot reload, sem Mailpit (usa SMTP real), Postgres sem porta pública.
+#
+# Sobe com:  docker compose -f docker-compose.prod.yml up -d --build
+# Consome as variáveis de um arquivo .env (veja .env.prod.example).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    # sem `ports`: o banco só é alcançável pela rede interna do compose
+    # (API e job de migration), nunca pela internet.
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER}']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Job pontual: aplica as migrations e sai. A API só sobe depois que ele
+  # termina com sucesso (depends_on: service_completed_successfully).
+  flyway:
+    image: flyway/flyway:10-alpine
+    command: migrate
+    environment:
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      FLYWAY_USER: ${POSTGRES_USER}
+      FLYWAY_PASSWORD: ${POSTGRES_PASSWORD}
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql
+      FLYWAY_BASELINE_ON_MIGRATE: 'true'
+    volumes:
+      - ./backend/migrations:/flyway/sql:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      # production liga o atributo Secure do cookie de sessão (exige HTTPS,
+      # que o Caddy fornece).
+      APP_ENV: production
+      # Origem pública do frontend: usada no CORS E como base dos links nos
+      # emails (recuperação de senha, cadastro, cancelamento). Como front e API
+      # ficam na mesma origem atrás do Caddy, é a URL raiz do site.
+      FRONTEND_ORIGIN: https://${DOMINIO}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_SENHA: ${ADMIN_SENHA}
+      # Rate limiting por IP (padrão 10/min quando ausente). NÃO deixe 0 em produção.
+      RATE_LIMIT_LOGIN_POR_MINUTO: ${RATE_LIMIT_LOGIN_POR_MINUTO:-10}
+      RATE_LIMIT_CONVIDADO_POR_MINUTO: ${RATE_LIMIT_CONVIDADO_POR_MINUTO:-10}
+      # SMTP real (ex.: Brevo). Vazio desliga o envio (emails só são logados).
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+      EMAIL_REMETENTE: ${EMAIL_REMETENTE}
+      EMAIL_REMETENTE_NOME: ${EMAIL_REMETENTE_NOME:-agendaGo}
+      EMAIL_REPLY_TO: ${EMAIL_REPLY_TO}
+    depends_on:
+      flyway:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        # Resolvida em tempo de BUILD (import.meta.env do Vite). Aponta para a
+        # API na mesma origem, sob o prefixo /api que o Caddy remove.
+        PUBLIC_API_URL: https://${DOMINIO}/api
+    restart: unless-stopped
+    environment:
+      # adapter-node atrás de proxy: conhece a origem pública e confia nos
+      # cabeçalhos X-Forwarded-* do Caddy.
+      ORIGIN: https://${DOMINIO}
+      PROTOCOL_HEADER: x-forwarded-proto
+      HOST_HEADER: x-forwarded-host
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      DOMINIO: ${DOMINIO}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data # certificados (persistem entre restarts)
+      - caddy_config:/config
+    depends_on:
+      - api
+      - web
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,37 @@
+# Proxy reverso de produção. O Caddy pega um certificado Let's Encrypt
+# automaticamente para {$DOMINIO} (precisa das portas 80/443 abertas e do
+# domínio apontando para o IP do host) e serve tudo numa origem só:
+#
+#   /api/*  -> API Go (o prefixo /api é removido antes de repassar)
+#   /*      -> frontend SvelteKit (servidor Node do adapter-node)
+#
+# Origem única = o cookie de sessão SameSite=Lax funciona sem mudança de código
+# e não há CORS entre frontend e API.
+
+{$DOMINIO} {
+	encode gzip zstd
+
+	# Cabeçalhos de segurança seguros (não quebram o app). HSTS assume
+	# compromisso com HTTPS — correto atrás do Caddy.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# API sob /api/* — handle_path remove o prefixo (/api/auth/me -> /auth/me).
+	handle_path /api/* {
+		# a documentação Swagger não fica exposta na internet em produção
+		@swagger path /swagger /swagger/*
+		respond @swagger 404
+
+		reverse_proxy api:8080
+	}
+
+	# Todo o resto é o frontend.
+	handle {
+		reverse_proxy web:3000
+	}
+}
