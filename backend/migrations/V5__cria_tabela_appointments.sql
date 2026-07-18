@@ -2,17 +2,24 @@
 -- data (minutos desde a meia-noite, fuso único do sistema). A máquina de
 -- estados, o TTL e o anti-overbooking (lock transacional + checagem de
 -- conflito) são responsabilidade do domínio/usecase, não do banco.
+-- lembrete_enviado_em NULL significa "ainda não enviado". observacao é uma
+-- nota livre opcional, escrita por quem solicita. marcado_pelo_prestador
+-- indica um registro que o próprio prestador criou (em vez de partir de uma
+-- solicitação do cliente/convidado) — nasce FALSE, valor técnico inicial.
 CREATE TABLE appointments (
-    id             UUID        PRIMARY KEY,
-    provider_id    UUID        NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
-    client_id      UUID        NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
-    data           DATE        NOT NULL,
-    inicio_minutos SMALLINT    NOT NULL,
-    fim_minutos    SMALLINT    NOT NULL,
-    status         VARCHAR(20) NOT NULL,
-    expira_em      TIMESTAMPTZ NOT NULL,
-    criado_em      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id                     UUID        PRIMARY KEY,
+    provider_id            UUID        NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+    client_id              UUID        NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    data                   DATE        NOT NULL,
+    inicio_minutos         SMALLINT    NOT NULL,
+    fim_minutos            SMALLINT    NOT NULL,
+    status                 VARCHAR(20) NOT NULL,
+    expira_em              TIMESTAMPTZ NOT NULL,
+    criado_em              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    atualizado_em          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    lembrete_enviado_em    TIMESTAMPTZ,
+    observacao             TEXT,
+    marcado_pelo_prestador BOOLEAN     NOT NULL DEFAULT FALSE
 );
 
 CREATE INDEX idx_appointments_provider_data ON appointments (provider_id, data);
