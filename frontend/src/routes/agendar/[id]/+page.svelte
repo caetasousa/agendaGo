@@ -58,6 +58,10 @@
 	let convidadoEmail = $state('');
 	let convidadoTelefone = $state('');
 
+	// Nota livre e opcional, visível ao prestador — usada tanto pelo cliente
+	// autenticado quanto pelo convidado.
+	let observacao = $state('');
+
 	// Conta os dígitos do telefone para a mesma validação leve do backend (>= 8).
 	const telefoneValido = $derived((convidadoTelefone.match(/\d/g) ?? []).length >= 8);
 	const convidadoValido = $derived(
@@ -169,11 +173,13 @@
 			await solicitarAgendamento({
 				providerId: data.prestador.id,
 				data: diaSelecionado,
-				inicioMinutos: slotSelecionado.inicioMinutos
+				inicioMinutos: slotSelecionado.inicioMinutos,
+				observacao: observacao.trim() || undefined
 			});
 			solicitado = true;
 			removeSlotOfertado(slotSelecionado.inicioMinutos);
 			slotSelecionado = null;
+			observacao = '';
 		} catch (e) {
 			erro = e instanceof ApiError ? e.message : 'Não foi possível solicitar o agendamento.';
 		} finally {
@@ -193,11 +199,13 @@
 				inicioMinutos: slotSelecionado.inicioMinutos,
 				nome: convidadoNome.trim(),
 				email: convidadoEmail.trim(),
-				telefone: convidadoTelefone.trim()
+				telefone: convidadoTelefone.trim(),
+				observacao: observacao.trim() || undefined
 			});
 			solicitado = true;
 			removeSlotOfertado(slotSelecionado.inicioMinutos);
 			slotSelecionado = null;
+			observacao = '';
 		} catch (e) {
 			erro = e instanceof ApiError ? e.message : 'Não foi possível solicitar o agendamento.';
 		} finally {
@@ -384,6 +392,15 @@
 					</p>
 
 					{#if sessao.usuario?.tipo === 'client'}
+						<label class="mt-4 block">
+							<span class="mb-1 block text-xs font-medium text-mute">Observação (opcional)</span>
+							<textarea
+								bind:value={observacao}
+								rows="3"
+								placeholder="Alguma informação para o prestador?"
+								class="h-auto w-full resize-none rounded-md border border-hairline-strong bg-surface-elevated px-3 py-2 text-sm text-ink outline-none transition focus:border-ink"
+							></textarea>
+						</label>
 						<button
 							type="button"
 							disabled={enviando}
@@ -443,6 +460,16 @@
 									/>
 								</label>
 							</div>
+
+							<label class="block">
+								<span class="mb-1 block text-xs font-medium text-mute">Observação (opcional)</span>
+								<textarea
+									bind:value={observacao}
+									rows="3"
+									placeholder="Alguma informação para o prestador?"
+									class="h-auto w-full resize-none rounded-md border border-hairline-strong bg-surface-elevated px-3 py-2 text-sm text-ink outline-none transition focus:border-ink"
+								></textarea>
+							</label>
 
 							<div class="flex flex-wrap items-center gap-3">
 								<button

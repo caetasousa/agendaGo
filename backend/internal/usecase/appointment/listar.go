@@ -10,18 +10,23 @@ import (
 
 // Resumo é um agendamento pronto para exibição. Além dos nomes das duas
 // pontas, carrega o contato do cliente (email/telefone) — o prestador precisa
-// dele para falar com quem agendou, sobretudo convidados sem cadastro.
+// dele para falar com quem agendou, sobretudo convidados sem cadastro. A
+// Observacao é visível às duas partes, sem essa restrição. MarcadoPeloPrestador
+// indica um registro que o próprio prestador criou: já nasce confirmado, sem
+// pedido para aceitar/recusar, e cancelável a qualquer momento por ele.
 type Resumo struct {
-	ID              string
-	Data            time.Time
-	InicioMinutos   int
-	FimMinutos      int
-	Status          appointment.Status
-	ExpiraEm        time.Time
-	NomeCliente     string
-	EmailCliente    string
-	TelefoneCliente string
-	NomePrestador   string
+	ID                   string
+	Data                 time.Time
+	InicioMinutos        int
+	FimMinutos           int
+	Status               appointment.Status
+	ExpiraEm             time.Time
+	NomeCliente          string
+	EmailCliente         string
+	TelefoneCliente      string
+	NomePrestador        string
+	Observacao           string
+	MarcadoPeloPrestador bool
 }
 
 // ListarInput identifica o dono da listagem e o instante da consulta.
@@ -89,12 +94,14 @@ func (uc *ListarUseCase) montar(agendamentos []*appointment.Appointment, agora t
 		}
 
 		resumo := Resumo{
-			ID:            a.ID,
-			Data:          a.Data,
-			InicioMinutos: a.InicioMinutos,
-			FimMinutos:    a.FimMinutos,
-			Status:        a.Status,
-			ExpiraEm:      a.ExpiraEm,
+			ID:                   a.ID,
+			Data:                 a.Data,
+			InicioMinutos:        a.InicioMinutos,
+			FimMinutos:           a.FimMinutos,
+			Status:               a.Status,
+			ExpiraEm:             a.ExpiraEm,
+			Observacao:           a.Observacao,
+			MarcadoPeloPrestador: a.MarcadoPeloPrestador,
 		}
 		if c != nil {
 			resumo.NomeCliente = c.Nome

@@ -71,6 +71,17 @@ type Appointment struct {
 	// LembreteEnviadoEm marca quando o lembrete por email foi enviado; nil
 	// significa que ainda não foi.
 	LembreteEnviadoEm *time.Time
+	// Observacao é uma nota livre sobre o agendamento, escrita por quem
+	// solicita (cliente, convidado, ou o prestador ao marcar para alguém) e
+	// visível às duas partes. Vazia quando ninguém escreveu nada. Definida na
+	// criação, fora do construtor Novo — não é parte da validação da reserva.
+	Observacao string
+	// MarcadoPeloPrestador indica que o próprio prestador registrou este
+	// agendamento (cliente que ligou, por exemplo), em vez de ter partido de
+	// uma solicitação do cliente/convidado. Nasce CONFIRMADO direto — não há
+	// pedido para aceitar — e o cancelamento pelo prestador ignora a
+	// antecedência mínima, já que é ele quem gerencia o próprio registro.
+	MarcadoPeloPrestador bool
 }
 
 // Novo cria uma solicitação de agendamento (SOLICITADO) que já ocupa o
@@ -99,6 +110,17 @@ func Novo(id, providerID, clientID string, data time.Time, inicioMinutos, fimMin
 		CriadoEm:      agora,
 		AtualizadoEm:  agora,
 	}, nil
+}
+
+// MarcarComoRegistroDoPrestador converte uma solicitação recém-criada em um
+// registro do próprio prestador: pula direto para CONFIRMADO (sem etapa de
+// solicitação, já que não há pedido para aceitar) e liga MarcadoPeloPrestador,
+// que isenta o cancelamento da antecedência mínima. Só faz sentido logo após
+// Novo, antes de qualquer outra transição.
+func (a *Appointment) MarcarComoRegistroDoPrestador(agora time.Time) {
+	a.Status = StatusConfirmado
+	a.MarcadoPeloPrestador = true
+	a.AtualizadoEm = agora
 }
 
 // InicioEm devolve o instante de início do atendimento no fuso informado.

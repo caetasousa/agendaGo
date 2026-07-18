@@ -25,6 +25,7 @@ export interface MeResponse {
 	descansoMinutos?: number;
 	duracaoAtendimentoMinutos?: number;
 	horariosPadrao?: Bloco[];
+	permiteMarcacaoPeloPrestador?: boolean;
 }
 
 export function loginProvider(dados: LoginRequest): Promise<LoginResponse> {

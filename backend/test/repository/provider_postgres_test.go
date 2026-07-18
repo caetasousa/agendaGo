@@ -179,6 +179,9 @@ func TestProviderPostgres(t *testing.T) {
 		if encontrado.Email != "carlos@email.com" {
 			t.Errorf("esperava email 'carlos@email.com', got: %s", encontrado.Email)
 		}
+		if !encontrado.PermiteMarcacaoPeloPrestador {
+			t.Error("esperava PermiteMarcacaoPeloPrestador true por padrão")
+		}
 	})
 
 	t.Run("retorna (nil, nil) quando ID não existe", func(t *testing.T) {
@@ -217,6 +220,26 @@ func TestProviderPostgres(t *testing.T) {
 		}
 		if !encontrado.AtualizadoEm.After(encontrado.CriadoEm) {
 			t.Error("esperava AtualizadoEm posterior a CriadoEm após Atualizar")
+		}
+	})
+
+	t.Run("Atualizar persiste PermiteMarcacaoPeloPrestador desativado", func(t *testing.T) {
+		p, _ := provider.Novo("33333333-3333-3333-3333-333333333333", "Fábio Lima", "fabio@email.com", "11999998888", "12345678")
+		if err := repo.Salvar(p); err != nil {
+			t.Fatalf("esperava sucesso ao salvar, got: %v", err)
+		}
+
+		p.DesativarMarcacaoPeloPrestador()
+		if err := repo.Atualizar(p); err != nil {
+			t.Fatalf("esperava sucesso ao atualizar, got: %v", err)
+		}
+
+		encontrado, err := repo.BuscarPorID(p.ID)
+		if err != nil {
+			t.Fatalf("esperava sucesso na busca, got: %v", err)
+		}
+		if encontrado.PermiteMarcacaoPeloPrestador {
+			t.Error("esperava PermiteMarcacaoPeloPrestador false após desativar e Atualizar")
 		}
 	})
 

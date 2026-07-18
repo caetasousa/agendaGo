@@ -59,6 +59,33 @@
 		}
 	}
 
+	let copiadoId = $state<string | null>(null);
+
+	// mensagemParaCliente monta um texto pronto com data, hora e observação —
+	// só faz sentido para marcações do prestador, que não disparam email.
+	function mensagemParaCliente(a: Agendamento): string {
+		const linhas = [
+			`Agendamento confirmado para ${a.nomeCliente ?? 'você'}:`,
+			`${dataLonga(a.data)}, das ${minutosParaHHMM(a.inicioMinutos)} às ${minutosParaHHMM(a.fimMinutos)}.`
+		];
+		if (a.observacao) {
+			linhas.push(`Observação: ${a.observacao}`);
+		}
+		return linhas.join('\n');
+	}
+
+	async function copiarMensagem(a: Agendamento) {
+		try {
+			await navigator.clipboard.writeText(mensagemParaCliente(a));
+			copiadoId = a.id;
+			setTimeout(() => {
+				if (copiadoId === a.id) copiadoId = null;
+			}, 2000);
+		} catch {
+			erro = 'Não foi possível copiar — copie manualmente pela seleção do texto.';
+		}
+	}
+
 	const botaoBase =
 		'inline-flex h-8 items-center rounded-md px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60';
 	const botaoPrimario = `${botaoBase} bg-primary text-primary-on hover:opacity-90`;
@@ -91,6 +118,9 @@
 						{/if}
 					</p>
 				{/if}
+				{#if a.observacao}
+					<p class="mt-1 text-xs text-mute">{a.observacao}</p>
+				{/if}
 			</div>
 			<span
 				class="inline-flex items-center gap-1.5 rounded-full border border-hairline-strong bg-surface-elevated px-2.5 py-0.5 text-xs text-body"
@@ -100,7 +130,19 @@
 			</span>
 		</div>
 
+		{#if ehPrestador && a.marcadoPeloPrestador && a.status === 'CONFIRMADO'}
+			<p class="mt-3 whitespace-pre-wrap border-t border-hairline pt-3 text-xs text-mute">
+				{mensagemParaCliente(a)}
+			</p>
+		{/if}
+
 		<div class="mt-3 flex flex-wrap gap-2 empty:hidden">
+			{#if ehPrestador && a.marcadoPeloPrestador && a.status === 'CONFIRMADO'}
+				<button type="button" onclick={() => copiarMensagem(a)} class={botaoContorno}>
+					{copiadoId === a.id ? 'Copiado!' : 'Copiar para o cliente'}
+				</button>
+			{/if}
+
 			{#if ehPrestador && a.status === 'SOLICITADO'}
 				<button
 					type="button"
@@ -116,7 +158,7 @@
 					onclick={() => executar(a.id, recusarAgendamento)}
 					class={botaoPerigo}
 				>
-					Recusar
+					Cancelar
 				</button>
 			{/if}
 
@@ -131,7 +173,7 @@
 				</button>
 			{/if}
 
-			{#if a.status === 'CONFIRMADO' && !jaComecou(a)}
+			{#if a.status === 'CONFIRMADO' && (a.marcadoPeloPrestador || !jaComecou(a))}
 				<button
 					type="button"
 					disabled={agindo !== null}

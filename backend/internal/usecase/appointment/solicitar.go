@@ -9,24 +9,28 @@ import (
 )
 
 // SolicitarInput contém os dados da solicitação. ClientID vem da identidade
-// da sessão autenticada, nunca do corpo da requisição.
+// da sessão autenticada, nunca do corpo da requisição. Observacao é uma nota
+// livre e opcional, visível ao prestador na lista de agendamentos.
 type SolicitarInput struct {
 	ClientID      string
 	ProviderID    string
 	Data          time.Time
 	InicioMinutos int
 	Agora         time.Time
+	Observacao    string
 }
 
 // SolicitarOutput contém a solicitação criada, já ocupando o intervalo.
 type SolicitarOutput struct {
-	ID            string
-	ProviderID    string
-	Data          time.Time
-	InicioMinutos int
-	FimMinutos    int
-	Status        appointment.Status
-	ExpiraEm      time.Time
+	ID                   string
+	ProviderID           string
+	Data                 time.Time
+	InicioMinutos        int
+	FimMinutos           int
+	Status               appointment.Status
+	ExpiraEm             time.Time
+	Observacao           string
+	MarcadoPeloPrestador bool
 }
 
 // SolicitarUseCase cria a solicitação de agendamento: valida que o horário é
@@ -78,18 +82,35 @@ func (uc *SolicitarUseCase) Executar(in SolicitarInput) (*SolicitarOutput, error
 		return nil, ErrClientInativo
 	}
 
-	return uc.reservar(in.ProviderID, in.ClientID, in.Data, in.InicioMinutos, in.Agora)
+	return uc.reservar(in.ProviderID, in.ClientID, in.Data, in.InicioMinutos, in.Agora, in.Observacao)
 }
 
 // reservar valida que InicioMinutos é um slot livre de verdade (via
-// ConsultarSlots) e persiste a solicitação sob a barreira anti-overbooking.
-// Compartilhado pela solicitação autenticada e pela de convidado.
-func (uc *SolicitarUseCase) reservar(providerID, clientID string, data time.Time, inicioMinutos int, agora time.Time) (*SolicitarOutput, error) {
+// ConsultarSlots) e persiste a solicitação sob a barreira anti-overbooking,
+// notificando o prestador do novo pedido. Compartilhado pela solicitação
+// autenticada e pela de convidado.
+func (uc *SolicitarUseCase) reservar(providerID, clientID string, data time.Time, inicioMinutos int, agora time.Time, observacao string) (*SolicitarOutput, error) {
+	novo, err := uc.reservarSlot(providerID, clientID, data, inicioMinutos, agora, false, observacao, false)
+	if err != nil {
+		return nil, err
+	}
+	uc.notificarSolicitacao(novo)
+	return novaSaidaSolicitar(novo), nil
+}
+
+// reservarSlot é o núcleo da reserva, sem notificação: valida o slot, cria a
+// solicitação e persiste sob a barreira anti-overbooking. O
+// incluirAgendaFechada só é usado quando o próprio prestador marca na sua
+// agenda — o público nunca enxerga slots de agenda fechada. Quando
+// comoRegistroDoPrestador é true, o agendamento já nasce CONFIRMADO e
+// marcado como registro do prestador (ver MarcarComoRegistroDoPrestador).
+func (uc *SolicitarUseCase) reservarSlot(providerID, clientID string, data time.Time, inicioMinutos int, agora time.Time, incluirAgendaFechada bool, observacao string, comoRegistroDoPrestador bool) (*appointment.Appointment, error) {
 	slots, err := uc.consultarSlots.Executar(ConsultarSlotsInput{
-		ProviderID: providerID,
-		De:         data,
-		Ate:        data,
-		Agora:      agora,
+		ProviderID:           providerID,
+		De:                   data,
+		Ate:                  data,
+		Agora:                agora,
+		IncluirAgendaFechada: incluirAgendaFechada,
 	})
 	if err != nil {
 		return nil, err
@@ -111,22 +132,32 @@ func (uc *SolicitarUseCase) reservar(providerID, clientID string, data time.Time
 	if err != nil {
 		return nil, err
 	}
+	novo.Observacao = observacao
+	if comoRegistroDoPrestador {
+		novo.MarcarComoRegistroDoPrestador(agora)
+	}
 
 	if err := uc.repo.SalvarSeLivre(novo, agora); err != nil {
 		return nil, err
 	}
 
-	uc.notificarSolicitacao(novo)
+	return novo, nil
+}
 
+// novaSaidaSolicitar projeta o agendamento persistido na saída dos usecases
+// de solicitação.
+func novaSaidaSolicitar(a *appointment.Appointment) *SolicitarOutput {
 	return &SolicitarOutput{
-		ID:            novo.ID,
-		ProviderID:    novo.ProviderID,
-		Data:          novo.Data,
-		InicioMinutos: novo.InicioMinutos,
-		FimMinutos:    novo.FimMinutos,
-		Status:        novo.Status,
-		ExpiraEm:      novo.ExpiraEm,
-	}, nil
+		ID:                   a.ID,
+		ProviderID:           a.ProviderID,
+		Data:                 a.Data,
+		InicioMinutos:        a.InicioMinutos,
+		FimMinutos:           a.FimMinutos,
+		Status:               a.Status,
+		ExpiraEm:             a.ExpiraEm,
+		Observacao:           a.Observacao,
+		MarcadoPeloPrestador: a.MarcadoPeloPrestador,
+	}
 }
 
 // notificarSolicitacao avisa o prestador do novo pedido. Best-effort: se não

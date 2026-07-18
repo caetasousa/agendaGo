@@ -20,6 +20,8 @@
 	let duracaoAtendimentoMinutos = $state(data.duracaoAtendimentoMinutos);
 	// svelte-ignore state_referenced_locally
 	let horariosPadrao = $state<Bloco[]>(data.horariosPadrao.map((b) => ({ ...b })));
+	// svelte-ignore state_referenced_locally
+	let permiteMarcacaoPeloPrestador = $state(data.permiteMarcacaoPeloPrestador);
 
 	let enviando = $state(false);
 	let erro = $state<string | null>(null);
@@ -68,13 +70,15 @@
 				aceitaAgendamentos,
 				descansoMinutos,
 				duracaoAtendimentoMinutos,
-				horariosPadrao
+				horariosPadrao,
+				permiteMarcacaoPeloPrestador
 			});
 			telefone = salvo.telefone;
 			aceitaAgendamentos = salvo.aceitaAgendamentos;
 			descansoMinutos = salvo.descansoMinutos;
 			duracaoAtendimentoMinutos = salvo.duracaoAtendimentoMinutos;
 			horariosPadrao = salvo.horariosPadrao;
+			permiteMarcacaoPeloPrestador = salvo.permiteMarcacaoPeloPrestador;
 			if (sessao.usuario) {
 				sessao.definir({ ...sessao.usuario, ...salvo });
 			}
@@ -137,6 +141,32 @@
 				/>
 				<p class="mt-1.5 text-xs text-mute">Como os clientes entram em contato com você.</p>
 			</div>
+		</div>
+
+		<!-- Marcar para um cliente: toggle -->
+		<div class="rounded-xl border border-hairline-strong bg-surface-card p-6">
+			<label
+				for="permite-marcacao-pelo-prestador"
+				class="flex cursor-pointer items-start justify-between gap-4"
+			>
+				<span class="min-w-0">
+					<span class="block text-sm font-semibold text-ink">Marcar para um cliente</span>
+					<span class="mt-1 block text-sm text-body">
+						Quando ativo, você pode registrar você mesmo um agendamento na sua agenda (ex.:
+						cliente que ligou).
+					</span>
+				</span>
+				<input
+					id="permite-marcacao-pelo-prestador"
+					type="checkbox"
+					bind:checked={permiteMarcacaoPeloPrestador}
+					onchange={() => (sucesso = false)}
+					class="peer sr-only"
+				/>
+				<span
+					class="relative mt-0.5 h-6 w-11 shrink-0 rounded-full border border-hairline-strong bg-surface-elevated transition-colors peer-checked:border-accent-green peer-checked:bg-accent-green/30 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-link after:absolute after:top-0.5 after:left-0.5 after:h-5 after:w-5 after:rounded-full after:bg-mute after:transition-transform after:content-[''] peer-checked:after:translate-x-5 peer-checked:after:bg-accent-green"
+				></span>
+			</label>
 		</div>
 
 		<!-- Duração e descanso -->

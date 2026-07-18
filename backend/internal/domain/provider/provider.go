@@ -22,8 +22,13 @@ type Provider struct {
 	DescansoMinutos           int
 	DuracaoAtendimentoMinutos int
 	HorariosPadrao            []availability.TimeBlock
-	CriadoEm                  time.Time
-	AtualizadoEm              time.Time
+	// PermiteMarcacaoPeloPrestador controla se o próprio prestador pode
+	// registrar agendamentos na própria agenda (cliente que ligou, por
+	// exemplo). Nasce true — é uma capacidade que já existe por padrão,
+	// desativável em Preferências.
+	PermiteMarcacaoPeloPrestador bool
+	CriadoEm                     time.Time
+	AtualizadoEm                 time.Time
 }
 
 var (
@@ -61,18 +66,19 @@ func Novo(id, nome, email, telefone, senhaHash string) (*Provider, error) {
 
 	agora := time.Now()
 	return &Provider{
-		ID:                        id,
-		Nome:                      nome,
-		Email:                     email,
-		Telefone:                  telefone,
-		SenhaHash:                 senhaHash,
-		Ativo:                     true,
-		AceitaAgendamentos:        false,
-		DescansoMinutos:           0,
-		DuracaoAtendimentoMinutos: duracaoAtendimentoSugerida,
-		HorariosPadrao:            horariosComerciaisPadrao,
-		CriadoEm:                  agora,
-		AtualizadoEm:              agora,
+		ID:                           id,
+		Nome:                         nome,
+		Email:                        email,
+		Telefone:                     telefone,
+		SenhaHash:                    senhaHash,
+		Ativo:                        true,
+		AceitaAgendamentos:           false,
+		DescansoMinutos:              0,
+		DuracaoAtendimentoMinutos:    duracaoAtendimentoSugerida,
+		HorariosPadrao:               horariosComerciaisPadrao,
+		PermiteMarcacaoPeloPrestador: true,
+		CriadoEm:                     agora,
+		AtualizadoEm:                 agora,
 	}, nil
 }
 
@@ -147,6 +153,20 @@ func (p *Provider) AtivarAgenda() {
 // DesativarAgenda impede o prestador de receber novos agendamentos.
 func (p *Provider) DesativarAgenda() {
 	p.AceitaAgendamentos = false
+	p.AtualizadoEm = time.Now()
+}
+
+// AtivarMarcacaoPeloPrestador permite que o próprio prestador registre
+// agendamentos na própria agenda.
+func (p *Provider) AtivarMarcacaoPeloPrestador() {
+	p.PermiteMarcacaoPeloPrestador = true
+	p.AtualizadoEm = time.Now()
+}
+
+// DesativarMarcacaoPeloPrestador impede o prestador de registrar
+// agendamentos na própria agenda — só sobra o fluxo normal de solicitação.
+func (p *Provider) DesativarMarcacaoPeloPrestador() {
+	p.PermiteMarcacaoPeloPrestador = false
 	p.AtualizadoEm = time.Now()
 }
 

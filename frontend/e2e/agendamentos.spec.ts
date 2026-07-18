@@ -223,7 +223,7 @@ test('prestador recusa uma solicitação e o cliente vê o status', async ({ pag
 	await page.click('button:has-text("Sair")');
 	await entrar(page, emailPrestador);
 	await page.goto('/painel/agendamentos');
-	await page.click('button:has-text("Recusar")');
+	await page.click('button:has-text("Cancelar")');
 	await expect(page.locator('li[data-agendamento]')).toHaveAttribute('data-status', 'RECUSADO');
 
 	await page.click('button:has-text("Sair")');

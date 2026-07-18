@@ -10,6 +10,7 @@ export interface AtualizarPreferenciasRequest {
 	descansoMinutos: number;
 	duracaoAtendimentoMinutos: number;
 	horariosPadrao: Bloco[];
+	permiteMarcacaoPeloPrestador: boolean;
 }
 
 export interface AtualizarPreferenciasResponse {
@@ -18,6 +19,7 @@ export interface AtualizarPreferenciasResponse {
 	descansoMinutos: number;
 	duracaoAtendimentoMinutos: number;
 	horariosPadrao: Bloco[];
+	permiteMarcacaoPeloPrestador: boolean;
 }
 
 export function atualizarPreferencias(

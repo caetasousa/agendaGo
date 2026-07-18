@@ -9,10 +9,12 @@ import (
 
 // blocosPadrao resolve o expediente default de uma data sem definição própria:
 // o expediente configurado em HorariosPadrao, aplicado em dias úteis quando o
-// prestador está ativo e aceita agendamentos; vazio em fins de semana, com a
-// agenda desativada ou com o prestador banido pelo admin.
-func blocosPadrao(p *provider.Provider, data time.Time) []availability.TimeBlock {
-	if !p.Ativo || !p.AceitaAgendamentos {
+// prestador está ativo; vazio em fins de semana ou com o prestador banido pelo
+// admin. A agenda desativada (AceitaAgendamentos=false) só zera o expediente
+// para o público — o dono continua enxergando os próprios horários quando
+// incluirAgendaFechada é true.
+func blocosPadrao(p *provider.Provider, data time.Time, incluirAgendaFechada bool) []availability.TimeBlock {
+	if !p.Ativo || (!p.AceitaAgendamentos && !incluirAgendaFechada) {
 		return nil
 	}
 	dia := availability.DiaSemanaDe(data)
@@ -27,6 +29,10 @@ func blocosPadrao(p *provider.Provider, data time.Time) []availability.TimeBlock
 type ConsultarDisponibilidadeInput struct {
 	ProviderID string
 	Data       time.Time
+	// IncluirAgendaFechada resolve o expediente mesmo com AceitaAgendamentos
+	// desligado — só para o próprio prestador operando a sua agenda. Exceções
+	// de data (bloqueio explícito) valem também para o dono.
+	IncluirAgendaFechada bool
 }
 
 // ConsultarDisponibilidadeUseCase resolve os blocos de horário efetivamente
@@ -69,5 +75,5 @@ func (uc *ConsultarDisponibilidadeUseCase) Executar(in ConsultarDisponibilidadeI
 		return excecao.Blocos, nil
 	}
 
-	return blocosPadrao(p, in.Data), nil
+	return blocosPadrao(p, in.Data, in.IncluirAgendaFechada), nil
 }

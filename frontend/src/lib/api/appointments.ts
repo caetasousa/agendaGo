@@ -27,6 +27,12 @@ export interface Agendamento {
 	emailCliente?: string;
 	telefoneCliente?: string;
 	nomePrestador?: string;
+	// Nota livre escrita por quem criou o agendamento, visível às duas partes.
+	observacao?: string;
+	// Registro que o próprio prestador criou (cliente que ligou, por exemplo):
+	// nasce CONFIRMADO, sem pedido para aceitar/recusar, e ele cancela a
+	// qualquer momento, sem antecedência mínima.
+	marcadoPeloPrestador?: boolean;
 }
 
 export interface ListarAgendamentosResponse {
@@ -46,6 +52,7 @@ export interface SolicitarAgendamentoRequest {
 	providerId: string;
 	data: string;
 	inicioMinutos: number;
+	observacao?: string;
 }
 
 export interface SolicitarConvidadoRequest {
@@ -55,6 +62,7 @@ export interface SolicitarConvidadoRequest {
 	nome: string;
 	email: string;
 	telefone: string;
+	observacao?: string;
 }
 
 export interface Slot {
@@ -87,6 +95,29 @@ export function solicitarAgendamento(dados: SolicitarAgendamentoRequest): Promis
 // convidado a partir do nome/email/telefone informados — rota pública.
 export function solicitarConvidado(dados: SolicitarConvidadoRequest): Promise<Agendamento> {
 	return apiPost<SolicitarConvidadoRequest, Agendamento>('/agendamentos/convidado', dados);
+}
+
+export interface MarcarPeloPrestadorRequest {
+	data: string;
+	inicioMinutos: number;
+	nome: string;
+	// Registro puramente interno: sem telefone, sem email, sem notificação.
+	observacao?: string;
+}
+
+// consultarSlotsDoPrestador devolve os horários livres da agenda do prestador
+// autenticado — inclusive com a agenda fechada ao público, já que é o dono
+// consultando para marcar um cliente que ligou.
+export function consultarSlotsDoPrestador(de: string, ate: string): Promise<SlotsResponse> {
+	return apiGet<SlotsResponse>(`/providers/me/slots?de=${de}&ate=${ate}`);
+}
+
+// marcarPeloPrestador registra na agenda do prestador autenticado um cliente
+// que o contatou por fora (ex.: telefone), com só nome e observação — registro
+// puramente interno, sem notificação. Nasce SOLICITADO, como os demais — o
+// prestador confirma em seguida na lista de agendamentos.
+export function marcarPeloPrestador(dados: MarcarPeloPrestadorRequest): Promise<Agendamento> {
+	return apiPost<MarcarPeloPrestadorRequest, Agendamento>('/providers/me/agendamentos', dados);
 }
 
 // listarAgendamentosDoCliente lista os agendamentos feitos pelo cliente autenticado.

@@ -32,6 +32,10 @@ var (
 	// ErrTokenCancelamentoInvalido é retornado quando o token de cancelamento
 	// não corresponde a nenhum agendamento — genérico de propósito.
 	ErrTokenCancelamentoInvalido = errors.New("link de cancelamento inválido")
+	// ErrMarcacaoPeloPrestadorNaoPermitida é retornado quando o prestador
+	// desativou, em Preferências, a possibilidade de marcar agendamentos na
+	// própria agenda.
+	ErrMarcacaoPeloPrestadorNaoPermitida = errors.New("marcação pelo prestador está desativada nas preferências")
 )
 
 // TTLPreCadastro é o prazo de validade do token de pré-cadastro entregue ao

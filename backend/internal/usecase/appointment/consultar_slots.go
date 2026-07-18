@@ -24,6 +24,11 @@ type ConsultarSlotsInput struct {
 	De         time.Time
 	Ate        time.Time
 	Agora      time.Time
+	// IncluirAgendaFechada oferta os slots mesmo com AceitaAgendamentos
+	// desligado — só para o próprio prestador marcando na sua agenda (a
+	// identidade vem da sessão, nunca de entrada pública). Agenda fechada
+	// esconde os horários do público, não do dono.
+	IncluirAgendaFechada bool
 }
 
 // DiaSlots são os horários livres ofertáveis de uma data.
@@ -101,10 +106,11 @@ func (uc *ConsultarSlotsUseCase) Executar(in ConsultarSlotsInput) (*ConsultarSlo
 		dia := DiaSlots{Data: d}
 		diaTruncado := time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
 
-		if p.Ativo && p.AceitaAgendamentos && !diaTruncado.Before(hoje) {
+		if p.Ativo && (p.AceitaAgendamentos || in.IncluirAgendaFechada) && !diaTruncado.Before(hoje) {
 			blocos, err := uc.resolvedor.Executar(ucavailability.ConsultarDisponibilidadeInput{
-				ProviderID: in.ProviderID,
-				Data:       d,
+				ProviderID:           in.ProviderID,
+				Data:                 d,
+				IncluirAgendaFechada: in.IncluirAgendaFechada,
 			})
 			if err != nil {
 				return nil, err

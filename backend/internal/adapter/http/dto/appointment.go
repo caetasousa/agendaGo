@@ -1,10 +1,12 @@
 package dto
 
 // SolicitarAgendamentoRequest é o pedido de reserva de um slot livre.
+// Observacao é uma nota livre e opcional, visível ao prestador e ao cliente.
 type SolicitarAgendamentoRequest struct {
 	ProviderID    string `json:"providerId" validate:"required,uuid"`
 	Data          string `json:"data" validate:"required,datetime=2006-01-02"`
 	InicioMinutos int    `json:"inicioMinutos" validate:"min=0,max=1440"`
+	Observacao    string `json:"observacao" validate:"omitempty,max=500"`
 }
 
 func (r SolicitarAgendamentoRequest) Validar() error {
@@ -12,7 +14,8 @@ func (r SolicitarAgendamentoRequest) Validar() error {
 }
 
 // SolicitarConvidadoRequest é o pedido de reserva de um convidado sem cadastro.
-// Além do slot, exige nome/email/telefone de contato.
+// Além do slot, exige nome/email/telefone de contato. Observacao é uma nota
+// livre e opcional, visível às duas partes.
 type SolicitarConvidadoRequest struct {
 	ProviderID    string `json:"providerId" validate:"required,uuid"`
 	Data          string `json:"data" validate:"required,datetime=2006-01-02"`
@@ -20,25 +23,47 @@ type SolicitarConvidadoRequest struct {
 	Nome          string `json:"nome" validate:"required,min=2,max=100"`
 	Email         string `json:"email" validate:"required,email"`
 	Telefone      string `json:"telefone" validate:"required,min=8,max=30"`
+	Observacao    string `json:"observacao" validate:"omitempty,max=500"`
 }
 
 func (r SolicitarConvidadoRequest) Validar() error {
 	return validate.Struct(r)
 }
 
+// MarcarPeloPrestadorRequest é a marcação feita pelo próprio prestador para um
+// cliente que o contatou por fora (ex.: telefone). O prestador vem da sessão —
+// não há providerId no corpo. É um registro puramente interno: só nome e uma
+// observação livre e opcional — sem telefone, sem email, sem notificação.
+type MarcarPeloPrestadorRequest struct {
+	Data          string `json:"data" validate:"required,datetime=2006-01-02"`
+	InicioMinutos int    `json:"inicioMinutos" validate:"min=0,max=1440"`
+	Nome          string `json:"nome" validate:"required,min=2,max=100"`
+	Observacao    string `json:"observacao" validate:"omitempty,max=500"`
+}
+
+func (r MarcarPeloPrestadorRequest) Validar() error {
+	return validate.Struct(r)
+}
+
 // AgendamentoResponse é um agendamento pronto para exibição. O contato do
 // cliente (email/telefone) permite ao prestador falar com quem agendou.
+// Observacao é a nota livre escrita por quem criou o agendamento, visível às
+// duas partes. MarcadoPeloPrestador indica um registro que o próprio
+// prestador criou: já nasce CONFIRMADO, sem pedido para aceitar/recusar, e
+// cancelável por ele a qualquer momento, sem antecedência mínima.
 type AgendamentoResponse struct {
-	ID              string `json:"id"`
-	Data            string `json:"data"`
-	InicioMinutos   int    `json:"inicioMinutos"`
-	FimMinutos      int    `json:"fimMinutos"`
-	Status          string `json:"status"`
-	ExpiraEm        string `json:"expiraEm"`
-	NomeCliente     string `json:"nomeCliente,omitempty"`
-	EmailCliente    string `json:"emailCliente,omitempty"`
-	TelefoneCliente string `json:"telefoneCliente,omitempty"`
-	NomePrestador   string `json:"nomePrestador,omitempty"`
+	ID                   string `json:"id"`
+	Data                 string `json:"data"`
+	InicioMinutos        int    `json:"inicioMinutos"`
+	FimMinutos           int    `json:"fimMinutos"`
+	Status               string `json:"status"`
+	ExpiraEm             string `json:"expiraEm"`
+	NomeCliente          string `json:"nomeCliente,omitempty"`
+	EmailCliente         string `json:"emailCliente,omitempty"`
+	TelefoneCliente      string `json:"telefoneCliente,omitempty"`
+	NomePrestador        string `json:"nomePrestador,omitempty"`
+	Observacao           string `json:"observacao,omitempty"`
+	MarcadoPeloPrestador bool   `json:"marcadoPeloPrestador,omitempty"`
 }
 
 // ListarAgendamentosResponse contém os agendamentos do usuário autenticado.

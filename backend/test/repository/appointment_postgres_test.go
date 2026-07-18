@@ -57,6 +57,27 @@ func TestAppointmentPostgres(t *testing.T) {
 		}
 	})
 
+	t.Run("observação é persistida e lida de volta; vazia vira NULL sem erro", func(t *testing.T) {
+		comObservacao := novo("eeeeeeee-0000-0000-0000-000000000004", 12*60, 13*60)
+		comObservacao.Observacao = "cliente prefere corte curto"
+		if err := repo.SalvarSeLivre(comObservacao, agora); err != nil {
+			t.Fatalf("esperava salvar, got: %v", err)
+		}
+		encontrado, err := repo.BuscarPorID(comObservacao.ID)
+		if err != nil || encontrado.Observacao != "cliente prefere corte curto" {
+			t.Errorf("esperava observação persistida, got: %+v (%v)", encontrado, err)
+		}
+
+		semObservacao := novo("eeeeeeee-0000-0000-0000-000000000005", 13*60, 14*60)
+		if err := repo.SalvarSeLivre(semObservacao, agora); err != nil {
+			t.Fatalf("esperava salvar sem observação, got: %v", err)
+		}
+		encontrado2, err := repo.BuscarPorID(semObservacao.ID)
+		if err != nil || encontrado2.Observacao != "" {
+			t.Errorf("esperava observação vazia, got: %+v (%v)", encontrado2, err)
+		}
+	})
+
 	t.Run("intervalo em conflito é barrado (anti-overbooking)", func(t *testing.T) {
 		b := novo("eeeeeeee-0000-0000-0000-000000000002", 8*60+30, 9*60+30)
 		if err := repo.SalvarSeLivre(b, agora); err != appointment.ErrConflitoHorario {
@@ -89,13 +110,13 @@ func TestAppointmentPostgres(t *testing.T) {
 
 	t.Run("listagens por prestador, cliente e ocupantes do período", func(t *testing.T) {
 		doPrestador, err := repo.ListarPorPrestador(providerID)
-		if err != nil || len(doPrestador) != 2 {
-			t.Errorf("esperava 2 agendamentos do prestador, got: %d (%v)", len(doPrestador), err)
+		if err != nil || len(doPrestador) != 4 {
+			t.Errorf("esperava 4 agendamentos do prestador, got: %d (%v)", len(doPrestador), err)
 		}
 
 		doCliente, err := repo.ListarPorCliente(clientID)
-		if err != nil || len(doCliente) != 2 {
-			t.Errorf("esperava 2 agendamentos do cliente, got: %d (%v)", len(doCliente), err)
+		if err != nil || len(doCliente) != 4 {
+			t.Errorf("esperava 4 agendamentos do cliente, got: %d (%v)", len(doCliente), err)
 		}
 
 		// só o CONFIRMADO ocupa: a primeira solicitação já venceu o TTL

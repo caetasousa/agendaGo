@@ -23,6 +23,7 @@ type ambienteAgendamento struct {
 	consultarSlots       *ucappointment.ConsultarSlotsUseCase
 	solicitar            *ucappointment.SolicitarUseCase
 	solicitarConvidado   *ucappointment.SolicitarConvidadoUseCase
+	marcarPeloPrestador  *ucappointment.MarcarPeloPrestadorUseCase
 	transicionar         *ucappointment.TransicionarUseCase
 	cancelarPorToken     *ucappointment.CancelarPorTokenUseCase
 	consultarPreCadastro *ucclient.ConsultarPreCadastroUseCase
@@ -33,6 +34,7 @@ type ambienteAgendamento struct {
 	clients              *repository.ClientMemoria
 	cancelamentos        *repository.CancellationMemoria
 	preCadastros         *repository.PreCadastroMemoria
+	providers            *repository.ProviderMemoria
 	prestador            *provider.Provider
 	mailer               *email.MailerMemoria
 }
@@ -61,6 +63,7 @@ func novoAmbienteAgendamento(t *testing.T) *ambienteAgendamento {
 	solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointments, clientRepo, providerRepo, notificador, 24*time.Hour)
 	preCadastros := repository.NovoPreCadastroMemoria()
 	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitar, clientRepo, providerRepo, cancelamentos, preCadastros, notificador)
+	marcarPeloPrestador := ucappointment.NovoMarcarPeloPrestadorUseCase(solicitar, clientRepo, providerRepo)
 	transicionar := ucappointment.NovoTransicionarUseCase(appointments, providerRepo, clientRepo, cancelamentos, preCadastros, notificador, 24*time.Hour, time.UTC)
 	cancelarPorToken := ucappointment.NovoCancelarPorTokenUseCase(appointments, cancelamentos, providerRepo, clientRepo, notificador, 24*time.Hour, time.UTC)
 	hasher := security.NovoHasherArgon2id()
@@ -73,6 +76,7 @@ func novoAmbienteAgendamento(t *testing.T) *ambienteAgendamento {
 		consultarSlots:       consultarSlots,
 		solicitar:            solicitar,
 		solicitarConvidado:   solicitarConvidado,
+		marcarPeloPrestador:  marcarPeloPrestador,
 		transicionar:         transicionar,
 		cancelarPorToken:     cancelarPorToken,
 		consultarPreCadastro: consultarPreCadastro,
@@ -83,6 +87,7 @@ func novoAmbienteAgendamento(t *testing.T) *ambienteAgendamento {
 		clients:              clientRepo,
 		cancelamentos:        cancelamentos,
 		preCadastros:         preCadastros,
+		providers:            providerRepo,
 		prestador:            p,
 		mailer:               mailer,
 	}

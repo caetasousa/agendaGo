@@ -65,6 +65,49 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 		}
 	})
 
+	t.Run("desativa e reativa a marcação pelo prestador", func(t *testing.T) {
+		repo := repository.NovoProviderMemoria()
+		p := novoProviderComPreferencias(repo)
+		if !p.PermiteMarcacaoPeloPrestador {
+			t.Fatal("esperava que a marcação pelo prestador nascesse ativada")
+		}
+		uc := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
+
+		out, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
+			ProviderID:                   "provider-1",
+			Telefone:                     "11999998888",
+			DuracaoAtendimentoMinutos:    60,
+			AceitaAgendamentos:           true,
+			DescansoMinutos:              0,
+			PermiteMarcacaoPeloPrestador: false,
+		})
+		if err != nil {
+			t.Fatalf("esperava sucesso, got: %v", err)
+		}
+		if out.PermiteMarcacaoPeloPrestador {
+			t.Error("esperava marcação pelo prestador desativada na saída")
+		}
+		persistido, _ := repo.BuscarPorID("provider-1")
+		if persistido.PermiteMarcacaoPeloPrestador {
+			t.Error("esperava marcação pelo prestador desativada persistida")
+		}
+
+		out, err = uc.Executar(ucprovider.AtualizarPreferenciasInput{
+			ProviderID:                   "provider-1",
+			Telefone:                     "11999998888",
+			DuracaoAtendimentoMinutos:    60,
+			AceitaAgendamentos:           true,
+			DescansoMinutos:              0,
+			PermiteMarcacaoPeloPrestador: true,
+		})
+		if err != nil {
+			t.Fatalf("esperava sucesso na reativação, got: %v", err)
+		}
+		if !out.PermiteMarcacaoPeloPrestador {
+			t.Error("esperava marcação pelo prestador reativada")
+		}
+	})
+
 	t.Run("retorna erro quando descanso é negativo", func(t *testing.T) {
 		repo := repository.NovoProviderMemoria()
 		novoProviderComPreferencias(repo)

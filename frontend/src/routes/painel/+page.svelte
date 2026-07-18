@@ -55,7 +55,7 @@
 		<div class="mt-4 grid gap-4 sm:grid-cols-2">
 			<a
 				href="/painel/agendamentos"
-				class="group rounded-xl border border-hairline-strong bg-surface-card p-6 transition hover:border-ink/40 sm:col-span-2"
+				class="group rounded-xl border border-hairline-strong bg-surface-card p-6 transition hover:border-ink/40"
 			>
 				<span class="block h-2 w-2 rounded-full bg-accent-orange" aria-hidden="true"></span>
 				<h2 class="mt-4 flex items-center justify-between text-base font-semibold text-ink">
@@ -66,6 +66,24 @@
 					Confirme ou recuse solicitações e acompanhe os atendimentos confirmados.
 				</p>
 			</a>
+
+			{#if data.usuario.permiteMarcacaoPeloPrestador}
+				<a
+					href="/painel/marcar"
+					class="group rounded-xl border border-hairline-strong bg-surface-card p-6 transition hover:border-ink/40"
+				>
+					<span class="block h-2 w-2 rounded-full bg-accent-red" aria-hidden="true"></span>
+					<h2 class="mt-4 flex items-center justify-between text-base font-semibold text-ink">
+						Marcar para um cliente
+						<span class="text-mute transition group-hover:translate-x-0.5 group-hover:text-ink"
+							>→</span
+						>
+					</h2>
+					<p class="mt-2 text-sm text-body">
+						Cliente ligou? Registre você mesmo a marcação num horário livre da sua agenda.
+					</p>
+				</a>
+			{/if}
 
 			<a
 				href="/painel/disponibilidade"

@@ -142,12 +142,13 @@ func (h *ProviderHandler) AtualizarPreferencias(w http.ResponseWriter, r *http.R
 	}
 
 	output, err := h.atualizarPreferencias.Executar(ucprovider.AtualizarPreferenciasInput{
-		ProviderID:                id.UserID,
-		Telefone:                  req.Telefone,
-		AceitaAgendamentos:        req.AceitaAgendamentos,
-		DescansoMinutos:           req.DescansoMinutos,
-		DuracaoAtendimentoMinutos: req.DuracaoAtendimentoMinutos,
-		HorariosPadrao:            horarios,
+		ProviderID:                   id.UserID,
+		Telefone:                     req.Telefone,
+		AceitaAgendamentos:           req.AceitaAgendamentos,
+		DescansoMinutos:              req.DescansoMinutos,
+		DuracaoAtendimentoMinutos:    req.DuracaoAtendimentoMinutos,
+		HorariosPadrao:               horarios,
+		PermiteMarcacaoPeloPrestador: req.PermiteMarcacaoPeloPrestador,
 	})
 	if err != nil {
 		switch {
@@ -168,11 +169,12 @@ func (h *ProviderHandler) AtualizarPreferencias(w http.ResponseWriter, r *http.R
 	}
 
 	responderJSON(w, http.StatusOK, dto.AtualizarPreferenciasResponse{
-		Telefone:                  output.Telefone,
-		AceitaAgendamentos:        output.AceitaAgendamentos,
-		DescansoMinutos:           output.DescansoMinutos,
-		DuracaoAtendimentoMinutos: output.DuracaoAtendimentoMinutos,
-		HorariosPadrao:            blocosParaDTO(output.HorariosPadrao),
+		Telefone:                     output.Telefone,
+		AceitaAgendamentos:           output.AceitaAgendamentos,
+		DescansoMinutos:              output.DescansoMinutos,
+		DuracaoAtendimentoMinutos:    output.DuracaoAtendimentoMinutos,
+		HorariosPadrao:               blocosParaDTO(output.HorariosPadrao),
+		PermiteMarcacaoPeloPrestador: output.PermiteMarcacaoPeloPrestador,
 	})
 }
 

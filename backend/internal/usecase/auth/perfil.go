@@ -9,15 +9,16 @@ import (
 // DescansoMinutos e HorariosPadrao só são preenchidos para prestadores —
 // ficam nil/vazios para clientes.
 type PerfilOutput struct {
-	ID                        string
-	Nome                      string
-	Email                     string
-	Telefone                  string
-	Tipo                      string
-	AceitaAgendamentos        *bool
-	DescansoMinutos           *int
-	DuracaoAtendimentoMinutos *int
-	HorariosPadrao            []availability.TimeBlock
+	ID                           string
+	Nome                         string
+	Email                        string
+	Telefone                     string
+	Tipo                         string
+	AceitaAgendamentos           *bool
+	DescansoMinutos              *int
+	DuracaoAtendimentoMinutos    *int
+	HorariosPadrao               []availability.TimeBlock
+	PermiteMarcacaoPeloPrestador *bool
 }
 
 // PerfilUseCase consulta os dados do usuário autenticado a partir da sua identidade de sessão.
@@ -44,15 +45,16 @@ func (uc *PerfilUseCase) Executar(id Identidade) (*PerfilOutput, error) {
 			return nil, ErrSessaoInvalida
 		}
 		return &PerfilOutput{
-			ID:                        p.ID,
-			Nome:                      p.Nome,
-			Email:                     p.Email,
-			Telefone:                  p.Telefone,
-			Tipo:                      string(session.TipoProvider),
-			AceitaAgendamentos:        &p.AceitaAgendamentos,
-			DescansoMinutos:           &p.DescansoMinutos,
-			DuracaoAtendimentoMinutos: &p.DuracaoAtendimentoMinutos,
-			HorariosPadrao:            p.HorariosPadrao,
+			ID:                           p.ID,
+			Nome:                         p.Nome,
+			Email:                        p.Email,
+			Telefone:                     p.Telefone,
+			Tipo:                         string(session.TipoProvider),
+			AceitaAgendamentos:           &p.AceitaAgendamentos,
+			DescansoMinutos:              &p.DescansoMinutos,
+			DuracaoAtendimentoMinutos:    &p.DuracaoAtendimentoMinutos,
+			HorariosPadrao:               p.HorariosPadrao,
+			PermiteMarcacaoPeloPrestador: &p.PermiteMarcacaoPeloPrestador,
 		}, nil
 
 	case session.TipoClient:

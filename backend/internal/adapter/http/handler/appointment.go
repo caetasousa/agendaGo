@@ -22,6 +22,7 @@ type AppointmentHandler struct {
 	consultarSlots       *ucappointment.ConsultarSlotsUseCase
 	solicitar            *ucappointment.SolicitarUseCase
 	solicitarConvidado   *ucappointment.SolicitarConvidadoUseCase
+	marcarPeloPrestador  *ucappointment.MarcarPeloPrestadorUseCase
 	transicionar         *ucappointment.TransicionarUseCase
 	cancelarPorToken     *ucappointment.CancelarPorTokenUseCase
 	listar               *ucappointment.ListarUseCase
@@ -33,6 +34,7 @@ func NovoAppointmentHandler(
 	consultarSlots *ucappointment.ConsultarSlotsUseCase,
 	solicitar *ucappointment.SolicitarUseCase,
 	solicitarConvidado *ucappointment.SolicitarConvidadoUseCase,
+	marcarPeloPrestador *ucappointment.MarcarPeloPrestadorUseCase,
 	transicionar *ucappointment.TransicionarUseCase,
 	cancelarPorToken *ucappointment.CancelarPorTokenUseCase,
 	listar *ucappointment.ListarUseCase,
@@ -42,6 +44,7 @@ func NovoAppointmentHandler(
 		consultarSlots:       consultarSlots,
 		solicitar:            solicitar,
 		solicitarConvidado:   solicitarConvidado,
+		marcarPeloPrestador:  marcarPeloPrestador,
 		transicionar:         transicionar,
 		cancelarPorToken:     cancelarPorToken,
 		listar:               listar,
@@ -85,6 +88,57 @@ func (h *AppointmentHandler) ConsultarSlots(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	responderJSON(w, http.StatusOK, slotsParaDTO(out))
+}
+
+// ConsultarSlotsDoPrestador godoc
+//
+//	@Summary		Consultar os próprios horários livres (prestador)
+//	@Description	Slots livres da agenda do prestador autenticado, incluindo com a agenda fechada ao público — usados por ele para marcar um cliente que ligou
+//	@Tags			appointments
+//	@Produce		json
+//	@Param			de	query		string	true	"Data inicial (YYYY-MM-DD)"
+//	@Param			ate	query		string	true	"Data final (YYYY-MM-DD)"
+//	@Success		200	{object}	dto.SlotsResponse
+//	@Failure		400	{object}	map[string]string
+//	@Failure		401	{object}	map[string]string
+//	@Failure		403	{object}	map[string]string
+//	@Router			/providers/me/slots [get]
+func (h *AppointmentHandler) ConsultarSlotsDoPrestador(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.identidadeDoContexto(r)
+	if !ok {
+		responderErro(w, http.StatusUnauthorized, "não autenticado")
+		return
+	}
+
+	de, err := time.Parse(layoutData, r.URL.Query().Get("de"))
+	if err != nil {
+		responderErro(w, http.StatusBadRequest, "parâmetro 'de' inválido (YYYY-MM-DD)")
+		return
+	}
+	ate, err := time.Parse(layoutData, r.URL.Query().Get("ate"))
+	if err != nil {
+		responderErro(w, http.StatusBadRequest, "parâmetro 'ate' inválido (YYYY-MM-DD)")
+		return
+	}
+
+	out, err := h.consultarSlots.Executar(ucappointment.ConsultarSlotsInput{
+		ProviderID:           id.UserID,
+		De:                   de,
+		Ate:                  ate,
+		Agora:                time.Now(),
+		IncluirAgendaFechada: true,
+	})
+	if err != nil {
+		responderErroAgendamento(w, r, err)
+		return
+	}
+
+	responderJSON(w, http.StatusOK, slotsParaDTO(out))
+}
+
+// slotsParaDTO projeta os slots calculados na resposta HTTP.
+func slotsParaDTO(out *ucappointment.ConsultarSlotsOutput) dto.SlotsResponse {
 	dias := make([]dto.DiaSlotsDTO, 0, len(out.Dias))
 	for _, d := range out.Dias {
 		slots := make([]dto.SlotDTO, 0, len(d.Slots))
@@ -93,8 +147,7 @@ func (h *AppointmentHandler) ConsultarSlots(w http.ResponseWriter, r *http.Reque
 		}
 		dias = append(dias, dto.DiaSlotsDTO{Data: d.Data.Format(layoutData), Slots: slots})
 	}
-
-	responderJSON(w, http.StatusOK, dto.SlotsResponse{Dias: dias})
+	return dto.SlotsResponse{Dias: dias}
 }
 
 // Solicitar godoc
@@ -145,6 +198,7 @@ func (h *AppointmentHandler) Solicitar(w http.ResponseWriter, r *http.Request) {
 		Data:          data,
 		InicioMinutos: req.InicioMinutos,
 		Agora:         time.Now(),
+		Observacao:    req.Observacao,
 	})
 	if err != nil {
 		responderErroAgendamento(w, r, err)
@@ -158,6 +212,7 @@ func (h *AppointmentHandler) Solicitar(w http.ResponseWriter, r *http.Request) {
 		FimMinutos:    out.FimMinutos,
 		Status:        string(out.Status),
 		ExpiraEm:      out.ExpiraEm.Format(time.RFC3339),
+		Observacao:    out.Observacao,
 	})
 }
 
@@ -204,6 +259,7 @@ func (h *AppointmentHandler) SolicitarConvidado(w http.ResponseWriter, r *http.R
 		Email:         req.Email,
 		Telefone:      req.Telefone,
 		Agora:         time.Now(),
+		Observacao:    req.Observacao,
 	})
 	if err != nil {
 		responderErroAgendamento(w, r, err)
@@ -217,6 +273,74 @@ func (h *AppointmentHandler) SolicitarConvidado(w http.ResponseWriter, r *http.R
 		FimMinutos:    out.FimMinutos,
 		Status:        string(out.Status),
 		ExpiraEm:      out.ExpiraEm.Format(time.RFC3339),
+		Observacao:    out.Observacao,
+	})
+}
+
+// MarcarPeloPrestador godoc
+//
+//	@Summary		Marcar um agendamento para um cliente (prestador)
+//	@Description	O prestador autenticado registra na própria agenda um cliente que o contatou por fora (ex.: telefone). Registro puramente interno: só nome e observação — sem notificação. Nasce CONFIRMADO direto e pode ser cancelado a qualquer momento pelo prestador. Retorna 403 se o prestador desativou a funcionalidade em Preferências.
+//	@Tags			appointments
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		dto.MarcarPeloPrestadorRequest	true	"Slot e nome do cliente"
+//	@Success		201		{object}	dto.AgendamentoResponse
+//	@Failure		400		{object}	map[string]string
+//	@Failure		401		{object}	map[string]string
+//	@Failure		403		{object}	map[string]string
+//	@Failure		409		{object}	map[string]string
+//	@Router			/providers/me/agendamentos [post]
+func (h *AppointmentHandler) MarcarPeloPrestador(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.identidadeDoContexto(r)
+	if !ok {
+		responderErro(w, http.StatusUnauthorized, "não autenticado")
+		return
+	}
+
+	var req dto.MarcarPeloPrestadorRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		responderErro(w, http.StatusBadRequest, "corpo da requisição inválido")
+		return
+	}
+	if err := req.Validar(); err != nil {
+		var ve validator.ValidationErrors
+		if errors.As(err, &ve) {
+			responderErro(w, http.StatusBadRequest, mensagemValidacao(ve[0]))
+			return
+		}
+		responderErro(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	data, err := time.Parse(layoutData, req.Data)
+	if err != nil {
+		responderErro(w, http.StatusBadRequest, "data inválida")
+		return
+	}
+
+	out, err := h.marcarPeloPrestador.Executar(ucappointment.MarcarPeloPrestadorInput{
+		ProviderID:    id.UserID,
+		Data:          data,
+		InicioMinutos: req.InicioMinutos,
+		Nome:          req.Nome,
+		Observacao:    req.Observacao,
+		Agora:         time.Now(),
+	})
+	if err != nil {
+		responderErroAgendamento(w, r, err)
+		return
+	}
+
+	responderJSON(w, http.StatusCreated, dto.AgendamentoResponse{
+		ID:                   out.ID,
+		Data:                 out.Data.Format(layoutData),
+		InicioMinutos:        out.InicioMinutos,
+		FimMinutos:           out.FimMinutos,
+		Status:               string(out.Status),
+		ExpiraEm:             out.ExpiraEm.Format(time.RFC3339),
+		Observacao:           out.Observacao,
+		MarcadoPeloPrestador: out.MarcadoPeloPrestador,
 	})
 }
 
@@ -272,14 +396,16 @@ func (h *AppointmentHandler) listarAgendamentos(
 	agendamentos := make([]dto.AgendamentoResponse, 0, len(out.Agendamentos))
 	for _, a := range out.Agendamentos {
 		resp := dto.AgendamentoResponse{
-			ID:            a.ID,
-			Data:          a.Data.Format(layoutData),
-			InicioMinutos: a.InicioMinutos,
-			FimMinutos:    a.FimMinutos,
-			Status:        string(a.Status),
-			ExpiraEm:      a.ExpiraEm.Format(time.RFC3339),
-			NomeCliente:   a.NomeCliente,
-			NomePrestador: a.NomePrestador,
+			ID:                   a.ID,
+			Data:                 a.Data.Format(layoutData),
+			InicioMinutos:        a.InicioMinutos,
+			FimMinutos:           a.FimMinutos,
+			Status:               string(a.Status),
+			ExpiraEm:             a.ExpiraEm.Format(time.RFC3339),
+			NomeCliente:          a.NomeCliente,
+			NomePrestador:        a.NomePrestador,
+			Observacao:           a.Observacao,
+			MarcadoPeloPrestador: a.MarcadoPeloPrestador,
 		}
 		if incluiContato {
 			resp.EmailCliente = a.EmailCliente
@@ -448,7 +574,8 @@ func responderErroAgendamento(w http.ResponseWriter, r *http.Request, err error)
 		errors.Is(err, ucappointment.ErrAgendamentoNaoEncontrado),
 		errors.Is(err, ucappointment.ErrTokenCancelamentoInvalido):
 		responderErro(w, http.StatusNotFound, err.Error())
-	case errors.Is(err, ucappointment.ErrClientInativo):
+	case errors.Is(err, ucappointment.ErrClientInativo),
+		errors.Is(err, ucappointment.ErrMarcacaoPeloPrestadorNaoPermitida):
 		responderErro(w, http.StatusForbidden, err.Error())
 	case errors.Is(err, ucappointment.ErrEmailTemConta):
 		responderErro(w, http.StatusConflict, err.Error())

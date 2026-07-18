@@ -121,7 +121,14 @@ func (uc *TransicionarUseCase) Cancelar(in TransicionarInput) error {
 		return appointment.ErrTransicaoInvalida
 	}
 
-	if err := a.Cancelar(in.Agora, uc.antecedencia, uc.fuso); err != nil {
+	// um agendamento que o próprio prestador registrou não tem pedido de
+	// ninguém a proteger — ele cancela a qualquer momento, mesmo em cima da
+	// hora.
+	antecedencia := uc.antecedencia
+	if a.MarcadoPeloPrestador {
+		antecedencia = 0
+	}
+	if err := a.Cancelar(in.Agora, antecedencia, uc.fuso); err != nil {
 		return err
 	}
 	if err := uc.repo.Atualizar(a); err != nil {

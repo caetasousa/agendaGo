@@ -22,11 +22,12 @@ type CadastrarProviderResponse struct {
 }
 
 type AtualizarPreferenciasRequest struct {
-	Telefone                  string     `json:"telefone" validate:"required,min=8,max=30"`
-	AceitaAgendamentos        bool       `json:"aceitaAgendamentos"`
-	DescansoMinutos           int        `json:"descansoMinutos" validate:"min=0"`
-	DuracaoAtendimentoMinutos int        `json:"duracaoAtendimentoMinutos" validate:"min=15,max=1440"`
-	HorariosPadrao            []BlocoDTO `json:"horariosPadrao"  validate:"dive"`
+	Telefone                     string     `json:"telefone" validate:"required,min=8,max=30"`
+	AceitaAgendamentos           bool       `json:"aceitaAgendamentos"`
+	DescansoMinutos              int        `json:"descansoMinutos" validate:"min=0"`
+	DuracaoAtendimentoMinutos    int        `json:"duracaoAtendimentoMinutos" validate:"min=15,max=1440"`
+	HorariosPadrao               []BlocoDTO `json:"horariosPadrao"  validate:"dive"`
+	PermiteMarcacaoPeloPrestador bool       `json:"permiteMarcacaoPeloPrestador"`
 }
 
 func (r AtualizarPreferenciasRequest) Validar() error {
@@ -34,9 +35,10 @@ func (r AtualizarPreferenciasRequest) Validar() error {
 }
 
 type AtualizarPreferenciasResponse struct {
-	Telefone                  string     `json:"telefone"`
-	AceitaAgendamentos        bool       `json:"aceitaAgendamentos"`
-	DescansoMinutos           int        `json:"descansoMinutos"`
-	DuracaoAtendimentoMinutos int        `json:"duracaoAtendimentoMinutos"`
-	HorariosPadrao            []BlocoDTO `json:"horariosPadrao"`
+	Telefone                     string     `json:"telefone"`
+	AceitaAgendamentos           bool       `json:"aceitaAgendamentos"`
+	DescansoMinutos              int        `json:"descansoMinutos"`
+	DuracaoAtendimentoMinutos    int        `json:"duracaoAtendimentoMinutos"`
+	HorariosPadrao               []BlocoDTO `json:"horariosPadrao"`
+	PermiteMarcacaoPeloPrestador bool       `json:"permiteMarcacaoPeloPrestador"`
 }

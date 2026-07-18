@@ -9,7 +9,9 @@ import (
 // indica um cliente convidado, sem conta — ele pode agendar sem se autenticar.
 // Ativo=false é um banimento pelo admin: o cliente deixa de logar. Telefone é
 // opcional para quem tem conta, mas exigido no agendamento de convidado, para
-// o prestador ter como contatar.
+// o prestador ter como contatar. Email vazio só existe no convidado registrado
+// pelo próprio prestador (cliente que ligou por telefone) — sem email, não há
+// notificações nem links de cancelamento/cadastro para esse cliente.
 type Client struct {
 	ID           string
 	Nome         string
@@ -39,17 +41,41 @@ func NovoComConta(id, nome, email, senhaHash string) (*Client, error) {
 	if senhaHash == "" {
 		return nil, ErrSenhaObrigatoria
 	}
+	if email == "" {
+		return nil, ErrEmailObrigatorio
+	}
 	return novo(id, nome, email, "", senhaHash)
 }
 
 // NovoConvidado cria um Client sem conta, para agendar sem se autenticar. O
 // telefone é obrigatório (validação leve: ao menos 8 dígitos) — é como o
-// prestador entra em contato com quem agendou sem cadastro.
+// prestador entra em contato com quem agendou sem cadastro. O email é
+// obrigatório: é por ele que o convidado recebe os links de cancelamento e
+// de criação de conta.
 func NovoConvidado(id, nome, email, telefone string) (*Client, error) {
+	if email == "" {
+		return nil, ErrEmailObrigatorio
+	}
+	return NovoConvidadoSemEmail(id, nome, email, telefone)
+}
+
+// NovoConvidadoSemEmail cria um convidado que pode não ter email — o caso do
+// cliente registrado pelo próprio prestador (ligou por telefone). Sem email,
+// esse cliente não recebe notificações nem links; o contato é só o telefone,
+// que continua obrigatório.
+func NovoConvidadoSemEmail(id, nome, email, telefone string) (*Client, error) {
 	if !telefoneValido(telefone) {
 		return nil, ErrTelefoneObrigatorio
 	}
 	return novo(id, nome, email, telefone, "")
+}
+
+// NovoRegistradoPeloPrestador cria um cliente mínimo — só nome — para quando
+// o próprio prestador marca o horário por um cliente que ligou. Sem email nem
+// telefone: esse cliente não recebe notificações nem links, e não há chave de
+// reuso entre marcações (cada marcação sem cadastro cria um cliente novo).
+func NovoRegistradoPeloPrestador(id, nome string) (*Client, error) {
+	return novo(id, nome, "", "", "")
 }
 
 // telefoneValido faz uma validação leve: exige ao menos 8 dígitos, ignorando
@@ -67,9 +93,6 @@ func telefoneValido(telefone string) bool {
 func novo(id, nome, email, telefone, senhaHash string) (*Client, error) {
 	if nome == "" {
 		return nil, ErrNomeObrigatorio
-	}
-	if email == "" {
-		return nil, ErrEmailObrigatorio
 	}
 
 	agora := time.Now()

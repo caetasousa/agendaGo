@@ -116,6 +116,7 @@ func main() {
 	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(consultarDisponibilidade, appointmentRepo, providerRepo, config.FusoHorario)
 	solicitarAgendamento := ucappointment.NovoSolicitarUseCase(consultarSlots, appointmentRepo, clientRepo, providerRepo, notificador, config.TTLSolicitacao)
 	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitarAgendamento, clientRepo, providerRepo, cancelamentoRepo, preCadastroRepo, notificador)
+	marcarPeloPrestador := ucappointment.NovoMarcarPeloPrestadorUseCase(solicitarAgendamento, clientRepo, providerRepo)
 	transicionarAgendamento := ucappointment.NovoTransicionarUseCase(appointmentRepo, providerRepo, clientRepo, cancelamentoRepo, preCadastroRepo, notificador, config.AntecedenciaMinimaCancelamento, config.FusoHorario)
 	cancelarPorToken := ucappointment.NovoCancelarPorTokenUseCase(appointmentRepo, cancelamentoRepo, providerRepo, clientRepo, notificador, config.AntecedenciaMinimaCancelamento, config.FusoHorario)
 	listarAgendamentos := ucappointment.NovoListarUseCase(appointmentRepo, providerRepo, clientRepo)
@@ -131,7 +132,7 @@ func main() {
 	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, loginAdmin, logout, perfil, config.CookieSeguro(), identidadeDoContexto)
 	passwordResetHandler := handler.NovoPasswordResetHandler(solicitarRecuperacao, redefinirSenha)
 	availabilityHandler := handler.NovoAvailabilityHandler(consultarAgenda, definirDia, removerDia, identidadeDoContexto)
-	appointmentHandler := handler.NovoAppointmentHandler(consultarSlots, solicitarAgendamento, solicitarConvidado, transicionarAgendamento, cancelarPorToken, listarAgendamentos, identidadeDoContexto)
+	appointmentHandler := handler.NovoAppointmentHandler(consultarSlots, solicitarAgendamento, solicitarConvidado, marcarPeloPrestador, transicionarAgendamento, cancelarPorToken, listarAgendamentos, identidadeDoContexto)
 	adminHandler := handler.NovoAdminHandler(moderar, detalharUsuario)
 
 	// middlewares
@@ -198,6 +199,10 @@ func main() {
 		r.Put("/providers/me/dias/{data}", availabilityHandler.DefinirDia)
 		r.Delete("/providers/me/dias/{data}", availabilityHandler.RemoverDia)
 		r.Get("/providers/me/agendamentos", appointmentHandler.ListarDoPrestador)
+		// marcação feita pelo próprio prestador (cliente ligou): slots da
+		// própria agenda (mesmo fechada ao público) e o registro da reserva
+		r.Get("/providers/me/slots", appointmentHandler.ConsultarSlotsDoPrestador)
+		r.Post("/providers/me/agendamentos", appointmentHandler.MarcarPeloPrestador)
 	})
 	r.Group(func(r chi.Router) {
 		r.Use(authMw.Autenticar)

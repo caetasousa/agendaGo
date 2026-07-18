@@ -171,15 +171,16 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	}
 
 	responderJSON(w, http.StatusOK, dto.MeResponse{
-		ID:                        perfil.ID,
-		Nome:                      perfil.Nome,
-		Email:                     perfil.Email,
-		Telefone:                  perfil.Telefone,
-		Tipo:                      perfil.Tipo,
-		AceitaAgendamentos:        perfil.AceitaAgendamentos,
-		DescansoMinutos:           perfil.DescansoMinutos,
-		DuracaoAtendimentoMinutos: perfil.DuracaoAtendimentoMinutos,
-		HorariosPadrao:            blocosParaDTO(perfil.HorariosPadrao),
+		ID:                           perfil.ID,
+		Nome:                         perfil.Nome,
+		Email:                        perfil.Email,
+		Telefone:                     perfil.Telefone,
+		Tipo:                         perfil.Tipo,
+		AceitaAgendamentos:           perfil.AceitaAgendamentos,
+		DescansoMinutos:              perfil.DescansoMinutos,
+		DuracaoAtendimentoMinutos:    perfil.DuracaoAtendimentoMinutos,
+		HorariosPadrao:               blocosParaDTO(perfil.HorariosPadrao),
+		PermiteMarcacaoPeloPrestador: perfil.PermiteMarcacaoPeloPrestador,
 	})
 }
 

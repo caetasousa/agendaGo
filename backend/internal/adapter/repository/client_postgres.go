@@ -21,12 +21,13 @@ func NovoClientPostgres(pool *pgxpool.Pool) *ClientPostgres {
 
 // Salvar persiste um novo cliente. criado_em e atualizado_em ficam a cargo
 // do DEFAULT NOW() da tabela — por isso não são enviados no INSERT.
-// SenhaHash vazio (cliente convidado) é gravado como NULL na coluna.
+// SenhaHash e Email vazios (convidado, possivelmente só-telefone) são gravados
+// como NULL — o UNIQUE de email não colide entre NULLs.
 func (r *ClientPostgres) Salvar(c *client.Client) error {
 	_, err := r.pool.Exec(context.Background(),
 		`INSERT INTO clients (id, nome, email, telefone, senha_hash, ativo)
 		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		c.ID, c.Nome, c.Email, telefoneOuNulo(c.Telefone), senhaHashOuNulo(c.SenhaHash), c.Ativo,
+		c.ID, c.Nome, emailOuNulo(c.Email), telefoneOuNulo(c.Telefone), senhaHashOuNulo(c.SenhaHash), c.Ativo,
 	)
 	return err
 }
@@ -111,9 +112,12 @@ func (r *ClientPostgres) buscar(sql, arg string) (*client.Client, error) {
 
 func escanearClient(linha escaneavel) (*client.Client, error) {
 	var c client.Client
-	var telefone, senhaHash *string
-	if err := linha.Scan(&c.ID, &c.Nome, &c.Email, &telefone, &senhaHash, &c.Ativo, &c.CriadoEm, &c.AtualizadoEm); err != nil {
+	var email, telefone, senhaHash *string
+	if err := linha.Scan(&c.ID, &c.Nome, &email, &telefone, &senhaHash, &c.Ativo, &c.CriadoEm, &c.AtualizadoEm); err != nil {
 		return nil, err
+	}
+	if email != nil {
+		c.Email = *email
 	}
 	if telefone != nil {
 		c.Telefone = *telefone
@@ -140,4 +144,14 @@ func telefoneOuNulo(telefone string) *string {
 		return nil
 	}
 	return &telefone
+}
+
+// emailOuNulo converte a string vazia (convidado registrado pelo prestador,
+// sem email) para NULL — assim o UNIQUE da coluna não colide entre clientes
+// sem email.
+func emailOuNulo(email string) *string {
+	if email == "" {
+		return nil
+	}
+	return &email
 }

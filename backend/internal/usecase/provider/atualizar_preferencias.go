@@ -18,21 +18,23 @@ type BlocoInput struct {
 // AtualizarPreferenciasInput contém as preferências a aplicar. ProviderID vem
 // da identidade da sessão autenticada, nunca do corpo da requisição.
 type AtualizarPreferenciasInput struct {
-	ProviderID                string
-	Telefone                  string
-	AceitaAgendamentos        bool
-	DescansoMinutos           int
-	DuracaoAtendimentoMinutos int
-	HorariosPadrao            []BlocoInput
+	ProviderID                   string
+	Telefone                     string
+	AceitaAgendamentos           bool
+	DescansoMinutos              int
+	DuracaoAtendimentoMinutos    int
+	HorariosPadrao               []BlocoInput
+	PermiteMarcacaoPeloPrestador bool
 }
 
 // AtualizarPreferenciasOutput contém as preferências após a atualização.
 type AtualizarPreferenciasOutput struct {
-	Telefone                  string
-	AceitaAgendamentos        bool
-	DescansoMinutos           int
-	DuracaoAtendimentoMinutos int
-	HorariosPadrao            []availability.TimeBlock
+	Telefone                     string
+	AceitaAgendamentos           bool
+	DescansoMinutos              int
+	DuracaoAtendimentoMinutos    int
+	HorariosPadrao               []availability.TimeBlock
+	PermiteMarcacaoPeloPrestador bool
 }
 
 // AtualizarPreferenciasUseCase orquestra a atualização das preferências de um prestador.
@@ -67,6 +69,12 @@ func (uc *AtualizarPreferenciasUseCase) Executar(in AtualizarPreferenciasInput) 
 		p.DesativarAgenda()
 	}
 
+	if in.PermiteMarcacaoPeloPrestador {
+		p.AtivarMarcacaoPeloPrestador()
+	} else {
+		p.DesativarMarcacaoPeloPrestador()
+	}
+
 	if err := p.DefinirDescanso(in.DescansoMinutos); err != nil {
 		return nil, err
 	}
@@ -92,10 +100,11 @@ func (uc *AtualizarPreferenciasUseCase) Executar(in AtualizarPreferenciasInput) 
 	}
 
 	return &AtualizarPreferenciasOutput{
-		Telefone:                  p.Telefone,
-		AceitaAgendamentos:        p.AceitaAgendamentos,
-		DescansoMinutos:           p.DescansoMinutos,
-		DuracaoAtendimentoMinutos: p.DuracaoAtendimentoMinutos,
-		HorariosPadrao:            p.HorariosPadrao,
+		Telefone:                     p.Telefone,
+		AceitaAgendamentos:           p.AceitaAgendamentos,
+		DescansoMinutos:              p.DescansoMinutos,
+		DuracaoAtendimentoMinutos:    p.DuracaoAtendimentoMinutos,
+		HorariosPadrao:               p.HorariosPadrao,
+		PermiteMarcacaoPeloPrestador: p.PermiteMarcacaoPeloPrestador,
 	}, nil
 }

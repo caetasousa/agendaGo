@@ -85,7 +85,9 @@ func (uc *ConsultarAgendaUseCase) Executar(in ConsultarAgendaInput) (*ConsultarA
 
 	var dias []DiaAgenda
 	for d := in.De; !d.After(in.Ate); d = d.AddDate(0, 0, 1) {
-		dia := DiaAgenda{Data: d, Origem: OrigemPadrao, Blocos: blocosPadrao(p, d)}
+		// a tela de disponibilidade reflete o que o público vê: agenda
+		// desativada zera o expediente padrão (a UI mostra o aviso)
+		dia := DiaAgenda{Data: d, Origem: OrigemPadrao, Blocos: blocosPadrao(p, d, false)}
 		if e, ok := porData[d.Format("2006-01-02")]; ok {
 			if e.Tipo == availability.TipoBloqueio {
 				dia.Origem = OrigemBloqueio
