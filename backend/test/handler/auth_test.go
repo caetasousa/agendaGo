@@ -10,11 +10,11 @@ import (
 
 	"agendago/internal/adapter/http/handler"
 	"agendago/internal/adapter/http/middleware"
-	"agendago/internal/adapter/repository"
 	"agendago/internal/adapter/security"
 	"agendago/internal/domain/client"
 	"agendago/internal/domain/provider"
 	ucauth "agendago/internal/usecase/auth"
+	"agendago/test/repository/memoria"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -25,9 +25,9 @@ func novoRouterAuth(t *testing.T) (*chi.Mux, *provider.Provider, *client.Client)
 	t.Helper()
 	hasher := security.NovoHasherArgon2id()
 
-	providerRepo := repository.NovoProviderMemoria()
-	clientRepo := repository.NovoClientMemoria()
-	sessionRepo := repository.NovoSessionMemoria()
+	providerRepo := memoria.NovoProviderMemoria()
+	clientRepo := memoria.NovoClientMemoria()
+	sessionRepo := memoria.NovoSessionMemoria()
 
 	senhaHash, _ := hasher.Gerar("12345678")
 	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
@@ -40,7 +40,7 @@ func novoRouterAuth(t *testing.T) (*chi.Mux, *provider.Provider, *client.Client)
 	loginClient := ucauth.NovoLoginClientUseCase(clientRepo, sessionRepo, hasher)
 	logout := ucauth.NovoLogoutUseCase(sessionRepo)
 	validarSessao := ucauth.NovoValidarSessaoUseCase(sessionRepo)
-	perfil := ucauth.NovoPerfilUseCase(providerRepo, clientRepo, repository.NovoAdminMemoria())
+	perfil := ucauth.NovoPerfilUseCase(providerRepo, clientRepo, memoria.NovoAdminMemoria())
 
 	identidadeDoContexto := func(r *http.Request) (ucauth.Identidade, bool) {
 		return middleware.IdentidadeDoContexto(r.Context())

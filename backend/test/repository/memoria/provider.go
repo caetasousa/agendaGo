@@ -1,4 +1,4 @@
-package repository
+package memoria
 
 import (
 	"sync"
@@ -7,7 +7,7 @@ import (
 )
 
 type ProviderMemoria struct {
-	mu   sync.RWMutex
+	mu    sync.RWMutex
 	dados map[string]*provider.Provider
 }
 

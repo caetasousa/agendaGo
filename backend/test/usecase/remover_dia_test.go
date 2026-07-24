@@ -4,16 +4,16 @@ import (
 	"testing"
 	"time"
 
-	"agendago/internal/adapter/repository"
 	"agendago/internal/domain/availability"
 	ucavailability "agendago/internal/usecase/availability"
+	"agendago/test/repository/memoria"
 )
 
 func TestRemoverDia(t *testing.T) {
 	data := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
 
 	t.Run("remove a definição da data com sucesso", func(t *testing.T) {
-		repo := repository.NovoAvailabilityMemoria()
+		repo := memoria.NovoAvailabilityMemoria()
 		excecao, _ := availability.NovaDateException("exc-1", "provider-1", data, availability.TipoBloqueio, nil)
 		repo.SalvarExcecao(excecao)
 
@@ -29,7 +29,7 @@ func TestRemoverDia(t *testing.T) {
 	})
 
 	t.Run("retorna ErrDiaNaoDefinido quando a data não tem definição própria", func(t *testing.T) {
-		repo := repository.NovoAvailabilityMemoria()
+		repo := memoria.NovoAvailabilityMemoria()
 		uc := ucavailability.NovoRemoverDiaUseCase(repo)
 
 		err := uc.Executar(ucavailability.RemoverDiaInput{ProviderID: "provider-1", Data: data})
@@ -39,7 +39,7 @@ func TestRemoverDia(t *testing.T) {
 	})
 
 	t.Run("não remove definição de outro prestador na mesma data", func(t *testing.T) {
-		repo := repository.NovoAvailabilityMemoria()
+		repo := memoria.NovoAvailabilityMemoria()
 		excecao, _ := availability.NovaDateException("exc-1", "provider-2", data, availability.TipoBloqueio, nil)
 		repo.SalvarExcecao(excecao)
 

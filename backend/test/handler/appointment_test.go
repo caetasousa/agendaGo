@@ -11,13 +11,13 @@ import (
 	"agendago/internal/adapter/email"
 	"agendago/internal/adapter/http/handler"
 	"agendago/internal/adapter/http/middleware"
-	"agendago/internal/adapter/repository"
 	"agendago/internal/adapter/security"
 	"agendago/internal/domain/client"
 	"agendago/internal/domain/provider"
 	ucappointment "agendago/internal/usecase/appointment"
 	ucauth "agendago/internal/usecase/auth"
 	ucavailability "agendago/internal/usecase/availability"
+	"agendago/test/repository/memoria"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -26,15 +26,15 @@ import (
 // cliente cadastrados e as rotas de agendamento, espelhando o wiring de main.go.
 // providerRepo é devolvido para os testes que precisam mutar o prestador
 // (ex.: desativar a marcação pelo prestador em preferências) depois de montado o router.
-func novoRouterAgendamento(t *testing.T) (r *chi.Mux, providerID string, mailer *email.MailerMemoria, providerRepo *repository.ProviderMemoria) {
+func novoRouterAgendamento(t *testing.T) (r *chi.Mux, providerID string, mailer *email.MailerMemoria, providerRepo *memoria.ProviderMemoria) {
 	t.Helper()
 	hasher := security.NovoHasherArgon2id()
 
-	providerRepo = repository.NovoProviderMemoria()
-	clientRepo := repository.NovoClientMemoria()
-	sessionRepo := repository.NovoSessionMemoria()
-	availabilityRepo := repository.NovoAvailabilityMemoria()
-	appointmentRepo := repository.NovoAppointmentMemoria()
+	providerRepo = memoria.NovoProviderMemoria()
+	clientRepo := memoria.NovoClientMemoria()
+	sessionRepo := memoria.NovoSessionMemoria()
+	availabilityRepo := memoria.NovoAvailabilityMemoria()
+	appointmentRepo := memoria.NovoAppointmentMemoria()
 
 	senhaHash, _ := hasher.Gerar("12345678")
 	p, _ := provider.Novo("11111111-1111-1111-1111-111111111111", "João Silva", "joao@email.com", "11999998888", senhaHash)
@@ -54,8 +54,8 @@ func novoRouterAgendamento(t *testing.T) (r *chi.Mux, providerID string, mailer 
 
 	mailer = email.NovaMailerMemoria()
 	notificador := email.NovoNotificador(mailer, "http://localhost:5173", time.UTC, email.ExecutorSincrono)
-	cancelamentoRepo := repository.NovoCancellationMemoria()
-	preCadastroRepo := repository.NovoPreCadastroMemoria()
+	cancelamentoRepo := memoria.NovoCancellationMemoria()
+	preCadastroRepo := memoria.NovoPreCadastroMemoria()
 	resolvedor := ucavailability.NovoConsultarDisponibilidadeUseCase(availabilityRepo, providerRepo)
 	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointmentRepo, providerRepo, time.UTC)
 	solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointmentRepo, clientRepo, providerRepo, notificador, 24*time.Hour)

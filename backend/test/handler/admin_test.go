@@ -7,13 +7,13 @@ import (
 
 	"agendago/internal/adapter/http/handler"
 	"agendago/internal/adapter/http/middleware"
-	"agendago/internal/adapter/repository"
 	"agendago/internal/adapter/security"
 	"agendago/internal/domain/client"
 	"agendago/internal/domain/provider"
 	ucadmin "agendago/internal/usecase/admin"
 	ucappointment "agendago/internal/usecase/appointment"
 	ucauth "agendago/internal/usecase/auth"
+	"agendago/test/repository/memoria"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -24,10 +24,10 @@ func novoRouterAdmin(t *testing.T) (r *chi.Mux, providerID, clientID string) {
 	t.Helper()
 	hasher := security.NovoHasherArgon2id()
 
-	providerRepo := repository.NovoProviderMemoria()
-	clientRepo := repository.NovoClientMemoria()
-	sessionRepo := repository.NovoSessionMemoria()
-	adminRepo := repository.NovoAdminMemoria()
+	providerRepo := memoria.NovoProviderMemoria()
+	clientRepo := memoria.NovoClientMemoria()
+	sessionRepo := memoria.NovoSessionMemoria()
+	adminRepo := memoria.NovoAdminMemoria()
 
 	if err := ucadmin.NovoSemearUseCase(adminRepo, hasher).Executar("admin@agendago.dev", "12345678"); err != nil {
 		t.Fatalf("semear admin: %v", err)
@@ -49,7 +49,7 @@ func novoRouterAdmin(t *testing.T) (r *chi.Mux, providerID, clientID string) {
 		return middleware.IdentidadeDoContexto(req.Context())
 	}
 	moderar := ucadmin.NovoModerarUseCase(providerRepo, clientRepo, sessionRepo)
-	appointmentRepo := repository.NovoAppointmentMemoria()
+	appointmentRepo := memoria.NovoAppointmentMemoria()
 	listarAgendamentos := ucappointment.NovoListarUseCase(appointmentRepo, providerRepo, clientRepo)
 	detalhar := ucadmin.NovoDetalharUseCase(providerRepo, clientRepo, listarAgendamentos)
 	adminHandler := handler.NovoAdminHandler(moderar, detalhar)

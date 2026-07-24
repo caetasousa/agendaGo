@@ -4,13 +4,13 @@ import (
 	"testing"
 	"time"
 
-	"agendago/internal/adapter/repository"
 	"agendago/internal/adapter/security"
 	"agendago/internal/domain/client"
 	"agendago/internal/domain/provider"
 	"agendago/internal/domain/session"
 	"agendago/internal/pkg/token"
 	ucauth "agendago/internal/usecase/auth"
+	"agendago/test/repository/memoria"
 )
 
 func hashDoToken(t string) string {
@@ -22,10 +22,10 @@ func TestLoginProvider(t *testing.T) {
 	senhaHash, _ := hasher.Gerar("12345678")
 	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
 
-	novoAmbiente := func() (*ucauth.LoginProviderUseCase, *repository.SessionMemoria) {
-		providers := repository.NovoProviderMemoria()
+	novoAmbiente := func() (*ucauth.LoginProviderUseCase, *memoria.SessionMemoria) {
+		providers := memoria.NovoProviderMemoria()
 		providers.Salvar(p)
-		sessoes := repository.NovoSessionMemoria()
+		sessoes := memoria.NovoSessionMemoria()
 		return ucauth.NovoLoginProviderUseCase(providers, sessoes, hasher), sessoes
 	}
 
@@ -72,10 +72,10 @@ func TestLoginClient(t *testing.T) {
 	convidado, _ := client.NovoConvidado("client-2", "Convidado", "convidado@email.com", "11999998888")
 
 	novoAmbiente := func() *ucauth.LoginClientUseCase {
-		clients := repository.NovoClientMemoria()
+		clients := memoria.NovoClientMemoria()
 		clients.Salvar(comConta)
 		clients.Salvar(convidado)
-		sessoes := repository.NovoSessionMemoria()
+		sessoes := memoria.NovoSessionMemoria()
 		return ucauth.NovoLoginClientUseCase(clients, sessoes, hasher)
 	}
 
@@ -109,7 +109,7 @@ func TestLoginClient(t *testing.T) {
 
 func TestValidarSessao(t *testing.T) {
 	t.Run("valida sessão ativa e devolve identidade", func(t *testing.T) {
-		sessoes := repository.NovoSessionMemoria()
+		sessoes := memoria.NovoSessionMemoria()
 		s := session.Nova(hashDoToken("token-valido"), "user-1", session.TipoProvider, time.Hour)
 		sessoes.Salvar(s)
 
@@ -124,7 +124,7 @@ func TestValidarSessao(t *testing.T) {
 	})
 
 	t.Run("rejeita token sem sessão correspondente", func(t *testing.T) {
-		sessoes := repository.NovoSessionMemoria()
+		sessoes := memoria.NovoSessionMemoria()
 		uc := ucauth.NovoValidarSessaoUseCase(sessoes)
 		_, err := uc.Executar("token-desconhecido")
 		if err != ucauth.ErrSessaoInvalida {
@@ -133,7 +133,7 @@ func TestValidarSessao(t *testing.T) {
 	})
 
 	t.Run("rejeita sessão expirada", func(t *testing.T) {
-		sessoes := repository.NovoSessionMemoria()
+		sessoes := memoria.NovoSessionMemoria()
 		s := session.Nova(hashDoToken("token-expirado"), "user-1", session.TipoProvider, -time.Hour)
 		sessoes.Salvar(s)
 
@@ -152,11 +152,11 @@ func TestPerfil(t *testing.T) {
 	c, _ := client.NovoComConta("client-1", "Maria Silva", "maria@email.com", senhaHash)
 
 	novoAmbiente := func() *ucauth.PerfilUseCase {
-		providers := repository.NovoProviderMemoria()
+		providers := memoria.NovoProviderMemoria()
 		providers.Salvar(p)
-		clients := repository.NovoClientMemoria()
+		clients := memoria.NovoClientMemoria()
 		clients.Salvar(c)
-		return ucauth.NovoPerfilUseCase(providers, clients, repository.NovoAdminMemoria())
+		return ucauth.NovoPerfilUseCase(providers, clients, memoria.NovoAdminMemoria())
 	}
 
 	t.Run("devolve perfil do prestador", func(t *testing.T) {
@@ -226,7 +226,7 @@ func TestPerfil(t *testing.T) {
 
 func TestLogout(t *testing.T) {
 	t.Run("remove a sessão", func(t *testing.T) {
-		sessoes := repository.NovoSessionMemoria()
+		sessoes := memoria.NovoSessionMemoria()
 		s := session.Nova(hashDoToken("token-ativo"), "user-1", session.TipoProvider, time.Hour)
 		sessoes.Salvar(s)
 
@@ -242,7 +242,7 @@ func TestLogout(t *testing.T) {
 	})
 
 	t.Run("é idempotente para token sem sessão", func(t *testing.T) {
-		sessoes := repository.NovoSessionMemoria()
+		sessoes := memoria.NovoSessionMemoria()
 		uc := ucauth.NovoLogoutUseCase(sessoes)
 		if err := uc.Executar("token-nunca-existiu"); err != nil {
 			t.Errorf("não esperava erro, got: %v", err)

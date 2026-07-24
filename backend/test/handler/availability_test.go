@@ -9,12 +9,12 @@ import (
 
 	"agendago/internal/adapter/http/handler"
 	"agendago/internal/adapter/http/middleware"
-	"agendago/internal/adapter/repository"
 	"agendago/internal/adapter/security"
 	"agendago/internal/domain/client"
 	"agendago/internal/domain/provider"
 	ucauth "agendago/internal/usecase/auth"
 	ucavailability "agendago/internal/usecase/availability"
+	"agendago/test/repository/memoria"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -26,10 +26,10 @@ func novoRouterAvailability(t *testing.T) *chi.Mux {
 	t.Helper()
 	hasher := security.NovoHasherArgon2id()
 
-	providerRepo := repository.NovoProviderMemoria()
-	clientRepo := repository.NovoClientMemoria()
-	sessionRepo := repository.NovoSessionMemoria()
-	availabilityRepo := repository.NovoAvailabilityMemoria()
+	providerRepo := memoria.NovoProviderMemoria()
+	clientRepo := memoria.NovoClientMemoria()
+	sessionRepo := memoria.NovoSessionMemoria()
+	availabilityRepo := memoria.NovoAvailabilityMemoria()
 
 	senhaHash, _ := hasher.Gerar("12345678")
 	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)

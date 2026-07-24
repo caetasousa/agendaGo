@@ -11,25 +11,25 @@ import (
 
 	"agendago/internal/adapter/email"
 	"agendago/internal/adapter/http/handler"
-	"agendago/internal/adapter/repository"
 	"agendago/internal/adapter/security"
 	"agendago/internal/domain/client"
 	"agendago/internal/domain/precadastro"
 	"agendago/internal/pkg/token"
 	ucclient "agendago/internal/usecase/client"
+	"agendago/test/repository/memoria"
 
 	"github.com/go-chi/chi/v5"
 )
 
-func novoClientHandler() (*handler.ClientHandler, *repository.ClientMemoria, *repository.PreCadastroMemoria) {
-	clients := repository.NovoClientMemoria()
-	providers := repository.NovoProviderMemoria()
-	pendentes := repository.NovoSignupMemoria()
+func novoClientHandler() (*handler.ClientHandler, *memoria.ClientMemoria, *memoria.PreCadastroMemoria) {
+	clients := memoria.NovoClientMemoria()
+	providers := memoria.NovoProviderMemoria()
+	pendentes := memoria.NovoSignupMemoria()
 	notificador := email.NovoNotificador(email.NovaMailerMemoria(), "http://localhost:5173", time.UTC, email.ExecutorSincrono)
 	hasher := security.NovoHasherArgon2id()
 	solicitar := ucclient.NovoSolicitarCadastroUseCase(clients, providers, pendentes, notificador, hasher)
 	confirmar := ucclient.NovoConfirmarCadastroUseCase(clients, providers, pendentes)
-	preCadastroRepo := repository.NovoPreCadastroMemoria()
+	preCadastroRepo := memoria.NovoPreCadastroMemoria()
 	consultarPreCadastro := ucclient.NovoConsultarPreCadastroUseCase(preCadastroRepo)
 	concluirPreCadastro := ucclient.NovoConcluirPreCadastroUseCase(clients, providers, preCadastroRepo, hasher)
 	return handler.NovoClientHandler(solicitar, confirmar, consultarPreCadastro, concluirPreCadastro), clients, preCadastroRepo

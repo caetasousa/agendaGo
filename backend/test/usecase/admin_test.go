@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"agendago/internal/adapter/email"
-	"agendago/internal/adapter/repository"
 	"agendago/internal/adapter/security"
 	"agendago/internal/domain/client"
 	"agendago/internal/domain/provider"
@@ -14,11 +13,12 @@ import (
 	ucappointment "agendago/internal/usecase/appointment"
 	ucauth "agendago/internal/usecase/auth"
 	ucavailability "agendago/internal/usecase/availability"
+	"agendago/test/repository/memoria"
 )
 
 func TestSemearAdmin(t *testing.T) {
 	t.Run("cria o admin quando email e senha vêm preenchidos", func(t *testing.T) {
-		repo := repository.NovoAdminMemoria()
+		repo := memoria.NovoAdminMemoria()
 		hasher := security.NovoHasherArgon2id()
 		uc := ucadmin.NovoSemearUseCase(repo, hasher)
 
@@ -35,7 +35,7 @@ func TestSemearAdmin(t *testing.T) {
 	})
 
 	t.Run("é idempotente: rodar de novo mantém um só admin e atualiza a senha", func(t *testing.T) {
-		repo := repository.NovoAdminMemoria()
+		repo := memoria.NovoAdminMemoria()
 		hasher := security.NovoHasherArgon2id()
 		uc := ucadmin.NovoSemearUseCase(repo, hasher)
 
@@ -54,7 +54,7 @@ func TestSemearAdmin(t *testing.T) {
 	})
 
 	t.Run("email ou senha vazios não criam admin", func(t *testing.T) {
-		repo := repository.NovoAdminMemoria()
+		repo := memoria.NovoAdminMemoria()
 		uc := ucadmin.NovoSemearUseCase(repo, security.NovoHasherArgon2id())
 
 		uc.Executar("", "senha")
@@ -68,21 +68,21 @@ func TestSemearAdmin(t *testing.T) {
 func TestModerar(t *testing.T) {
 	type ambiente struct {
 		uc        *ucadmin.ModerarUseCase
-		providers *repository.ProviderMemoria
-		clients   *repository.ClientMemoria
-		sessoes   *repository.SessionMemoria
+		providers *memoria.ProviderMemoria
+		clients   *memoria.ClientMemoria
+		sessoes   *memoria.SessionMemoria
 	}
 	novoAmbiente := func() ambiente {
-		providers := repository.NovoProviderMemoria()
+		providers := memoria.NovoProviderMemoria()
 		p, _ := provider.Novo("p-1", "João Prestador", "joao@email.com", "11999998888", "hash")
 		p.AtivarAgenda()
 		providers.Salvar(p)
 
-		clients := repository.NovoClientMemoria()
+		clients := memoria.NovoClientMemoria()
 		c, _ := client.NovoComConta("c-1", "Maria Cliente", "maria@email.com", "hash")
 		clients.Salvar(c)
 
-		sessoes := repository.NovoSessionMemoria()
+		sessoes := memoria.NovoSessionMemoria()
 		return ambiente{
 			uc:        ucadmin.NovoModerarUseCase(providers, clients, sessoes),
 			providers: providers,
@@ -108,7 +108,7 @@ func TestModerar(t *testing.T) {
 	t.Run("banir e reativar prestador reflete no login e na listagem", func(t *testing.T) {
 		amb := novoAmbiente()
 		uc, providers := amb.uc, amb.providers
-		sessionRepo := repository.NovoSessionMemoria()
+		sessionRepo := memoria.NovoSessionMemoria()
 		hasher := security.NovoHasherArgon2id()
 
 		// re-cria o prestador com senha real para testar o login
@@ -140,7 +140,7 @@ func TestModerar(t *testing.T) {
 	t.Run("banir cliente bloqueia o login dele", func(t *testing.T) {
 		amb := novoAmbiente()
 		uc, clients := amb.uc, amb.clients
-		sessionRepo := repository.NovoSessionMemoria()
+		sessionRepo := memoria.NovoSessionMemoria()
 		hasher := security.NovoHasherArgon2id()
 
 		senhaHash, _ := hasher.Gerar("12345678")
@@ -208,17 +208,17 @@ func TestDetalhar(t *testing.T) {
 	// novoAmbiente monta o DetalharUseCase sobre repositórios em memória, com um
 	// prestador ativo e um convidado que agendou um horário com ele.
 	novoAmbiente := func() (*ucadmin.DetalharUseCase, *provider.Provider, *client.Client) {
-		providers := repository.NovoProviderMemoria()
+		providers := memoria.NovoProviderMemoria()
 		p, _ := provider.Novo("p-1", "João Prestador", "joao@email.com", "11999998888", "hash")
 		p.AtivarAgenda()
 		providers.Salvar(p)
 
-		clients := repository.NovoClientMemoria()
+		clients := memoria.NovoClientMemoria()
 		convidado, _ := client.NovoConvidado("c-1", "Convidada Silva", "convidada@email.com", "(11) 99999-8888")
 		clients.Salvar(convidado)
 
-		availabilityRepo := repository.NovoAvailabilityMemoria()
-		appointments := repository.NovoAppointmentMemoria()
+		availabilityRepo := memoria.NovoAvailabilityMemoria()
+		appointments := memoria.NovoAppointmentMemoria()
 		resolvedor := ucavailability.NovoConsultarDisponibilidadeUseCase(availabilityRepo, providers)
 		consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointments, providers, time.UTC)
 		notificador := email.NovoNotificador(email.NovaMailerMemoria(), "http://localhost:5173", time.UTC, email.ExecutorSincrono)

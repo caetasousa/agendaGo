@@ -4,22 +4,22 @@ import (
 	"testing"
 	"time"
 
-	"agendago/internal/adapter/repository"
 	"agendago/internal/domain/availability"
 	"agendago/internal/domain/provider"
 	ucavailability "agendago/internal/usecase/availability"
+	"agendago/test/repository/memoria"
 )
 
-func novoAmbienteDisponibilidade(t *testing.T, aceitaAgendamentos bool) (*ucavailability.ConsultarDisponibilidadeUseCase, *repository.AvailabilityMemoria) {
+func novoAmbienteDisponibilidade(t *testing.T, aceitaAgendamentos bool) (*ucavailability.ConsultarDisponibilidadeUseCase, *memoria.AvailabilityMemoria) {
 	t.Helper()
-	providerRepo := repository.NovoProviderMemoria()
+	providerRepo := memoria.NovoProviderMemoria()
 	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", "hash-da-senha")
 	if aceitaAgendamentos {
 		p.AtivarAgenda()
 	}
 	providerRepo.Salvar(p)
 
-	availRepo := repository.NovoAvailabilityMemoria()
+	availRepo := memoria.NovoAvailabilityMemoria()
 	uc := ucavailability.NovoConsultarDisponibilidadeUseCase(availRepo, providerRepo)
 	return uc, availRepo
 }
@@ -71,14 +71,14 @@ func TestConsultarDisponibilidade(t *testing.T) {
 	})
 
 	t.Run("dia útil sem definição própria: aplica o expediente padrão configurado pelo prestador", func(t *testing.T) {
-		providerRepo := repository.NovoProviderMemoria()
+		providerRepo := memoria.NovoProviderMemoria()
 		p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", "hash-da-senha")
 		p.AtivarAgenda()
 		bloco, _ := availability.NovoTimeBlock(9*60, 11*60)
 		p.DefinirHorariosPadrao([]availability.TimeBlock{bloco})
 		providerRepo.Salvar(p)
 
-		availRepo := repository.NovoAvailabilityMemoria()
+		availRepo := memoria.NovoAvailabilityMemoria()
 		uc := ucavailability.NovoConsultarDisponibilidadeUseCase(availRepo, providerRepo)
 
 		blocos, err := uc.Executar(ucavailability.ConsultarDisponibilidadeInput{ProviderID: "provider-1", Data: segunda})
@@ -130,8 +130,8 @@ func TestConsultarDisponibilidade(t *testing.T) {
 	})
 
 	t.Run("retorna erro quando prestador não existe", func(t *testing.T) {
-		availRepo := repository.NovoAvailabilityMemoria()
-		providerRepo := repository.NovoProviderMemoria()
+		availRepo := memoria.NovoAvailabilityMemoria()
+		providerRepo := memoria.NovoProviderMemoria()
 		uc := ucavailability.NovoConsultarDisponibilidadeUseCase(availRepo, providerRepo)
 
 		_, err := uc.Executar(ucavailability.ConsultarDisponibilidadeInput{ProviderID: "id-fantasma", Data: segunda})

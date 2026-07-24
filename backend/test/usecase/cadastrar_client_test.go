@@ -6,11 +6,11 @@ import (
 	"time"
 
 	"agendago/internal/adapter/email"
-	"agendago/internal/adapter/repository"
 	"agendago/internal/adapter/security"
 	"agendago/internal/domain/client"
 	"agendago/internal/domain/provider"
 	ucclient "agendago/internal/usecase/client"
+	"agendago/test/repository/memoria"
 )
 
 // ambienteCadastro monta os usecases de cadastro de cliente sobre repositórios
@@ -18,15 +18,15 @@ import (
 type ambienteCadastro struct {
 	solicitar *ucclient.SolicitarCadastroUseCase
 	confirmar *ucclient.ConfirmarCadastroUseCase
-	clients   *repository.ClientMemoria
-	providers *repository.ProviderMemoria
+	clients   *memoria.ClientMemoria
+	providers *memoria.ProviderMemoria
 	mailer    *email.MailerMemoria
 }
 
 func novoAmbienteCadastro() *ambienteCadastro {
-	clients := repository.NovoClientMemoria()
-	providers := repository.NovoProviderMemoria()
-	pendentes := repository.NovoSignupMemoria()
+	clients := memoria.NovoClientMemoria()
+	providers := memoria.NovoProviderMemoria()
+	pendentes := memoria.NovoSignupMemoria()
 	mailer := email.NovaMailerMemoria()
 	notificador := email.NovoNotificador(mailer, "http://localhost:5173", time.UTC, email.ExecutorSincrono)
 	hasher := security.NovoHasherArgon2id()

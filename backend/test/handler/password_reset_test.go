@@ -10,10 +10,10 @@ import (
 
 	"agendago/internal/adapter/email"
 	"agendago/internal/adapter/http/handler"
-	"agendago/internal/adapter/repository"
 	"agendago/internal/adapter/security"
 	"agendago/internal/domain/provider"
 	ucauth "agendago/internal/usecase/auth"
+	"agendago/test/repository/memoria"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -24,10 +24,10 @@ func novoRouterPasswordReset(t *testing.T) (r *chi.Mux, mailer *email.MailerMemo
 	t.Helper()
 	hasher := security.NovoHasherArgon2id()
 
-	providerRepo := repository.NovoProviderMemoria()
-	clientRepo := repository.NovoClientMemoria()
-	resetRepo := repository.NovoPasswordResetMemoria()
-	sessionRepo := repository.NovoSessionMemoria()
+	providerRepo := memoria.NovoProviderMemoria()
+	clientRepo := memoria.NovoClientMemoria()
+	resetRepo := memoria.NovoPasswordResetMemoria()
+	sessionRepo := memoria.NovoSessionMemoria()
 
 	senhaHash, _ := hasher.Gerar("12345678")
 	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)

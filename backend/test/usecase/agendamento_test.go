@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"agendago/internal/adapter/email"
-	"agendago/internal/adapter/repository"
 	"agendago/internal/adapter/security"
 	"agendago/internal/domain/appointment"
 	"agendago/internal/domain/client"
@@ -14,6 +13,7 @@ import (
 	ucappointment "agendago/internal/usecase/appointment"
 	ucavailability "agendago/internal/usecase/availability"
 	ucclient "agendago/internal/usecase/client"
+	"agendago/test/repository/memoria"
 )
 
 // ambienteAgendamento monta o conjunto de usecases de agendamento sobre
@@ -30,11 +30,11 @@ type ambienteAgendamento struct {
 	concluirPreCadastro  *ucclient.ConcluirPreCadastroUseCase
 	listar               *ucappointment.ListarUseCase
 	lembrar              *ucappointment.LembrarUseCase
-	appointments         *repository.AppointmentMemoria
-	clients              *repository.ClientMemoria
-	cancelamentos        *repository.CancellationMemoria
-	preCadastros         *repository.PreCadastroMemoria
-	providers            *repository.ProviderMemoria
+	appointments         *memoria.AppointmentMemoria
+	clients              *memoria.ClientMemoria
+	cancelamentos        *memoria.CancellationMemoria
+	preCadastros         *memoria.PreCadastroMemoria
+	providers            *memoria.ProviderMemoria
 	prestador            *provider.Provider
 	mailer               *email.MailerMemoria
 }
@@ -42,18 +42,18 @@ type ambienteAgendamento struct {
 func novoAmbienteAgendamento(t *testing.T) *ambienteAgendamento {
 	t.Helper()
 
-	providerRepo := repository.NovoProviderMemoria()
+	providerRepo := memoria.NovoProviderMemoria()
 	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", "hash")
 	p.AtivarAgenda()
 	providerRepo.Salvar(p)
 
-	clientRepo := repository.NovoClientMemoria()
+	clientRepo := memoria.NovoClientMemoria()
 	c, _ := client.NovoComConta("client-1", "Maria Souza", "maria@email.com", "hash")
 	clientRepo.Salvar(c)
 
-	availabilityRepo := repository.NovoAvailabilityMemoria()
-	appointments := repository.NovoAppointmentMemoria()
-	cancelamentos := repository.NovoCancellationMemoria()
+	availabilityRepo := memoria.NovoAvailabilityMemoria()
+	appointments := memoria.NovoAppointmentMemoria()
+	cancelamentos := memoria.NovoCancellationMemoria()
 
 	mailer := email.NovaMailerMemoria()
 	notificador := email.NovoNotificador(mailer, "http://localhost:5173", time.UTC, email.ExecutorSincrono)
@@ -61,7 +61,7 @@ func novoAmbienteAgendamento(t *testing.T) *ambienteAgendamento {
 	resolvedor := ucavailability.NovoConsultarDisponibilidadeUseCase(availabilityRepo, providerRepo)
 	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointments, providerRepo, time.UTC)
 	solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointments, clientRepo, providerRepo, notificador, 24*time.Hour)
-	preCadastros := repository.NovoPreCadastroMemoria()
+	preCadastros := memoria.NovoPreCadastroMemoria()
 	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitar, clientRepo, providerRepo, cancelamentos, preCadastros, notificador)
 	marcarPeloPrestador := ucappointment.NovoMarcarPeloPrestadorUseCase(solicitar, clientRepo, providerRepo)
 	transicionar := ucappointment.NovoTransicionarUseCase(appointments, providerRepo, clientRepo, cancelamentos, preCadastros, notificador, 24*time.Hour, time.UTC)

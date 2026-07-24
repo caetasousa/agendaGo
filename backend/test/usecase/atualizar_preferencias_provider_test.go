@@ -3,13 +3,13 @@ package usecase_test
 import (
 	"testing"
 
-	"agendago/internal/adapter/repository"
 	"agendago/internal/domain/availability"
 	"agendago/internal/domain/provider"
 	ucprovider "agendago/internal/usecase/provider"
+	"agendago/test/repository/memoria"
 )
 
-func novoProviderComPreferencias(repo *repository.ProviderMemoria) *provider.Provider {
+func novoProviderComPreferencias(repo *memoria.ProviderMemoria) *provider.Provider {
 	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", "hash-da-senha")
 	repo.Salvar(p)
 	return p
@@ -17,7 +17,7 @@ func novoProviderComPreferencias(repo *repository.ProviderMemoria) *provider.Pro
 
 func TestAtualizarPreferenciasProvider(t *testing.T) {
 	t.Run("ativa a agenda e define o descanso", func(t *testing.T) {
-		repo := repository.NovoProviderMemoria()
+		repo := memoria.NovoProviderMemoria()
 		novoProviderComPreferencias(repo)
 		uc := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
 
@@ -45,7 +45,7 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 	})
 
 	t.Run("desativa a agenda", func(t *testing.T) {
-		repo := repository.NovoProviderMemoria()
+		repo := memoria.NovoProviderMemoria()
 		p := novoProviderComPreferencias(repo)
 		p.AtivarAgenda()
 		uc := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
@@ -66,7 +66,7 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 	})
 
 	t.Run("desativa e reativa a marcação pelo prestador", func(t *testing.T) {
-		repo := repository.NovoProviderMemoria()
+		repo := memoria.NovoProviderMemoria()
 		p := novoProviderComPreferencias(repo)
 		if !p.PermiteMarcacaoPeloPrestador {
 			t.Fatal("esperava que a marcação pelo prestador nascesse ativada")
@@ -109,7 +109,7 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 	})
 
 	t.Run("retorna erro quando descanso é negativo", func(t *testing.T) {
-		repo := repository.NovoProviderMemoria()
+		repo := memoria.NovoProviderMemoria()
 		novoProviderComPreferencias(repo)
 		uc := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
 
@@ -126,7 +126,7 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 	})
 
 	t.Run("retorna erro quando prestador não existe", func(t *testing.T) {
-		repo := repository.NovoProviderMemoria()
+		repo := memoria.NovoProviderMemoria()
 		uc := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
 
 		_, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
@@ -141,7 +141,7 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 	})
 
 	t.Run("define o expediente padrão com três blocos curtos", func(t *testing.T) {
-		repo := repository.NovoProviderMemoria()
+		repo := memoria.NovoProviderMemoria()
 		novoProviderComPreferencias(repo)
 		uc := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
 
@@ -171,7 +171,7 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 	})
 
 	t.Run("aceita expediente padrão vazio (nenhum horário)", func(t *testing.T) {
-		repo := repository.NovoProviderMemoria()
+		repo := memoria.NovoProviderMemoria()
 		novoProviderComPreferencias(repo)
 		uc := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
 
@@ -192,7 +192,7 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 	})
 
 	t.Run("retorna erro quando um bloco do expediente padrão é inválido", func(t *testing.T) {
-		repo := repository.NovoProviderMemoria()
+		repo := memoria.NovoProviderMemoria()
 		novoProviderComPreferencias(repo)
 		uc := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
 
@@ -210,7 +210,7 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 	})
 
 	t.Run("retorna erro quando blocos do expediente padrão se sobrepõem", func(t *testing.T) {
-		repo := repository.NovoProviderMemoria()
+		repo := memoria.NovoProviderMemoria()
 		novoProviderComPreferencias(repo)
 		uc := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
 

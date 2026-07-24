@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"agendago/internal/adapter/email"
-	"agendago/internal/adapter/repository"
 	"agendago/internal/adapter/security"
 	"agendago/internal/domain/client"
 	"agendago/internal/domain/passwordreset"
@@ -13,6 +12,7 @@ import (
 	"agendago/internal/domain/session"
 	"agendago/internal/pkg/token"
 	ucauth "agendago/internal/usecase/auth"
+	"agendago/test/repository/memoria"
 )
 
 // ambienteRecuperacao monta o par de usecases de recuperação de senha sobre
@@ -21,10 +21,10 @@ type ambienteRecuperacao struct {
 	solicitar *ucauth.SolicitarRecuperacaoUseCase
 	redefinir *ucauth.RedefinirSenhaUseCase
 	login     *ucauth.LoginProviderUseCase
-	providers *repository.ProviderMemoria
-	clients   *repository.ClientMemoria
-	sessoes   *repository.SessionMemoria
-	resets    *repository.PasswordResetMemoria
+	providers *memoria.ProviderMemoria
+	clients   *memoria.ClientMemoria
+	sessoes   *memoria.SessionMemoria
+	resets    *memoria.PasswordResetMemoria
 	mailer    *email.MailerMemoria
 	prestador *provider.Provider
 }
@@ -34,18 +34,18 @@ func novoAmbienteRecuperacao(t *testing.T) *ambienteRecuperacao {
 	hasher := security.NovoHasherArgon2id()
 	senhaHash, _ := hasher.Gerar("senha-antiga")
 
-	providers := repository.NovoProviderMemoria()
+	providers := memoria.NovoProviderMemoria()
 	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
 	providers.Salvar(p)
 
-	clients := repository.NovoClientMemoria()
+	clients := memoria.NovoClientMemoria()
 	comConta, _ := client.NovoComConta("client-1", "Maria Souza", "maria@email.com", senhaHash)
 	clients.Salvar(comConta)
 	convidado, _ := client.NovoConvidado("client-2", "Convidada", "convidada@email.com", "11999998888")
 	clients.Salvar(convidado)
 
-	resets := repository.NovoPasswordResetMemoria()
-	sessoes := repository.NovoSessionMemoria()
+	resets := memoria.NovoPasswordResetMemoria()
+	sessoes := memoria.NovoSessionMemoria()
 	mailer := email.NovaMailerMemoria()
 	notificador := email.NovoNotificador(mailer, "http://localhost:5173", time.UTC, email.ExecutorSincrono)
 

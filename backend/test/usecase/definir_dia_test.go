@@ -4,16 +4,16 @@ import (
 	"testing"
 	"time"
 
-	"agendago/internal/adapter/repository"
 	"agendago/internal/domain/availability"
 	ucavailability "agendago/internal/usecase/availability"
+	"agendago/test/repository/memoria"
 )
 
 func TestDefinirDia(t *testing.T) {
 	data := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
 
 	t.Run("define bloqueio com sucesso", func(t *testing.T) {
-		repo := repository.NovoAvailabilityMemoria()
+		repo := memoria.NovoAvailabilityMemoria()
 		uc := ucavailability.NovoDefinirDiaUseCase(repo)
 
 		out, err := uc.Executar(ucavailability.DefinirDiaInput{
@@ -28,7 +28,7 @@ func TestDefinirDia(t *testing.T) {
 	})
 
 	t.Run("define extra com blocos", func(t *testing.T) {
-		repo := repository.NovoAvailabilityMemoria()
+		repo := memoria.NovoAvailabilityMemoria()
 		uc := ucavailability.NovoDefinirDiaUseCase(repo)
 
 		out, err := uc.Executar(ucavailability.DefinirDiaInput{
@@ -44,7 +44,7 @@ func TestDefinirDia(t *testing.T) {
 	})
 
 	t.Run("definir de novo substitui a definição anterior da data", func(t *testing.T) {
-		repo := repository.NovoAvailabilityMemoria()
+		repo := memoria.NovoAvailabilityMemoria()
 		uc := ucavailability.NovoDefinirDiaUseCase(repo)
 
 		uc.Executar(ucavailability.DefinirDiaInput{
@@ -71,7 +71,7 @@ func TestDefinirDia(t *testing.T) {
 	})
 
 	t.Run("retorna erro quando bloco é inválido", func(t *testing.T) {
-		repo := repository.NovoAvailabilityMemoria()
+		repo := memoria.NovoAvailabilityMemoria()
 		uc := ucavailability.NovoDefinirDiaUseCase(repo)
 
 		_, err := uc.Executar(ucavailability.DefinirDiaInput{
@@ -84,7 +84,7 @@ func TestDefinirDia(t *testing.T) {
 	})
 
 	t.Run("retorna erro quando extra vem sem blocos", func(t *testing.T) {
-		repo := repository.NovoAvailabilityMemoria()
+		repo := memoria.NovoAvailabilityMemoria()
 		uc := ucavailability.NovoDefinirDiaUseCase(repo)
 
 		_, err := uc.Executar(ucavailability.DefinirDiaInput{

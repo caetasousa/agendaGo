@@ -1,4 +1,4 @@
-package repository
+package memoria
 
 import (
 	"sync"
@@ -68,7 +68,7 @@ func (r *ClientMemoria) Listar() ([]*client.Client, error) {
 
 // BuscarPorEmail retorna (nil, nil) quando não há cliente com o email,
 // seguindo o mesmo contrato do repositório Postgres — inclusive para email
-// vazio: no banco a coluna vira NULL e `email = ''` nunca casa, então aqui
+// vazio: no banco a coluna vira NULL e `email = ”` nunca casa, então aqui
 // também não (clientes só-telefone não são encontráveis por email).
 func (r *ClientMemoria) BuscarPorEmail(email string) (*client.Client, error) {
 	if email == "" {

@@ -9,12 +9,12 @@ import (
 
 	"agendago/internal/adapter/http/handler"
 	"agendago/internal/adapter/http/middleware"
-	"agendago/internal/adapter/repository"
 	"agendago/internal/adapter/security"
 	"agendago/internal/domain/client"
 	"agendago/internal/domain/provider"
 	ucauth "agendago/internal/usecase/auth"
 	ucprovider "agendago/internal/usecase/provider"
+	"agendago/test/repository/memoria"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -26,8 +26,8 @@ func identidadeAusente(r *http.Request) (ucauth.Identidade, bool) {
 }
 
 func novoHandler() *handler.ProviderHandler {
-	repo := repository.NovoProviderMemoria()
-	cadastrar := ucprovider.NovoCadastrarUseCase(repo, repository.NovoClientMemoria(), security.NovoHasherArgon2id())
+	repo := memoria.NovoProviderMemoria()
+	cadastrar := ucprovider.NovoCadastrarUseCase(repo, memoria.NovoClientMemoria(), security.NovoHasherArgon2id())
 	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
 	listar := ucprovider.NovoListarUseCase(repo)
 	buscarResumo := ucprovider.NovoBuscarResumoUseCase(repo)
@@ -51,9 +51,9 @@ func novoRouterPreferencias(t *testing.T) (r *chi.Mux, providerID string) {
 	t.Helper()
 	hasher := security.NovoHasherArgon2id()
 
-	providerRepo := repository.NovoProviderMemoria()
-	clientRepo := repository.NovoClientMemoria()
-	sessionRepo := repository.NovoSessionMemoria()
+	providerRepo := memoria.NovoProviderMemoria()
+	clientRepo := memoria.NovoClientMemoria()
+	sessionRepo := memoria.NovoSessionMemoria()
 
 	senhaHash, _ := hasher.Gerar("12345678")
 	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)

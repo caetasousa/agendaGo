@@ -3,16 +3,16 @@ package usecase_test
 import (
 	"testing"
 
-	"agendago/internal/adapter/repository"
 	"agendago/internal/domain/provider"
 	ucprovider "agendago/internal/usecase/provider"
+	"agendago/test/repository/memoria"
 )
 
 func TestVitrine(t *testing.T) {
 	// ambiente com um prestador ativo ofertando, um com agenda fechada e um banido
-	novoRepo := func(t *testing.T) *repository.ProviderMemoria {
+	novoRepo := func(t *testing.T) *memoria.ProviderMemoria {
 		t.Helper()
-		repo := repository.NovoProviderMemoria()
+		repo := memoria.NovoProviderMemoria()
 
 		ativo, _ := provider.Novo("p-ativo", "Ana Ativa", "ana@email.com", "11999998888", "hash")
 		ativo.AtivarAgenda()

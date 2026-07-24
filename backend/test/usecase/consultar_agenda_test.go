@@ -4,22 +4,22 @@ import (
 	"testing"
 	"time"
 
-	"agendago/internal/adapter/repository"
 	"agendago/internal/domain/availability"
 	"agendago/internal/domain/provider"
 	ucavailability "agendago/internal/usecase/availability"
+	"agendago/test/repository/memoria"
 )
 
-func novoAmbienteAgenda(t *testing.T, aceitaAgendamentos bool) (*ucavailability.ConsultarAgendaUseCase, *repository.AvailabilityMemoria) {
+func novoAmbienteAgenda(t *testing.T, aceitaAgendamentos bool) (*ucavailability.ConsultarAgendaUseCase, *memoria.AvailabilityMemoria) {
 	t.Helper()
-	providerRepo := repository.NovoProviderMemoria()
+	providerRepo := memoria.NovoProviderMemoria()
 	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", "hash-da-senha")
 	if aceitaAgendamentos {
 		p.AtivarAgenda()
 	}
 	providerRepo.Salvar(p)
 
-	availRepo := repository.NovoAvailabilityMemoria()
+	availRepo := memoria.NovoAvailabilityMemoria()
 	uc := ucavailability.NovoConsultarAgendaUseCase(availRepo, providerRepo)
 	return uc, availRepo
 }
@@ -109,8 +109,8 @@ func TestConsultarAgenda(t *testing.T) {
 	})
 
 	t.Run("retorna erro quando prestador não existe", func(t *testing.T) {
-		availRepo := repository.NovoAvailabilityMemoria()
-		providerRepo := repository.NovoProviderMemoria()
+		availRepo := memoria.NovoAvailabilityMemoria()
+		providerRepo := memoria.NovoProviderMemoria()
 		uc := ucavailability.NovoConsultarAgendaUseCase(availRepo, providerRepo)
 
 		_, err := uc.Executar(ucavailability.ConsultarAgendaInput{ProviderID: "id-fantasma", De: segunda, Ate: domingo})

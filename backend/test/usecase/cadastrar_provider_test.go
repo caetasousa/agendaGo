@@ -3,14 +3,14 @@ package usecase_test
 import (
 	"testing"
 
-	"agendago/internal/adapter/repository"
 	"agendago/internal/adapter/security"
 	"agendago/internal/domain/client"
 	ucprovider "agendago/internal/usecase/provider"
+	"agendago/test/repository/memoria"
 )
 
 func novoUseCase() *ucprovider.CadastrarUseCase {
-	return ucprovider.NovoCadastrarUseCase(repository.NovoProviderMemoria(), repository.NovoClientMemoria(), security.NovoHasherArgon2id())
+	return ucprovider.NovoCadastrarUseCase(memoria.NovoProviderMemoria(), memoria.NovoClientMemoria(), security.NovoHasherArgon2id())
 }
 
 func TestCadastrarProvider(t *testing.T) {
@@ -63,8 +63,8 @@ func TestCadastrarProvider(t *testing.T) {
 	})
 
 	t.Run("persiste a senha com hash, nunca em texto puro", func(t *testing.T) {
-		repo := repository.NovoProviderMemoria()
-		uc := ucprovider.NovoCadastrarUseCase(repo, repository.NovoClientMemoria(), security.NovoHasherArgon2id())
+		repo := memoria.NovoProviderMemoria()
+		uc := ucprovider.NovoCadastrarUseCase(repo, memoria.NovoClientMemoria(), security.NovoHasherArgon2id())
 		uc.Executar(ucprovider.CadastrarInput{
 			Nome:     "João Silva",
 			Email:    "joao@email.com",
@@ -82,8 +82,8 @@ func TestCadastrarProvider(t *testing.T) {
 	})
 
 	t.Run("rejeita email que já pertence a um cliente/convidado", func(t *testing.T) {
-		providers := repository.NovoProviderMemoria()
-		clients := repository.NovoClientMemoria()
+		providers := memoria.NovoProviderMemoria()
+		clients := memoria.NovoClientMemoria()
 		convidado, _ := client.NovoConvidado("c-1", "Maria", "maria@email.com", "11999998888")
 		clients.Salvar(convidado)
 		uc := ucprovider.NovoCadastrarUseCase(providers, clients, security.NovoHasherArgon2id())
