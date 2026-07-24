@@ -2,8 +2,9 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { ApiError } from '$lib/api/client';
-	import { login, me } from '$lib/api/auth';
+	import { login, me, urlLoginGoogle } from '$lib/api/auth';
 	import { sessao } from '$lib/stores/session.svelte';
+	import GoogleIcon from '$lib/components/GoogleIcon.svelte';
 
 	// destinoAposLogin honra ?voltar= (ex: link público de agendamento), mas só
 	// para caminhos internos — nunca URLs absolutas, para evitar open redirect.
@@ -19,7 +20,26 @@
 	let senha = $state('');
 
 	let enviando = $state(false);
-	let erro = $state<string | null>(null);
+	// ?erro=social vem do backend quando o callback do Google falha (state
+	// inválido, email não verificado, conta banida) — mensagem genérica de
+	// propósito, para não vazar qual dessas condições ocorreu. ?erro=social_outro_tipo
+	// é o único caso com mensagem específica: o email já é conta do outro tipo
+	// (prestador tentando entrar como cliente, ou vice-versa), então orientar
+	// a pessoa a usar o botão certo é uma informação legítima de UX (o mesmo
+	// que o cadastro por senha já expõe).
+	function mensagemErroSocial(codigo: string | null): string | null {
+		if (codigo === 'social_outro_tipo') {
+			return 'Esse email já tem conta como outro tipo de usuário (cliente/prestador). Entre pela opção correta.';
+		}
+		if (codigo === 'social') {
+			return 'Não foi possível entrar com o Google.';
+		}
+		return null;
+	}
+
+	let erro = $state<string | null>(mensagemErroSocial(page.url.searchParams.get('erro')));
+
+	const voltar = page.url.searchParams.get('voltar') ?? undefined;
 
 	async function enviar(evento: SubmitEvent) {
 		evento.preventDefault();
@@ -98,10 +118,33 @@
 			</button>
 		</form>
 
+		<div class="mt-6 flex items-center gap-3">
+			<div class="h-px flex-1 bg-hairline-strong"></div>
+			<span class="text-xs uppercase tracking-wide text-mute">ou continue com</span>
+			<div class="h-px flex-1 bg-hairline-strong"></div>
+		</div>
+
+		<div class="mt-4 grid gap-3 sm:grid-cols-2">
+			<a
+				href={urlLoginGoogle('client', voltar)}
+				class="flex h-10 items-center justify-center gap-2 rounded-md border border-hairline-strong bg-surface-card px-4 text-sm font-medium text-ink transition hover:border-ink"
+			>
+				<GoogleIcon />
+				Sou cliente
+			</a>
+			<a
+				href={urlLoginGoogle('provider', voltar)}
+				class="flex h-10 items-center justify-center gap-2 rounded-md border border-hairline-strong bg-surface-card px-4 text-sm font-medium text-ink transition hover:border-ink"
+			>
+				<GoogleIcon />
+				Sou prestador
+			</a>
+		</div>
+
 		<p class="mt-6 text-sm text-body">
 			Ainda não tem conta?
 			<a
-				href="/cadastro{page.url.searchParams.get('voltar') ? `?voltar=${encodeURIComponent(page.url.searchParams.get('voltar') ?? '')}` : ''}"
+				href="/cadastro{voltar ? `?voltar=${encodeURIComponent(voltar)}` : ''}"
 				class="font-medium text-ink underline">Cadastre-se</a
 			>
 		</p>

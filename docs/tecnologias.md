@@ -120,6 +120,18 @@ O atributo `HttpOnly` do cookie impede que JavaScript no browser leia o token �
 - [MDN — Using HTTP cookies](https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies) (atributos `HttpOnly`, `Secure`, `SameSite`)
 - [Auth0 — Sessions vs. Tokens](https://auth0.com/blog/is-jwt-better-than-session-authentication/) (comparação prática dos dois modelos)
 
+### Login social: OpenID Connect (OIDC)
+
+O login com Google (`internal/adapter/oauth/google.go`, `internal/usecase/auth/login_social.go`) usa **OpenID Connect**, o protocolo padrão de identidade construído sobre o OAuth 2.0 — o OAuth por si só autoriza acesso a um recurso (ex.: "ler minha agenda"), mas não prova identidade; o OIDC adiciona o `id_token`, um JWT assinado pelo provedor que atesta quem é o usuário. O fluxo aqui é o **Authorization Code Flow**: o backend redireciona ao Google (`/auth/client|provider/google/start`), recebe um código de uso único no callback, e o troca (server-to-server) por um `id_token`, que é então **verificado** contra as chaves públicas (JWKS) do Google via `github.com/coreos/go-oidc` — nunca confiamos no token sem essa verificação criptográfica.
+
+Duas proteções do fluxo valem o estudo: o parâmetro **`state`** (gerado com o mesmo `token.Gerar/Hash` das sessões, guardado num cookie curto e numa tabela de uso único `oauth_states`) evita CSRF — sem ele, um atacante poderia induzir a vítima a completar o login de uma sessão iniciada por ele; o **`nonce`** embutido no `id_token` evita replay do mesmo token em outra sessão. Como o Google não fornece telefone e o domínio exige um valor para prestadores, a criação via login social usa um telefone placeholder (`internal/usecase/auth/login_social.go`) que o prestador completa depois em Preferências — e como o domínio de `Client`/`Provider` exige uma senha, uma senha aleatória de 256 bits é gerada e hasheada (nunca comunicada) só para satisfazer essa invariante.
+
+**Para estudar:**
+- [OpenID Connect — site oficial](https://openid.net/developers/how-connect-works/) (visão geral do protocolo sobre OAuth 2.0)
+- [Google Identity — OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect) (a implementação específica que o projeto consome)
+- [RFC 6749 — The OAuth 2.0 Authorization Framework](https://www.rfc-editor.org/rfc/rfc6749) (a base sobre a qual o OIDC é construído)
+- [OWASP — Unvalidated Redirects and Forwards Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html) (por que o `?voltar=` do callback só aceita caminhos internos)
+
 ### Tokens de uso único (recuperação de senha, confirmação de cadastro, cancelamento)
 
 O mesmo padrão da sessão — token opaco de 256 bits, guardado só como hash SHA-256 — reaparece em quatro fluxos por email, cada um numa tabela própria (`password_reset_tokens`, `cadastros_pendentes`, `pre_cadastro_tokens`, `cancelamento_tokens`). Três decisões de ciclo de vida se repetem em todos e valem o estudo:

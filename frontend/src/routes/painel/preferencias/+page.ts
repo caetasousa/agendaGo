@@ -1,8 +1,6 @@
 import { redirect } from '@sveltejs/kit';
-import { ApiError } from '$lib/api/client';
-import { me } from '$lib/api/auth';
 import type { Bloco } from '$lib/api/availability';
-import { sessao } from '$lib/stores/session.svelte';
+import { carregarUsuarioDoPainel } from '$lib/auth-guard';
 
 // O cookie de sessão é HttpOnly e a API vive em outra origem, então o SSR
 // nunca teria acesso a ele — a checagem de autenticação só pode rodar no browser.
@@ -15,30 +13,24 @@ export async function load(): Promise<{
 	duracaoAtendimentoMinutos: number;
 	horariosPadrao: Bloco[];
 	permiteMarcacaoPeloPrestador: boolean;
+	telefonePendente: boolean;
 }> {
-	let usuario;
-	try {
-		usuario = await me();
-	} catch (e) {
-		if (e instanceof ApiError && e.status === 401) {
-			sessao.limpar();
-			throw redirect(302, '/login');
-		}
-		throw e;
-	}
-
-	sessao.definir(usuario);
+	// permite carregar mesmo com telefone pendente — é aqui que ele é resolvido
+	const usuario = await carregarUsuarioDoPainel(true);
 
 	if (usuario.tipo !== 'provider') {
 		throw redirect(302, '/painel');
 	}
 
 	return {
-		telefone: usuario.telefone ?? '',
+		// telefone pendente é um placeholder técnico, não um valor real — o
+		// campo começa vazio para o prestador digitar o telefone de verdade
+		telefone: usuario.telefonePendente ? '' : (usuario.telefone ?? ''),
 		aceitaAgendamentos: usuario.aceitaAgendamentos ?? false,
 		descansoMinutos: usuario.descansoMinutos ?? 0,
 		duracaoAtendimentoMinutos: usuario.duracaoAtendimentoMinutos ?? 60,
 		horariosPadrao: usuario.horariosPadrao ?? [],
-		permiteMarcacaoPeloPrestador: usuario.permiteMarcacaoPeloPrestador ?? true
+		permiteMarcacaoPeloPrestador: usuario.permiteMarcacaoPeloPrestador ?? true,
+		telefonePendente: usuario.telefonePendente ?? false
 	};
 }

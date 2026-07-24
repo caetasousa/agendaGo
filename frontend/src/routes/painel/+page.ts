@@ -1,25 +1,13 @@
 import { redirect } from '@sveltejs/kit';
-import { ApiError } from '$lib/api/client';
-import { me, type MeResponse } from '$lib/api/auth';
-import { sessao } from '$lib/stores/session.svelte';
+import type { MeResponse } from '$lib/api/auth';
+import { carregarUsuarioDoPainel } from '$lib/auth-guard';
 
 // O cookie de sessão é HttpOnly e a API vive em outra origem, então o SSR
 // nunca teria acesso a ele — a checagem de autenticação só pode rodar no browser.
 export const ssr = false;
 
 export async function load(): Promise<{ usuario: MeResponse }> {
-	let usuario;
-	try {
-		usuario = await me();
-	} catch (e) {
-		if (e instanceof ApiError && e.status === 401) {
-			sessao.limpar();
-			throw redirect(302, '/login');
-		}
-		throw e;
-	}
-
-	sessao.definir(usuario);
+	const usuario = await carregarUsuarioDoPainel();
 	// O admin não tem painel de cliente/prestador: vai direto à moderação.
 	if (usuario.tipo === 'admin') {
 		throw redirect(302, '/admin');

@@ -71,6 +71,9 @@ e cai no painel de moderação (`/admin`), onde bane/reativa prestadores e clien
 | `POST` | [`/auth/provider/login`](http://localhost:8080/swagger/index.html#/auth/post_auth_provider_login) | Login do prestador |
 | `POST` | [`/auth/client/login`](http://localhost:8080/swagger/index.html#/auth/post_auth_client_login) | Login do cliente |
 | `POST` | [`/auth/admin/login`](http://localhost:8080/swagger/index.html#/auth/post_auth_admin_login) | Login do administrador |
+| `GET` | [`/auth/client/google/start`](http://localhost:8080/swagger/index.html#/auth/get_auth_client_google_start) | Iniciar login social do cliente com Google |
+| `GET` | [`/auth/provider/google/start`](http://localhost:8080/swagger/index.html#/auth/get_auth_provider_google_start) | Iniciar login social do prestador com Google |
+| `GET` | [`/auth/google/callback`](http://localhost:8080/swagger/index.html#/auth/get_auth_google_callback) | Callback do login social com Google |
 | `POST` | [`/auth/logout`](http://localhost:8080/swagger/index.html#/auth/post_auth_logout) | Encerrar sessão |
 | `GET` | [`/auth/me`](http://localhost:8080/swagger/index.html#/auth/get_auth_me) | Usuário autenticado atual |
 | `POST` | [`/auth/recuperar-senha`](http://localhost:8080/swagger/index.html#/auth/post_auth_recuperar_senha) | Solicitar recuperação de senha por email |

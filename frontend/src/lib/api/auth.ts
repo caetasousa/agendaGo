@@ -1,7 +1,7 @@
 // Tipos e chamadas da API de autenticação.
 // Espelham backend/internal/adapter/http/dto/auth.go
 
-import { ApiError, apiGet, apiPost, apiPostVazio, apiPostSemResposta } from './client';
+import { ApiError, apiGet, apiPost, apiPostVazio, apiPostSemResposta, BASE_URL } from './client';
 import type { Bloco } from './availability';
 
 export interface LoginRequest {
@@ -26,6 +26,10 @@ export interface MeResponse {
 	duracaoAtendimentoMinutos?: number;
 	horariosPadrao?: Bloco[];
 	permiteMarcacaoPeloPrestador?: boolean;
+	// telefonePendente é true quando o prestador entrou via login social e
+	// ainda não confirmou um telefone de verdade — travamos o painel em
+	// Preferências até ele completar o cadastro.
+	telefonePendente?: boolean;
 }
 
 export function loginProvider(dados: LoginRequest): Promise<LoginResponse> {
@@ -63,6 +67,18 @@ export async function login(dados: LoginRequest): Promise<LoginResponse> {
 
 export function logout(): Promise<void> {
 	return apiPostVazio('/auth/logout');
+}
+
+export type TipoContaSocial = 'client' | 'provider';
+
+// urlLoginGoogle monta a URL de início do login social (navegação de
+// navegador via redirect, não um fetch — o backend cuida de todo o fluxo
+// OAuth e volta com o cookie de sessão já definido). voltar é ecoado pelo
+// backend no redirect final, para preservar o destino pós-login (ex.: um
+// link público de agendamento).
+export function urlLoginGoogle(tipo: TipoContaSocial, voltar?: string): string {
+	const query = voltar ? `?voltar=${encodeURIComponent(voltar)}` : '';
+	return `${BASE_URL}/auth/${tipo}/google/start${query}`;
 }
 
 export function me(): Promise<MeResponse> {

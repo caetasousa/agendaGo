@@ -181,6 +181,7 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 		DuracaoAtendimentoMinutos:    perfil.DuracaoAtendimentoMinutos,
 		HorariosPadrao:               blocosParaDTO(perfil.HorariosPadrao),
 		PermiteMarcacaoPeloPrestador: perfil.PermiteMarcacaoPeloPrestador,
+		TelefonePendente:             perfil.TelefonePendente,
 	})
 }
 

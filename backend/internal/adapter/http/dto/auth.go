@@ -43,4 +43,8 @@ type MeResponse struct {
 	DuracaoAtendimentoMinutos    *int       `json:"duracaoAtendimentoMinutos,omitempty"`
 	HorariosPadrao               []BlocoDTO `json:"horariosPadrao,omitempty"`
 	PermiteMarcacaoPeloPrestador *bool      `json:"permiteMarcacaoPeloPrestador,omitempty"`
+	// TelefonePendente é true quando o prestador entrou via login social e
+	// ainda não confirmou um telefone de verdade — o frontend usa isso para
+	// travar o painel em Preferências até ele completar o cadastro.
+	TelefonePendente bool `json:"telefonePendente,omitempty"`
 }

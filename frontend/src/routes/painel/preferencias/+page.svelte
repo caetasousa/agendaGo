@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import type { PageData } from './$types';
 	import { ApiError } from '$lib/api/client';
 	import { atualizarPreferencias } from '$lib/api/preferences';
@@ -22,6 +23,8 @@
 	let horariosPadrao = $state<Bloco[]>(data.horariosPadrao.map((b) => ({ ...b })));
 	// svelte-ignore state_referenced_locally
 	let permiteMarcacaoPeloPrestador = $state(data.permiteMarcacaoPeloPrestador);
+	// svelte-ignore state_referenced_locally
+	let telefonePendente = $state(data.telefonePendente);
 
 	let enviando = $state(false);
 	let erro = $state<string | null>(null);
@@ -79,8 +82,16 @@
 			duracaoAtendimentoMinutos = salvo.duracaoAtendimentoMinutos;
 			horariosPadrao = salvo.horariosPadrao;
 			permiteMarcacaoPeloPrestador = salvo.permiteMarcacaoPeloPrestador;
+			// o backend só aceita um telefone real (valida no mínimo 8 dígitos),
+			// então se chegou aqui o telefone pendente foi resolvido
+			const estavaPendente = telefonePendente;
+			telefonePendente = false;
 			if (sessao.usuario) {
-				sessao.definir({ ...sessao.usuario, ...salvo });
+				sessao.definir({ ...sessao.usuario, ...salvo, telefonePendente: false });
+			}
+			if (estavaPendente) {
+				goto('/painel');
+				return;
 			}
 			sucesso = true;
 		} catch (e) {
@@ -96,10 +107,19 @@
 </script>
 
 <div class="mx-auto max-w-xl pb-24">
-	<a href="/painel" class="text-sm text-mute transition hover:text-ink">← Voltar ao painel</a>
+	{#if !telefonePendente}
+		<a href="/painel" class="text-sm text-mute transition hover:text-ink">← Voltar ao painel</a>
+	{/if}
 
 	<h1 class="display mt-4 text-4xl text-ink sm:text-5xl">Preferências</h1>
-	<p class="mt-3 text-body">Configure como você recebe agendamentos.</p>
+	{#if telefonePendente}
+		<p class="mt-3 text-body">
+			O Google não compartilha seu telefone — é como os clientes vão falar com você. Confirme um
+			telefone para liberar o restante do painel.
+		</p>
+	{:else}
+		<p class="mt-3 text-body">Configure como você recebe agendamentos.</p>
+	{/if}
 
 	<form class="mt-8 space-y-6" novalidate onsubmit={enviar}>
 		<!-- Aceitar agendamentos: toggle em destaque -->
@@ -304,7 +324,11 @@
 				disabled={enviando || descansoInvalido || duracaoInvalida}
 				class="inline-flex h-10 items-center rounded-md bg-primary px-5 text-sm font-medium text-primary-on transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
 			>
-				{enviando ? 'Salvando…' : 'Salvar alterações'}
+				{#if enviando}
+					{telefonePendente ? 'Concluindo…' : 'Salvando…'}
+				{:else}
+					{telefonePendente ? 'Concluir cadastro' : 'Salvar alterações'}
+				{/if}
 			</button>
 
 			{#if sucesso}

@@ -62,6 +62,10 @@ services:
       EMAIL_REMETENTE: ${EMAIL_REMETENTE:-nao-responda@agendago.dev}
       EMAIL_REMETENTE_NOME: ${EMAIL_REMETENTE_NOME:-agendaGo}
       EMAIL_REPLY_TO: ${EMAIL_REPLY_TO}
+      # Login social com Google: vazio desliga o recurso
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URL: ${GOOGLE_REDIRECT_URL}
     volumes:
       - ./backend:/app
     depends_on:

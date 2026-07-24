@@ -5,8 +5,9 @@
 	import { ApiError } from '$lib/api/client';
 	import { cadastrarProvider } from '$lib/api/provider';
 	import { cadastrarClient, concluirPreCadastro } from '$lib/api/customer';
-	import { login, me } from '$lib/api/auth';
+	import { login, me, urlLoginGoogle } from '$lib/api/auth';
 	import { sessao } from '$lib/stores/session.svelte';
+	import GoogleIcon from '$lib/components/GoogleIcon.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -189,6 +190,22 @@
 					>
 						← Trocar tipo de conta
 					</button>
+				{/if}
+
+				{#if !preCadastro && tipo}
+					<a
+						href={urlLoginGoogle(tipo, page.url.searchParams.get('voltar') ?? undefined)}
+						class="flex h-10 items-center justify-center gap-2 rounded-md border border-hairline-strong bg-surface-card px-4 text-sm font-medium text-ink transition hover:border-ink"
+					>
+						<GoogleIcon />
+						Continuar com Google
+					</a>
+
+					<div class="my-6 flex items-center gap-3">
+						<div class="h-px flex-1 bg-hairline-strong"></div>
+						<span class="text-xs uppercase tracking-wide text-mute">ou preencha os dados</span>
+						<div class="h-px flex-1 bg-hairline-strong"></div>
+					</div>
 				{/if}
 
 				<form class="space-y-5" novalidate onsubmit={enviar}>

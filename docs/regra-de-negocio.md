@@ -159,6 +159,36 @@ cadastra e entra logado direto (sem essa etapa).
   por cliente/convidado; o de cliente responde com o aviso "você já tem conta" quando o
   email pertence a um prestador (sem revelar isso na resposta HTTP).
 
+### Login social (Google)
+Cliente e prestador podem entrar sem senha, autenticando com Google. Diferente do cadastro
+normal, a conta social **nasce ativa na hora** — não há confirmação por email, porque o
+próprio Google já provou a posse do endereço.
+
+- **Email verificado é exigido sempre**, antes de qualquer outra decisão — tanto para
+  vincular a uma conta existente quanto para criar uma conta nova. Sem essa checagem,
+  alguém poderia registrar um provedor OIDC com um email alheio ainda não confirmado e
+  sequestrar a conta de outra pessoa, ou pré-criar uma conta num email que ainda não é seu.
+- **Email inédito cria conta nova**, sem senha de verdade: o sistema gera uma senha
+  aleatória, hasheia e descarta o valor em texto puro — ela nunca é comunicada e nunca serve
+  para logar. É só para satisfazer a mesma invariante de domínio do cadastro por senha.
+- **Email é único por tipo, mesma regra do cadastro normal**: um email que já é prestador
+  não pode logar socialmente como cliente (nem o contrário) — o login social rejeita com o
+  mesmo espírito de `ErrEmailJaCadastrado` do cadastro por senha, em vez de criar uma
+  segunda conta paralela sob o mesmo email.
+- **Prestador novo nasce com telefone pendente e fica travado até completar**: o Google
+  não fornece telefone, mas o domínio de prestador exige um (é como o cliente entra em
+  contato). Um prestador que nunca teve conta é criado na hora, no callback do Google, com
+  um telefone-placeholder técnico (`TelefonePendente`, ver `usecase/auth/login_social.go`) e
+  a agenda desativada (`AceitaAgendamentos=false`, o padrão de qualquer prestador novo). O
+  frontend detecta esse placeholder (`MeResponse.telefonePendente`) e trava a navegação do
+  painel em `/painel/preferencias` até um telefone de verdade ser salvo — nenhuma outra
+  página do painel carrega enquanto isso. Cliente não passa por essa trava — o cadastro de
+  cliente não exige telefone.
+- **Convidados (sem conta) ficam de fora**: login social só se aplica a quem tem ou vai
+  ganhar uma conta; o fluxo de agendamento sem cadastro não muda.
+- **Banimento vale igual**: um cliente ou prestador banido pelo admin não consegue entrar
+  por login social, mesma regra do login por senha.
+
 ### Confirmação
 O agendamento só é **concluído após a confirmação do prestador**. Enquanto isso, fica
 pendente (`SOLICITADO`) e ocupando o intervalo.
@@ -336,7 +366,8 @@ Valores centralizados em `config/agendamento.go` e no domínio:
 | Token de recuperação de senha | `internal/domain/passwordreset/` | `Token`, uso único, TTL curto |
 | Token de cancelamento (convidado) | `internal/domain/cancellation/` | `Token` por agendamento, gerado na confirmação, sem TTL |
 | Cadastro pendente (verificação de email) | `internal/domain/signup/` | `Pendente` com nome/telefone/senha-hash, uso único, TTL 24h; converte convidado em conta preservando o ID |
-| Orquestração | `internal/usecase/{provider,availability,appointment,admin,auth}/` | preferências, slots, solicitar, confirmar, recusar, cancelar (por sessão ou por token), concluir, moderar, recuperar/redefinir senha, lembrar |
+| Login social (Google) | `internal/domain/socialidentity/`, `internal/domain/oauthstate/`, `internal/usecase/auth/login_social.go`, `internal/adapter/oauth/google.go` | vínculo `(provedor, sub)` → usuário; state/nonce de uso único (CSRF/replay); vincula por email verificado ou cria conta sem senha real; prestador novo nasce com `TelefonePendente` |
+| Orquestração | `internal/usecase/{provider,availability,appointment,admin,auth}/` | preferências, slots, solicitar, confirmar, recusar, cancelar (por sessão ou por token), concluir, moderar, recuperar/redefinir senha, lembrar, login social |
 | Notificações | `internal/adapter/email/`, `internal/adapter/worker/` | templates, transporte SMTP, worker de lembrete |
-| Configuração | `config/agendamento.go`, `config/server.go`, `config/email.go` | fuso fixo, TTL, antecedência mínima, credenciais do admin, SMTP |
-| Persistência | `migrations/` | `providers`, `horarios_padrao`, `clients`, `admins`, `date_exceptions`, `appointments` (anti-overbooking por lock transacional no repositório), `sessions`, `password_reset_tokens`, `cancelamento_tokens`, `cadastros_pendentes`, `providers.telefone` |
+| Configuração | `config/agendamento.go`, `config/server.go`, `config/email.go`, `config/oauth.go` | fuso fixo, TTL, antecedência mínima, credenciais do admin, SMTP, credenciais Google OAuth |
+| Persistência | `migrations/` | `providers`, `horarios_padrao`, `clients`, `admins`, `date_exceptions`, `appointments` (anti-overbooking por lock transacional no repositório), `sessions`, `password_reset_tokens`, `cancelamento_tokens`, `cadastros_pendentes`, `providers.telefone`, `social_identities`, `oauth_states` |

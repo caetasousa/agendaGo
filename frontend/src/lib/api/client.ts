@@ -1,7 +1,7 @@
 // Cliente HTTP fino sobre fetch para falar com a API Go.
 // A URL base vem de PUBLIC_API_URL (Vite), com fallback para o dev local.
 
-const BASE_URL = import.meta.env.PUBLIC_API_URL ?? 'http://localhost:8080';
+export const BASE_URL = import.meta.env.PUBLIC_API_URL ?? 'http://localhost:8080';
 
 // ApiError carrega o status HTTP e a mensagem de erro devolvida pela API
 // (campo `erro` do corpo JSON, quando presente).

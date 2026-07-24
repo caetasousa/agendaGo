@@ -19,6 +19,11 @@ type PerfilOutput struct {
 	DuracaoAtendimentoMinutos    *int
 	HorariosPadrao               []availability.TimeBlock
 	PermiteMarcacaoPeloPrestador *bool
+	// TelefonePendente é true quando o prestador entrou via login social e
+	// ainda não confirmou um telefone de verdade (ver TelefonePendente em
+	// login_social.go) — o frontend usa isso para travar o painel em
+	// Preferências até ele completar o cadastro.
+	TelefonePendente bool
 }
 
 // PerfilUseCase consulta os dados do usuário autenticado a partir da sua identidade de sessão.
@@ -55,6 +60,7 @@ func (uc *PerfilUseCase) Executar(id Identidade) (*PerfilOutput, error) {
 			DuracaoAtendimentoMinutos:    &p.DuracaoAtendimentoMinutos,
 			HorariosPadrao:               p.HorariosPadrao,
 			PermiteMarcacaoPeloPrestador: &p.PermiteMarcacaoPeloPrestador,
+			TelefonePendente:             p.Telefone == TelefonePendente,
 		}, nil
 
 	case session.TipoClient:

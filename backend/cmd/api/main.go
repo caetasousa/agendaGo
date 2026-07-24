@@ -24,6 +24,7 @@ import (
 	"agendago/internal/adapter/email"
 	"agendago/internal/adapter/http/handler"
 	"agendago/internal/adapter/http/middleware"
+	"agendago/internal/adapter/oauth"
 	"agendago/internal/adapter/repository"
 	"agendago/internal/adapter/security"
 	"agendago/internal/adapter/worker"
@@ -68,6 +69,8 @@ func main() {
 	cancelamentoRepo := repository.NovoCancellationPostgres(pool)
 	signupRepo := repository.NovoSignupPostgres(pool)
 	preCadastroRepo := repository.NovoPreCadastroPostgres(pool)
+	socialIdentityRepo := repository.NovoSocialIdentityPostgres(pool)
+	oauthStateRepo := repository.NovoOAuthStatePostgres(pool)
 
 	// segurança
 	hasher := security.NovoHasherArgon2id()
@@ -101,6 +104,7 @@ func main() {
 	loginProvider := ucauth.NovoLoginProviderUseCase(providerRepo, sessionRepo, hasher)
 	loginClient := ucauth.NovoLoginClientUseCase(clientRepo, sessionRepo, hasher)
 	loginAdmin := ucauth.NovoLoginAdminUseCase(adminRepo, sessionRepo, hasher)
+	loginSocial := novoLoginSocialUseCase(context.Background(), providerRepo, clientRepo, socialIdentityRepo, oauthStateRepo, sessionRepo, hasher)
 	logout := ucauth.NovoLogoutUseCase(sessionRepo)
 	validarSessao := ucauth.NovoValidarSessaoUseCase(sessionRepo)
 	perfil := ucauth.NovoPerfilUseCase(providerRepo, clientRepo, adminRepo)
@@ -130,6 +134,7 @@ func main() {
 	providerHandler := handler.NovoProviderHandler(cadastrarProvider, atualizarPreferencias, listarPrestadores, buscarPrestador, identidadeDoContexto)
 	clientHandler := handler.NovoClientHandler(solicitarCadastroClient, confirmarCadastroClient, consultarPreCadastro, concluirPreCadastro)
 	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, loginAdmin, logout, perfil, config.CookieSeguro(), identidadeDoContexto)
+	oauthHandler := handler.NovoOAuthHandler(loginSocial, config.CookieSeguro(), config.OrigemFrontend())
 	passwordResetHandler := handler.NovoPasswordResetHandler(solicitarRecuperacao, redefinirSenha)
 	availabilityHandler := handler.NovoAvailabilityHandler(consultarAgenda, definirDia, removerDia, identidadeDoContexto)
 	appointmentHandler := handler.NovoAppointmentHandler(consultarSlots, solicitarAgendamento, solicitarConvidado, marcarPeloPrestador, transicionarAgendamento, cancelarPorToken, listarAgendamentos, identidadeDoContexto)
@@ -176,6 +181,13 @@ func main() {
 		r.Post("/auth/provider/login", authHandler.LoginProvider)
 		r.Post("/auth/client/login", authHandler.LoginClient)
 		r.Post("/auth/admin/login", authHandler.LoginAdmin)
+		// login social (Google): rotas só registradas com credenciais
+		// configuradas, para não expor um fluxo que vai falhar sempre
+		if config.OAuthGoogleAtivo() {
+			r.Get("/auth/client/google/start", oauthHandler.GoogleStartClient)
+			r.Get("/auth/provider/google/start", oauthHandler.GoogleStartProvider)
+			r.Get("/auth/google/callback", oauthHandler.GoogleCallback)
+		}
 	})
 	r.Post("/auth/logout", authHandler.Logout)
 	// recuperação de senha tem teto por IP, como os logins: mitiga farming de
@@ -288,6 +300,33 @@ func novoMailer() interface{ Enviar(email.Mensagem) error } {
 		os.Exit(1)
 	}
 	return m
+}
+
+// novoLoginSocialUseCase cria o usecase de login social com o adapter Google
+// já configurado, ou nil quando as credenciais OAuth não estão definidas —
+// nesse caso o roteador não registra as rotas correspondentes (ver
+// config.OAuthGoogleAtivo). O discovery do endpoint OIDC do Google acontece
+// aqui, no boot, para falhar cedo em vez de a cada tentativa de login.
+func novoLoginSocialUseCase(
+	ctx context.Context,
+	providerRepo *repository.ProviderPostgres,
+	clientRepo *repository.ClientPostgres,
+	socialIdentityRepo *repository.SocialIdentityPostgres,
+	oauthStateRepo *repository.OAuthStatePostgres,
+	sessionRepo *repository.SessionPostgres,
+	hasher *security.HasherArgon2id,
+) *ucauth.LoginSocialUseCase {
+	if !config.OAuthGoogleAtivo() {
+		return nil
+	}
+
+	google, err := oauth.NovoGoogle(ctx, config.GoogleClientID(), config.GoogleClientSecret(), config.GoogleRedirectURL())
+	if err != nil {
+		slog.Error("erro ao configurar login social com Google", slog.String("erro", err.Error()))
+		os.Exit(1)
+	}
+
+	return ucauth.NovoLoginSocialUseCase(google, clientRepo, providerRepo, clientRepo, providerRepo, socialIdentityRepo, oauthStateRepo, sessionRepo, hasher)
 }
 
 // health godoc
