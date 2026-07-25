@@ -11,6 +11,10 @@ Thumbs.db
 # Docs geradas pelo swag (regeneradas pelo container)
 /backend/docs/
 
+# Artefatos do Playwright quando rodado a partir da raiz do repositório
+/test-results/
+/playwright-report/
+
 # Variáveis de ambiente
 .env
 .env.*
