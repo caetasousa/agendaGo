@@ -5,6 +5,8 @@
 	import { atualizarPreferencias } from '$lib/api/preferences';
 	import type { Bloco } from '$lib/api/availability';
 	import TimeSelect from '$lib/components/TimeSelect.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import Icone from '$lib/components/Icone.svelte';
 	import { sessao } from '$lib/stores/session.svelte';
 
 	let { data }: { data: PageData } = $props();
@@ -32,6 +34,25 @@
 
 	const descansoInvalido = $derived(descansoMinutos < 0);
 	const duracaoInvalida = $derived(duracaoAtendimentoMinutos < 15 || duracaoAtendimentoMinutos > 1440);
+
+	// Instantâneo dos campos para detectar alterações não salvas. A barra de ação
+	// só flutua quando há algo a salvar — flutuando sempre, ela cobriria os
+	// campos do expediente enquanto a pessoa rola a página.
+	function instantaneo(): string {
+		return JSON.stringify({
+			telefone,
+			aceitaAgendamentos,
+			descansoMinutos,
+			duracaoAtendimentoMinutos,
+			horariosPadrao,
+			permiteMarcacaoPeloPrestador
+		});
+	}
+
+	// svelte-ignore state_referenced_locally
+	let salvoComo = $state(instantaneo());
+	const alterado = $derived(instantaneo() !== salvoComo);
+	const barraVisivel = $derived(alterado || sucesso || telefonePendente);
 
 	function minutosParaHHMM(minutos: number): string {
 		const h = Math.floor(minutos / 60)
@@ -93,6 +114,7 @@
 				goto('/painel');
 				return;
 			}
+			salvoComo = instantaneo();
 			sucesso = true;
 		} catch (e) {
 			erro = e instanceof ApiError ? e.message : 'Não foi possível salvar as preferências.';
@@ -106,22 +128,15 @@
 		'h-10 w-full rounded-md border border-hairline-strong bg-surface-card px-3.5 text-sm text-ink outline-none transition focus:border-ink';
 </script>
 
-<div class="mx-auto max-w-xl pb-24">
-	{#if !telefonePendente}
-		<a href="/painel" class="text-sm text-mute transition hover:text-ink">← Voltar ao painel</a>
-	{/if}
+<div class="max-w-2xl">
+	<PageHeader
+		titulo="Preferências"
+		descricao={telefonePendente
+			? 'O Google não compartilha seu telefone — é como os clientes vão falar com você. Confirme um telefone para liberar o restante do painel.'
+			: 'Configure como você recebe agendamentos.'}
+	/>
 
-	<h1 class="display mt-4 text-4xl text-ink sm:text-5xl">Preferências</h1>
-	{#if telefonePendente}
-		<p class="mt-3 text-body">
-			O Google não compartilha seu telefone — é como os clientes vão falar com você. Confirme um
-			telefone para liberar o restante do painel.
-		</p>
-	{:else}
-		<p class="mt-3 text-body">Configure como você recebe agendamentos.</p>
-	{/if}
-
-	<form class="mt-8 space-y-6" novalidate onsubmit={enviar}>
+	<form class="space-y-4 pb-4" novalidate onsubmit={enviar}>
 		<!-- Aceitar agendamentos: toggle em destaque -->
 		<div class="rounded-xl border border-hairline-strong bg-surface-card p-6">
 			<label for="aceita-agendamentos" class="flex cursor-pointer items-start justify-between gap-4">
@@ -247,9 +262,11 @@
 				Períodos em que você atende de segunda a sexta — a base do seu calendário.
 			</p>
 
-			<div class="mt-4 space-y-3">
+			<!-- Períodos separados por divisória: cada um num card com borda própria
+			     criava caixa dentro de caixa. -->
+			<div class="mt-3 divide-y divide-hairline border-y border-hairline">
 				{#each horariosPadrao as bloco, index (index)}
-					<div class="rounded-lg border border-hairline bg-surface-elevated p-4">
+					<div class="py-3">
 						<div class="flex items-center justify-between">
 							<span class="text-xs font-semibold tracking-wide text-mute uppercase">
 								Período {index + 1}
@@ -263,7 +280,7 @@
 							</button>
 						</div>
 
-						<div class="mt-3 grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+						<div class="mt-2 grid grid-cols-[1fr_auto_1fr] items-end gap-2">
 							<div>
 								<label for="expediente-inicio-{index}" class="mb-1.5 block text-xs text-mute">Início</label>
 								<TimeSelect
@@ -315,40 +332,33 @@
 			</div>
 		{/if}
 
-		<!-- Barra de ação fixa: botão sempre à vista, com o feedback ao lado -->
-		<div
-			class="sticky bottom-0 -mx-6 flex items-center gap-3 border-t border-hairline bg-canvas/90 px-6 py-4 backdrop-blur"
-		>
-			<button
-				type="submit"
-				disabled={enviando || descansoInvalido || duracaoInvalida}
-				class="inline-flex h-10 items-center rounded-md bg-primary px-5 text-sm font-medium text-primary-on transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+		<!-- Barra de ação: só entra em cena quando há algo a salvar, e o formulário
+		     reserva espaço abaixo para que ela nunca cubra o último card. -->
+		{#if barraVisivel}
+			<div
+				class="sticky bottom-4 z-10 flex items-center gap-3 rounded-xl border border-hairline-strong bg-surface-elevated/95 px-4 py-3 shadow-lg shadow-black/20 backdrop-blur"
 			>
-				{#if enviando}
-					{telefonePendente ? 'Concluindo…' : 'Salvando…'}
-				{:else}
-					{telefonePendente ? 'Concluir cadastro' : 'Salvar alterações'}
-				{/if}
-			</button>
+				<button
+					type="submit"
+					disabled={enviando || descansoInvalido || duracaoInvalida}
+					class="inline-flex h-10 items-center rounded-md bg-primary px-5 text-sm font-medium text-primary-on transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+				>
+					{#if enviando}
+						{telefonePendente ? 'Concluindo…' : 'Salvando…'}
+					{:else}
+						{telefonePendente ? 'Concluir cadastro' : 'Salvar alterações'}
+					{/if}
+				</button>
 
-			{#if sucesso}
-				<span class="flex items-center gap-1.5 text-sm font-medium text-accent-green">
-					<svg
-						width="16"
-						height="16"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2.5"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<path d="M20 6 9 17l-5-5" />
-					</svg>
-					Salvo
-				</span>
-			{/if}
-		</div>
+				{#if sucesso}
+					<span class="flex items-center gap-1.5 text-sm font-medium text-accent-green">
+						<Icone nome="check" tamanho={16} />
+						Salvo
+					</span>
+				{:else if alterado}
+					<span class="text-sm text-mute">Alterações não salvas</span>
+				{/if}
+			</div>
+		{/if}
 	</form>
 </div>
