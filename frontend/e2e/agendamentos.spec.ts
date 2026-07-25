@@ -229,9 +229,11 @@ test('prestador recusa uma solicitação e o cliente vê o status', async ({ pag
 	await page.click('button:has-text("Sair")');
 	await entrar(page, emailCliente);
 	await page.goto('/painel/agendamentos');
-	const cartaoCliente = page.locator('li[data-agendamento]');
-	await expect(cartaoCliente).toHaveAttribute('data-status', 'RECUSADO');
-	await expect(cartaoCliente.getByText('Recusado', { exact: true })).toBeVisible();
+	// a agenda é uma lista única agrupada por dia, e o filtro padrão ("Tudo")
+	// mostra também o que já foi encerrado
+	const linhaCliente = page.locator('li[data-agendamento]');
+	await expect(linhaCliente).toHaveAttribute('data-status', 'RECUSADO');
+	await expect(linhaCliente.getByText('Recusado', { exact: true })).toBeVisible();
 });
 
 test('diretório do painel lista todos os prestadores com link para o calendário', async ({ page, request }) => {

@@ -11,8 +11,12 @@ test('cadastro como prestador leva ao painel com o tipo correto', async ({ page 
 	await page.click('button[type="submit"]');
 
 	await page.waitForURL('/painel');
-	await expect(page.getByText('Olá, Prestador Teste')).toBeVisible();
-	await expect(page.getByText('Conta de prestador')).toBeVisible();
+	// a saudação usa só o primeiro nome; nome completo e tipo de conta ficam na
+	// sidebar, para um nome longo não quebrar o título da página
+	await expect(page.getByRole('heading', { name: 'Olá, Prestador' })).toBeVisible();
+	const sidebar = page.getByRole('complementary');
+	await expect(sidebar.getByText('Prestador Teste')).toBeVisible();
+	await expect(sidebar.getByText('Prestador', { exact: true })).toBeVisible();
 });
 
 test('cadastro como cliente exige confirmação por email antes de logar', async ({ page, request }) => {
@@ -38,7 +42,8 @@ test('cadastro como cliente exige confirmação por email antes de logar', async
 	await page.fill('#senha', '12345678');
 	await page.click('button[type="submit"]');
 	await page.waitForURL('/painel');
-	await expect(page.getByText('Conta de cliente')).toBeVisible();
+	// o tipo da conta é exibido no bloco de identidade da sidebar
+	await expect(page.getByRole('complementary').getByText('Cliente', { exact: true })).toBeVisible();
 });
 
 test('cadastro sem tipo mostra a escolha explícita antes do formulário', async ({ page }) => {
@@ -50,8 +55,9 @@ test('cadastro sem tipo mostra a escolha explícita antes do formulário', async
 	await expect(page.locator('[data-escolher="prestador"]')).toBeVisible();
 	await expect(page.locator('#nome')).toHaveCount(0);
 
-	// escolher "cliente" revela o formulário do tipo certo
+	// escolher "cliente" revela o formulário do tipo certo — o tipo escolhido
+	// fica marcado no segmento, que também permite trocar sem voltar
 	await page.click('[data-escolher="cliente"]');
 	await expect(page.locator('#nome')).toBeVisible();
-	await expect(page.getByText('Conta de cliente')).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Quero agendar', pressed: true })).toBeVisible();
 });

@@ -16,8 +16,8 @@ test('logout pelo header volta para a home e mostra Entrar', async ({ page }) =>
 	await page.click('button[type="submit"]');
 	await page.waitForURL('/painel');
 
-	// header mostra o usuário logado e o link para o painel
-	await expect(page.locator('header').getByText('Sessao Teste')).toBeVisible();
+	// dentro do painel quem identifica a sessão é a sidebar; o header guarda a saída
+	await expect(page.getByRole('complementary').getByText('Sessao Teste')).toBeVisible();
 
 	await page.click('button:has-text("Sair")');
 	await page.waitForURL('/');

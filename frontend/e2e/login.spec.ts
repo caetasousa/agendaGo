@@ -30,5 +30,6 @@ test('login unificado autentica cliente e senha errada mostra erro', async ({ pa
 	await page.fill('#senha', '12345678');
 	await page.click('button[type="submit"]');
 	await page.waitForURL('/painel');
-	await expect(page.getByText('Conta de cliente')).toBeVisible();
+	// o tipo da conta é exibido no bloco de identidade da sidebar
+	await expect(page.getByRole('complementary').getByText('Cliente', { exact: true })).toBeVisible();
 });
