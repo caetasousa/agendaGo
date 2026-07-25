@@ -8,6 +8,7 @@
 	import { login, me, urlLoginGoogle } from '$lib/api/auth';
 	import { sessao } from '$lib/stores/session.svelte';
 	import GoogleIcon from '$lib/components/GoogleIcon.svelte';
+	import AuthLayout from '$lib/components/AuthLayout.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -109,208 +110,242 @@
 		}
 	}
 
-	const inputClasse =
-		'mt-2 h-10 w-full rounded-md border border-hairline-strong bg-surface-card px-3.5 text-sm text-ink outline-none transition placeholder:text-mute focus:border-ink';
+	const rotuloClasse = 'block text-xs font-semibold tracking-wide text-mute uppercase';
+
+	// A manchete fala com quem está na tela: quem vai atender e quem vai agendar
+	// têm motivos diferentes para criar conta, e o texto genérico não servia aos
+	// dois.
+	const copia = $derived.by(() => {
+		if (preCadastro) {
+			return {
+				titulo: 'Falta só a senha.',
+				lede:
+					'Já reaproveitamos seus dados do agendamento — escolha uma senha e sua conta está pronta.'
+			};
+		}
+		if (tipo === 'provider') {
+			return {
+				titulo: 'Comece pela sua agenda.',
+				lede:
+					'Leva menos de um minuto. Você define os horários; seus clientes escolhem entre o que está livre de verdade.'
+			};
+		}
+		if (tipo === 'client') {
+			return {
+				titulo: 'Escolha um horário e pronto.',
+				lede:
+					'Você vê só o que está livre de verdade, solicita em segundos e acompanha tudo por aqui — sem precisar ligar para ninguém.'
+			};
+		}
+		return {
+			titulo: 'De que lado da agenda você está?',
+			lede:
+				'São duas contas diferentes: quem publica horários e quem escolhe entre eles. Diga qual é o seu caso.'
+		};
+	});
 </script>
 
-<div class="mx-auto max-w-xl">
-	<a href="/" class="text-sm text-mute transition hover:text-ink">← Voltar</a>
-
-	<h1 class="display mt-4 text-4xl text-ink sm:text-5xl">Criar conta</h1>
-	<p class="mt-3 text-body">
-		{#if preCadastro}
-			Falta só a senha — já reaproveitamos seus dados do agendamento.
-		{:else if tipo === null}
-			Como você quer usar o agendaGo?
-		{:else if tipo === 'provider'}
-			Conta de prestador — para oferecer seus horários e receber agendamentos.
-		{:else}
-			Conta de cliente — para agendar e acompanhar seus horários.
-		{/if}
-	</p>
-
+<AuthLayout titulo={copia.titulo} lede={copia.lede}>
 	{#if tipo === null}
 		<!-- Escolha explícita do tipo antes do formulário: evita que um cliente
 		     se cadastre como prestador sem perceber. -->
-		<div class="mt-8 grid gap-4 sm:grid-cols-2">
+		<div class="grid gap-3">
 			<button
 				type="button"
 				data-escolher="cliente"
 				onclick={() => escolher('client')}
-				class="group flex flex-col items-start rounded-xl border border-hairline-strong bg-surface-card p-6 text-left transition hover:border-ink"
+				class="group rounded-xl border border-hairline-strong bg-surface-card p-5 text-left transition hover:border-ink"
 			>
-				<span class="flex h-9 w-9 items-center justify-center rounded-md bg-surface-elevated" aria-hidden="true">
-					<span class="h-2.5 w-2.5 rounded-full bg-accent-blue"></span>
+				<span class="flex items-center gap-2 text-base font-semibold text-ink">
+					<span class="h-2 w-2 rounded-full bg-accent-blue" aria-hidden="true"></span>
+					Quero agendar
 				</span>
-				<span class="mt-4 text-base font-semibold text-ink">Quero agendar</span>
-				<span class="mt-1 text-sm text-body">
-					Sou cliente: agendo com um profissional e acompanho meus horários em um só lugar.
+				<span class="mt-1.5 block text-sm text-body">
+					Marco com um profissional e acompanho meus horários em um só lugar.
 				</span>
-				<span class="mt-4 text-sm font-medium text-ink group-hover:underline">Criar conta de cliente →</span>
 			</button>
 
 			<button
 				type="button"
 				data-escolher="prestador"
 				onclick={() => escolher('provider')}
-				class="group flex flex-col items-start rounded-xl border border-hairline-strong bg-surface-card p-6 text-left transition hover:border-ink"
+				class="group rounded-xl border border-hairline-strong bg-surface-card p-5 text-left transition hover:border-ink"
 			>
-				<span class="flex h-9 w-9 items-center justify-center rounded-md bg-surface-elevated" aria-hidden="true">
-					<span class="h-2.5 w-2.5 rounded-full bg-accent-green"></span>
+				<span class="flex items-center gap-2 text-base font-semibold text-ink">
+					<span class="h-2 w-2 rounded-full bg-accent-green" aria-hidden="true"></span>
+					Quero oferecer horários
 				</span>
-				<span class="mt-4 text-base font-semibold text-ink">Quero oferecer horários</span>
-				<span class="mt-1 text-sm text-body">
-					Sou prestador: publico minha agenda e recebo pedidos de horário dos meus clientes.
+				<span class="mt-1.5 block text-sm text-body">
+					Publico minha agenda e recebo pedidos de horário dos meus clientes.
 				</span>
-				<span class="mt-4 text-sm font-medium text-ink group-hover:underline">Criar conta de prestador →</span>
 			</button>
 		</div>
 
-		<p class="mt-6 text-sm text-body">
+		<p class="mt-7 text-sm text-body">
 			Já tem conta?
 			<a href="/login" class="font-medium text-ink underline">Entrar</a>
 		</p>
+	{:else if aguardandoConfirmacao}
+		<div class="rounded-xl border border-hairline-strong bg-surface-card p-6">
+			<p class="text-body">
+				Enviamos um email para <span class="font-medium text-ink">{email}</span>. Abra a mensagem e
+				clique no link para confirmar seu cadastro e ativar sua conta.
+			</p>
+			<p class="mt-4 text-sm text-mute">
+				Não recebeu? Verifique a caixa de spam. Se este email já tiver uma conta, você receberá
+				instruções para entrar.
+			</p>
+		</div>
 	{:else}
-		<div class="mt-8 rounded-xl border border-hairline-strong bg-surface-card p-8">
-			{#if aguardandoConfirmacao}
-				<p class="text-body">
-					Enviamos um email para <span class="font-medium text-ink">{email}</span>. Abra a mensagem e
-					clique no link para confirmar seu cadastro e ativar sua conta.
-				</p>
-				<p class="mt-4 text-sm text-mute">
-					Não recebeu? Verifique a caixa de spam. Se este email já tiver uma conta, você receberá
-					instruções para entrar.
-				</p>
+		{#if !preCadastro && !veioParaAgendar}
+			<!-- Troca de tipo sem sair da tela: o mesmo formulário serve aos dois. -->
+			<div
+				class="mb-6 inline-flex gap-1 rounded-full border border-hairline-strong bg-surface-card p-1"
+			>
+				<button
+					type="button"
+					aria-pressed={tipo === 'client'}
+					onclick={() => escolher('client')}
+					class="rounded-full px-3.5 py-1 text-sm transition {tipo === 'client'
+						? 'bg-surface-elevated font-semibold text-ink'
+						: 'text-mute hover:text-ink'}"
+				>
+					Quero agendar
+				</button>
+				<button
+					type="button"
+					aria-pressed={tipo === 'provider'}
+					onclick={() => escolher('provider')}
+					class="rounded-full px-3.5 py-1 text-sm transition {tipo === 'provider'
+						? 'bg-surface-elevated font-semibold text-ink'
+						: 'text-mute hover:text-ink'}"
+				>
+					Quero atender
+				</button>
+			</div>
+		{/if}
+
+		{#if !preCadastro && tipo}
+			<a
+				href={urlLoginGoogle(tipo, page.url.searchParams.get('voltar') ?? undefined)}
+				class="flex h-11 items-center justify-center gap-2 rounded-lg border border-hairline-strong px-4 text-sm font-medium text-ink transition hover:border-ink"
+			>
+				<GoogleIcon />
+				Criar conta com Google
+			</a>
+
+			<div class="my-6 flex items-center gap-3">
+				<div class="h-px flex-1 bg-hairline-strong"></div>
+				<span class="text-xs tracking-wide text-mute uppercase">ou preencha os dados</span>
+				<div class="h-px flex-1 bg-hairline-strong"></div>
+			</div>
+		{/if}
+
+		<form class="space-y-5" novalidate onsubmit={enviar}>
+			{#if erro}
+				<div
+					class="flex items-start gap-2 rounded-md border border-accent-red/40 bg-accent-red/10 p-3 text-sm"
+				>
+					<span class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent-red"></span>
+					<span class="text-body">{erro}</span>
+				</div>
+			{/if}
+
+			{#if preCadastro}
+				<div class="rounded-lg border border-hairline bg-surface-elevated p-4">
+					<p class="text-sm text-body">
+						<span class="font-medium text-ink">{nome}</span> · {email} · {telefone}
+					</p>
+				</div>
 			{:else}
-				{#if !preCadastro && !veioParaAgendar}
-					<button
-						type="button"
-						onclick={voltarParaEscolha}
-						class="mb-6 text-sm text-mute transition hover:text-ink"
-					>
-						← Trocar tipo de conta
-					</button>
+				<div>
+					<label for="nome" class={rotuloClasse}>Nome</label>
+					<input
+						id="nome"
+						type="text"
+						bind:value={nome}
+						required
+						minlength="2"
+						maxlength="100"
+						placeholder="Seu nome"
+						class="campo-linha mt-1"
+					/>
+				</div>
+
+				<div>
+					<label for="email" class={rotuloClasse}>E-mail</label>
+					<input
+						id="email"
+						type="email"
+						bind:value={email}
+						required
+						placeholder="voce@exemplo.com"
+						class="campo-linha mt-1"
+					/>
+				</div>
+
+				<div>
+					<label for="telefone" class={rotuloClasse}>Telefone</label>
+					<input
+						id="telefone"
+						type="tel"
+						bind:value={telefone}
+						required
+						minlength="8"
+						placeholder="(11) 99999-8888"
+						class="campo-linha mt-1"
+					/>
+				</div>
+			{/if}
+
+			<div>
+				<label for="senha" class={rotuloClasse}>Senha</label>
+				<input
+					id="senha"
+					type="password"
+					bind:value={senha}
+					required
+					minlength="8"
+					placeholder="Mínimo de 8 caracteres"
+					class="campo-linha mt-1"
+				/>
+			</div>
+
+			<div>
+				<label for="confirmar-senha" class={rotuloClasse}>Confirmar senha</label>
+				<input
+					id="confirmar-senha"
+					type="password"
+					bind:value={confirmarSenha}
+					required
+					minlength="8"
+					placeholder="Repita a senha"
+					aria-invalid={senhasDivergentes}
+					class="campo-linha mt-1"
+				/>
+				{#if senhasDivergentes}
+					<p class="mt-1.5 text-sm text-accent-red">As senhas não coincidem.</p>
 				{/if}
+			</div>
 
-				{#if !preCadastro && tipo}
-					<a
-						href={urlLoginGoogle(tipo, page.url.searchParams.get('voltar') ?? undefined)}
-						class="flex h-10 items-center justify-center gap-2 rounded-md border border-hairline-strong bg-surface-card px-4 text-sm font-medium text-ink transition hover:border-ink"
-					>
-						<GoogleIcon />
-						Continuar com Google
-					</a>
+			<button
+				type="submit"
+				disabled={enviando || senhasDivergentes}
+				class="flex h-11 w-full items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-on transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+			>
+				{enviando ? 'Enviando…' : 'Criar conta'}
+			</button>
 
-					<div class="my-6 flex items-center gap-3">
-						<div class="h-px flex-1 bg-hairline-strong"></div>
-						<span class="text-xs uppercase tracking-wide text-mute">ou preencha os dados</span>
-						<div class="h-px flex-1 bg-hairline-strong"></div>
-					</div>
-				{/if}
-
-				<form class="space-y-5" novalidate onsubmit={enviar}>
-					{#if erro}
-						<div
-							class="flex items-start gap-2 rounded-md border border-hairline-strong bg-surface-elevated p-3 text-sm"
-						>
-							<span class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent-red"></span>
-							<span class="text-body">{erro}</span>
-						</div>
-					{/if}
-
-					{#if preCadastro}
-						<div class="rounded-md border border-hairline bg-surface-elevated p-4">
-							<p class="text-sm text-body">
-								<span class="font-medium text-ink">{nome}</span> · {email} · {telefone}
-							</p>
-						</div>
-					{:else}
-						<div>
-							<label for="nome" class="block text-sm font-medium text-ink">Nome</label>
-							<input
-								id="nome"
-								type="text"
-								bind:value={nome}
-								required
-								minlength="2"
-								maxlength="100"
-								placeholder="Seu nome"
-								class={inputClasse}
-							/>
-						</div>
-
-						<div>
-							<label for="email" class="block text-sm font-medium text-ink">E-mail</label>
-							<input
-								id="email"
-								type="email"
-								bind:value={email}
-								required
-								placeholder="voce@exemplo.com"
-								class={inputClasse}
-							/>
-						</div>
-
-						<div>
-							<label for="telefone" class="block text-sm font-medium text-ink">Telefone</label>
-							<input
-								id="telefone"
-								type="tel"
-								bind:value={telefone}
-								required
-								minlength="8"
-								placeholder="(11) 99999-8888"
-								class={inputClasse}
-							/>
-						</div>
-					{/if}
-
-					<div>
-						<label for="senha" class="block text-sm font-medium text-ink">Senha</label>
-						<input
-							id="senha"
-							type="password"
-							bind:value={senha}
-							required
-							minlength="8"
-							placeholder="Mínimo de 8 caracteres"
-							class={inputClasse}
-						/>
-					</div>
-
-					<div>
-						<label for="confirmar-senha" class="block text-sm font-medium text-ink"
-							>Confirmar senha</label
-						>
-						<input
-							id="confirmar-senha"
-							type="password"
-							bind:value={confirmarSenha}
-							required
-							minlength="8"
-							placeholder="Repita a senha"
-							aria-invalid={senhasDivergentes}
-							class={inputClasse}
-						/>
-						{#if senhasDivergentes}
-							<p class="mt-1.5 text-sm text-accent-red">As senhas não coincidem.</p>
-						{/if}
-					</div>
-
-					<button
-						type="submit"
-						disabled={enviando || senhasDivergentes}
-						class="flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-on transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-					>
-						{enviando ? 'Enviando…' : 'Criar conta'}
-					</button>
-				</form>
-
-				<p class="mt-6 text-sm text-body">
-					Já tem conta?
-					<a href="/login" class="font-medium text-ink underline">Entrar</a>
+			{#if tipo === 'client' && !preCadastro}
+				<p class="text-xs text-mute">
+					Enviaremos um email para confirmar seu cadastro antes de ativar a conta.
 				</p>
 			{/if}
-		</div>
+		</form>
+
+		<p class="mt-7 text-sm text-body">
+			Já tem conta?
+			<a href="/login" class="font-medium text-ink underline">Entrar</a>
+		</p>
 	{/if}
-</div>
+</AuthLayout>

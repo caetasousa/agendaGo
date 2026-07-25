@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import { ApiError } from '$lib/api/client';
 	import { confirmarCadastro } from '$lib/api/customer';
+	import AuthLayout from '$lib/components/AuthLayout.svelte';
 
 	const token = page.url.searchParams.get('token') ?? '';
 
@@ -20,12 +21,13 @@
 	});
 </script>
 
-<div class="mx-auto max-w-xl">
-	<a href="/" class="text-sm text-mute transition hover:text-ink">← Início</a>
-
-	<h1 class="display mt-4 text-4xl text-ink sm:text-5xl">Confirmação de cadastro</h1>
-
-	<div class="mt-8 rounded-xl border border-hairline-strong bg-surface-card p-8">
+<AuthLayout
+	titulo={estado === 'ok' ? 'Sua conta está pronta.' : 'Confirmação de cadastro.'}
+	lede={estado === 'ok'
+		? 'Foi só isso. Entre para ver seus agendamentos — inclusive os que você já tinha feito sem conta com este email.'
+		: 'Estamos verificando o link que você recebeu por email.'}
+>
+	<div class="rounded-xl border border-hairline-strong bg-surface-card p-6">
 		{#if estado === 'confirmando'}
 			<p class="text-body">Confirmando seu cadastro…</p>
 		{:else if estado === 'ok'}
@@ -40,4 +42,4 @@
 			</p>
 		{/if}
 	</div>
-</div>
+</AuthLayout>

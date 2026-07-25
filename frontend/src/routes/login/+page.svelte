@@ -5,6 +5,7 @@
 	import { login, me, urlLoginGoogle } from '$lib/api/auth';
 	import { sessao } from '$lib/stores/session.svelte';
 	import GoogleIcon from '$lib/components/GoogleIcon.svelte';
+	import AuthLayout from '$lib/components/AuthLayout.svelte';
 
 	// destinoAposLogin honra ?voltar= (ex: link público de agendamento), mas só
 	// para caminhos internos — nunca URLs absolutas, para evitar open redirect.
@@ -59,94 +60,91 @@
 		}
 	}
 
-	const inputClasse =
-		'mt-2 h-10 w-full rounded-md border border-hairline-strong bg-surface-card px-3.5 text-sm text-ink outline-none transition placeholder:text-mute focus:border-ink';
+	const rotuloClasse = 'block text-xs font-semibold tracking-wide text-mute uppercase';
 </script>
 
-<div class="mx-auto max-w-xl">
-	<a href="/" class="text-sm text-mute transition hover:text-ink">← Voltar</a>
-
-	<h1 class="display mt-4 text-4xl text-ink sm:text-5xl">Entrar</h1>
-	<p class="mt-3 text-body">Acesse sua conta de prestador ou cliente.</p>
-
-	<div class="mt-8 rounded-xl border border-hairline-strong bg-surface-card p-8">
-		<form class="space-y-5" novalidate onsubmit={enviar}>
-			{#if erro}
-				<div
-					class="flex items-start gap-2 rounded-md border border-hairline-strong bg-surface-elevated p-3 text-sm"
-				>
-					<span class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent-red"></span>
-					<span class="text-body">{erro}</span>
-				</div>
-			{/if}
-
-			<div>
-				<label for="email" class="block text-sm font-medium text-ink">E-mail</label>
-				<input
-					id="email"
-					type="email"
-					bind:value={email}
-					required
-					placeholder="voce@exemplo.com"
-					class={inputClasse}
-				/>
-			</div>
-
-			<div>
-				<div class="flex items-baseline justify-between">
-					<label for="senha" class="block text-sm font-medium text-ink">Senha</label>
-					<a href="/recuperar-senha" class="text-sm text-mute transition hover:text-ink"
-						>Esqueci minha senha</a
-					>
-				</div>
-				<input
-					id="senha"
-					type="password"
-					bind:value={senha}
-					required
-					placeholder="Sua senha"
-					class={inputClasse}
-				/>
-			</div>
-
-			<button
-				type="submit"
-				disabled={enviando}
-				class="flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-on transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+<AuthLayout
+	titulo="Bem-vindo de volta."
+	lede="Sua agenda continua exatamente onde você parou — com os horários que você definiu e os pedidos que chegaram enquanto isso."
+>
+	<form class="space-y-6" novalidate onsubmit={enviar}>
+		{#if erro}
+			<div
+				class="flex items-start gap-2 rounded-md border border-accent-red/40 bg-accent-red/10 p-3 text-sm"
 			>
-				{enviando ? 'Entrando…' : 'Entrar'}
-			</button>
-		</form>
+				<span class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent-red"></span>
+				<span class="text-body">{erro}</span>
+			</div>
+		{/if}
 
-		<div class="mt-6 flex items-center gap-3">
-			<div class="h-px flex-1 bg-hairline-strong"></div>
-			<span class="text-xs uppercase tracking-wide text-mute">ou continue com</span>
-			<div class="h-px flex-1 bg-hairline-strong"></div>
+		<div>
+			<label for="email" class={rotuloClasse}>E-mail</label>
+			<input
+				id="email"
+				type="email"
+				bind:value={email}
+				required
+				placeholder="voce@exemplo.com"
+				class="campo-linha mt-1"
+			/>
 		</div>
 
-		<div class="mt-4 grid gap-3 sm:grid-cols-2">
-			<a
-				href={urlLoginGoogle('client', voltar)}
-				class="flex h-10 items-center justify-center gap-2 rounded-md border border-hairline-strong bg-surface-card px-4 text-sm font-medium text-ink transition hover:border-ink"
-			>
-				<GoogleIcon />
-				Sou cliente
-			</a>
-			<a
-				href={urlLoginGoogle('provider', voltar)}
-				class="flex h-10 items-center justify-center gap-2 rounded-md border border-hairline-strong bg-surface-card px-4 text-sm font-medium text-ink transition hover:border-ink"
-			>
-				<GoogleIcon />
-				Sou prestador
-			</a>
+		<div>
+			<div class="flex items-baseline justify-between gap-3">
+				<label for="senha" class={rotuloClasse}>Senha</label>
+				<a href="/recuperar-senha" class="text-xs text-mute transition hover:text-ink">
+					Esqueci minha senha
+				</a>
+			</div>
+			<input
+				id="senha"
+				type="password"
+				bind:value={senha}
+				required
+				placeholder="Sua senha"
+				class="campo-linha mt-1"
+			/>
 		</div>
 
-		<p class="mt-6 text-sm text-body">
-			Ainda não tem conta?
-			<a
-				href="/cadastro{voltar ? `?voltar=${encodeURIComponent(voltar)}` : ''}"
-				class="font-medium text-ink underline">Cadastre-se</a
-			>
-		</p>
+		<button
+			type="submit"
+			disabled={enviando}
+			class="flex h-11 w-full items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-on transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+		>
+			{enviando ? 'Entrando…' : 'Entrar'}
+		</button>
+	</form>
+
+	<div class="mt-7 flex items-center gap-3">
+		<div class="h-px flex-1 bg-hairline-strong"></div>
+		<span class="text-xs tracking-wide text-mute uppercase">ou</span>
+		<div class="h-px flex-1 bg-hairline-strong"></div>
 	</div>
-</div>
+
+	<!-- O Google exige saber o tipo de conta antes de iniciar o fluxo: o backend
+	     usa caminhos distintos para cliente e prestador. -->
+	<div class="mt-4 grid gap-3 sm:grid-cols-2">
+		<a
+			href={urlLoginGoogle('client', voltar)}
+			class="flex h-11 items-center justify-center gap-2 rounded-lg border border-hairline-strong px-4 text-sm font-medium text-ink transition hover:border-ink"
+		>
+			<GoogleIcon />
+			Sou cliente
+		</a>
+		<a
+			href={urlLoginGoogle('provider', voltar)}
+			class="flex h-11 items-center justify-center gap-2 rounded-lg border border-hairline-strong px-4 text-sm font-medium text-ink transition hover:border-ink"
+		>
+			<GoogleIcon />
+			Sou prestador
+		</a>
+	</div>
+
+	<p class="mt-7 text-sm text-body">
+		Ainda não tem conta?
+		<a
+			href="/cadastro{voltar ? `?voltar=${encodeURIComponent(voltar)}` : ''}"
+			class="font-medium text-ink underline">Cadastre-se</a
+		>
+	</p>
+</AuthLayout>
