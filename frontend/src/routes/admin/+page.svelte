@@ -10,6 +10,8 @@
 		reativarPrestador,
 		type UsuarioModeracao
 	} from '$lib/api/admin';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import Indicadores from '$lib/components/Indicadores.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -53,9 +55,7 @@
 	<li
 		data-usuario={u.id}
 		data-ativo={u.ativo}
-		class="flex flex-wrap items-center justify-between gap-3 rounded-md border border-hairline-strong p-4 {u.ativo
-			? ''
-			: 'opacity-70'}"
+		class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 {u.ativo ? '' : 'opacity-70'}"
 	>
 		<a href="{base}/{u.id}" class="group min-w-0" data-detalhe={u.id}>
 			<p class="flex items-center gap-2 text-sm font-medium text-ink group-hover:underline">
@@ -93,53 +93,77 @@
 	</li>
 {/snippet}
 
-<div class="mx-auto max-w-2xl">
-	<h1 class="display mt-4 text-4xl text-ink sm:text-5xl">Moderação</h1>
-	<p class="mt-3 text-body">
-		Banir remove o acesso do usuário e o tira da vitrine; o histórico de agendamentos é preservado.
-		Reativar devolve o acesso.
-	</p>
+<div>
+	<PageHeader
+		titulo="Moderação"
+		descricao="Banir remove o acesso do usuário e o tira da vitrine; o histórico de agendamentos é preservado. Reativar devolve o acesso."
+	/>
 
 	{#if erro}
 		<div
-			class="mt-6 flex items-start gap-2 rounded-md border border-hairline-strong bg-surface-elevated p-3 text-sm"
+			class="mb-6 flex items-start gap-2 rounded-md border border-accent-red/40 bg-accent-red/10 p-3 text-sm"
 		>
 			<span class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent-red"></span>
 			<span class="text-body">{erro}</span>
 		</div>
 	{/if}
 
-	<div class="mt-8 rounded-xl border border-hairline-strong bg-surface-card p-5 sm:p-8">
-		<div class="flex items-center justify-between">
-			<h2 class="text-lg font-semibold text-ink">Prestadores</h2>
-			<span class="text-xs text-mute">{totalPrestadoresAtivos}/{prestadores.length} ativos</span>
+	<Indicadores
+		itens={[
+			{ rotulo: 'Prestadores', valor: prestadores.length },
+			{ rotulo: 'Prestadores ativos', valor: totalPrestadoresAtivos },
+			{ rotulo: 'Clientes', valor: clientes.length },
+			{ rotulo: 'Clientes ativos', valor: totalClientesAtivos }
+		]}
+	/>
+
+	<section class="mt-6">
+		<div class="mb-2 flex items-baseline justify-between gap-3">
+			<h2 class="text-sm font-semibold text-ink">Prestadores</h2>
+			<span class="text-xs text-mute tabular-nums">
+				{totalPrestadoresAtivos}/{prestadores.length} ativos
+			</span>
 		</div>
 
 		{#if prestadores.length === 0}
-			<p class="mt-4 text-sm text-body">Nenhum prestador cadastrado.</p>
+			<p
+				class="rounded-xl border border-hairline-strong bg-surface-card px-4 py-6 text-center text-sm text-body"
+			>
+				Nenhum prestador cadastrado.
+			</p>
 		{:else}
-			<ul class="mt-4 space-y-2">
+			<ul
+				class="divide-y divide-hairline overflow-hidden rounded-xl border border-hairline-strong bg-surface-card"
+			>
 				{#each prestadores as p (p.id)}
 					{@render linha(p, '/admin/prestadores', banirPrestador, reativarPrestador)}
 				{/each}
 			</ul>
 		{/if}
-	</div>
+	</section>
 
-	<div class="mt-8 rounded-xl border border-hairline-strong bg-surface-card p-5 sm:p-8">
-		<div class="flex items-center justify-between">
-			<h2 class="text-lg font-semibold text-ink">Clientes</h2>
-			<span class="text-xs text-mute">{totalClientesAtivos}/{clientes.length} ativos</span>
+	<section class="mt-6">
+		<div class="mb-2 flex items-baseline justify-between gap-3">
+			<h2 class="text-sm font-semibold text-ink">Clientes</h2>
+			<span class="text-xs text-mute tabular-nums">
+				{totalClientesAtivos}/{clientes.length} ativos
+			</span>
 		</div>
 
 		{#if clientes.length === 0}
-			<p class="mt-4 text-sm text-body">Nenhum cliente cadastrado.</p>
+			<p
+				class="rounded-xl border border-hairline-strong bg-surface-card px-4 py-6 text-center text-sm text-body"
+			>
+				Nenhum cliente cadastrado.
+			</p>
 		{:else}
-			<ul class="mt-4 space-y-2">
+			<ul
+				class="divide-y divide-hairline overflow-hidden rounded-xl border border-hairline-strong bg-surface-card"
+			>
 				{#each clientes as c (c.id)}
 					{@render linha(c, '/admin/clientes', banirCliente, reativarCliente)}
 				{/each}
 			</ul>
 		{/if}
-	</div>
+	</section>
 </div>
