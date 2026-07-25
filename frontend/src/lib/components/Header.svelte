@@ -1,7 +1,14 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { sessao } from '$lib/stores/session.svelte';
+
+	// Dentro do painel/moderação a sidebar já mostra quem está logado e o Sair;
+	// repetir aqui duplicaria a navegação e empurraria o layout com nomes longos.
+	const noApp = $derived(
+		page.url.pathname.startsWith('/painel') || page.url.pathname.startsWith('/admin')
+	);
 
 	let tema = $state<'dark' | 'light'>('dark');
 
@@ -26,9 +33,16 @@
 </script>
 
 <header class="sticky top-0 z-10 border-b border-hairline bg-canvas/80 backdrop-blur">
-	<div class="mx-auto flex h-16 max-w-5xl items-center justify-between px-6">
+	<div
+		class="mx-auto flex h-16 items-center justify-between {noApp
+			? 'max-w-6xl px-4 sm:px-6'
+			: 'max-w-5xl px-6'}"
+	>
 		<a href="/" class="flex items-center gap-2 text-lg font-semibold tracking-tight text-ink">
-			<span class="h-2 w-2 rounded-full bg-accent-green" aria-hidden="true"></span>
+			<span
+				class="h-2 w-2 rounded-full bg-accent-green shadow-[0_0_10px_var(--accent-green)]"
+				aria-hidden="true"
+			></span>
 			agendaGo
 		</a>
 
@@ -36,13 +50,17 @@
 			{#if sessao.carregando}
 				<!-- espaço neutro: evita mostrar "Entrar" antes de saber se há sessão -->
 			{:else if sessao.usuario}
-				<span class="text-sm text-body">{sessao.usuario.nome}</span>
-				<a
-					href={sessao.usuario.tipo === 'admin' ? '/admin' : '/painel'}
-					class="text-sm text-mute transition hover:text-ink"
-				>
-					{sessao.usuario.tipo === 'admin' ? 'Moderação' : 'Painel'}
-				</a>
+				<!-- Dentro do app a sidebar já identifica a sessão e navega; aqui fica
+				     só a saída, que precisa existir também abaixo de md, onde a
+				     sidebar não é exibida. -->
+				{#if !noApp}
+					<a
+						href={sessao.usuario.tipo === 'admin' ? '/admin' : '/painel'}
+						class="text-sm text-mute transition hover:text-ink"
+					>
+						{sessao.usuario.tipo === 'admin' ? 'Moderação' : 'Painel'}
+					</a>
+				{/if}
 				<button
 					type="button"
 					onclick={sair}
