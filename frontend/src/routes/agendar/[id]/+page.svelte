@@ -287,8 +287,13 @@
 			{/if}
 
 			<div class="mt-4 grid grid-cols-7 gap-1 sm:gap-1.5 {carregandoMes ? 'opacity-60' : ''}">
+				<!-- Mesmo recuo horizontal das células, para alinhar com o número do dia. -->
 				{#each ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'] as nome, i (nome)}
-					<div class="pb-1 text-center text-xs font-medium {i === 0 || i === 6 ? 'text-ash' : 'text-mute'}">
+					<div
+						class="px-1 pb-1 text-xs font-medium sm:px-1.5 {i === 0 || i === 6
+							? 'text-ash'
+							: 'text-mute'}"
+					>
 						{nome}
 					</div>
 				{/each}
