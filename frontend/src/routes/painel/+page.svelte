@@ -1,11 +1,21 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import type { PageData } from './$types';
+	import type { Agendamento } from '$lib/api/appointments';
+	import { chaveData } from '$lib/holidays';
+	import Icone from '$lib/components/Icone.svelte';
+	import LinhaAgendamento from '$lib/components/LinhaAgendamento.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import Indicadores from '$lib/components/Indicadores.svelte';
 
 	let { data }: { data: PageData } = $props();
 
 	const ehPrestador = $derived(data.usuario.tipo === 'provider');
 	const linkAgendamento = $derived(`${page.url.origin}/agendar/${data.usuario.id}`);
+
+	// Só o primeiro nome na saudação: o nome completo vive na sidebar, e é o que
+	// fazia o título quebrar em duas linhas quando era longo.
+	const primeiroNome = $derived(data.usuario.nome.trim().split(/\s+/)[0]);
 
 	let copiado = $state(false);
 
@@ -18,131 +28,125 @@
 			// clipboard indisponível (ex: contexto sem HTTPS): o link continua visível para cópia manual
 		}
 	}
+
+	const chaveHoje = chaveData(new Date());
+
+	// Ordena por data e hora de início — a agenda é lida no tempo, não na ordem
+	// em que a API devolveu.
+	function porQuandoComeca(a: Agendamento, b: Agendamento): number {
+		return a.data === b.data ? a.inicioMinutos - b.inicioMinutos : a.data.localeCompare(b.data);
+	}
+
+	const pendentes = $derived(
+		data.agendamentos.filter((a) => a.status === 'SOLICITADO').sort(porQuandoComeca)
+	);
+	const proximos = $derived(
+		data.agendamentos
+			.filter((a) => a.status === 'CONFIRMADO' && a.data >= chaveHoje)
+			.sort(porQuandoComeca)
+	);
+	const realizadosNoMes = $derived(
+		data.agendamentos.filter(
+			(a) => a.status === 'REALIZADO' && a.data.slice(0, 7) === chaveHoje.slice(0, 7)
+		)
+	);
+
+	// Mesma faixa de três colunas para os dois perfis: só o rótulo do primeiro
+	// muda, porque quem aguarda é diferente — o prestador precisa agir, o cliente
+	// está esperando a resposta dele.
+	const indicadores = $derived([
+		{
+			rotulo: ehPrestador ? 'Aguardando' : 'Solicitados',
+			valor: pendentes.length,
+			destaque: ehPrestador && pendentes.length > 0
+		},
+		{ rotulo: 'Confirmados', valor: proximos.length },
+		{ rotulo: 'Realizados no mês', valor: realizadosNoMes.length }
+	]);
+
+	// O prestador precisa confirmar; o cliente está do outro lado da mesma espera.
+	const tituloPendentes = $derived(
+		ehPrestador ? 'Aguardando sua confirmação' : 'Aguardando confirmação do prestador'
+	);
+
+	const semNada = $derived(pendentes.length === 0 && proximos.length === 0);
 </script>
 
-<div class="mx-auto max-w-2xl">
-	<h1 class="display mt-4 text-4xl text-ink sm:text-5xl">Olá, {data.usuario.nome}</h1>
-	<p class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-body">
-		<span
-			class="inline-flex items-center gap-1.5 rounded-full border border-hairline-strong bg-surface-elevated px-2.5 py-0.5 text-xs font-medium text-ink"
-		>
-			<span class="h-1.5 w-1.5 rounded-full bg-accent-green"></span>
-			{ehPrestador ? 'Conta de prestador' : 'Conta de cliente'}
-		</span>
-		<span class="text-sm text-mute">{data.usuario.email}</span>
-	</p>
-
-	{#if ehPrestador}
-		<div
-			class="mt-8 flex flex-wrap items-center gap-3 rounded-xl border border-hairline-strong bg-surface-card p-4"
-		>
-			<div class="min-w-0 flex-1">
-				<p class="text-xs font-medium tracking-wide text-mute uppercase">Seu link de agendamento</p>
-				<p class="mt-1 truncate text-sm text-ink" data-link-agendamento>{linkAgendamento}</p>
-				<p class="mt-1 text-xs text-mute">
-					Compartilhe no Instagram ou WhatsApp — quem abrir vê seus horários livres e agenda.
-				</p>
-			</div>
-			<button
-				type="button"
-				onclick={copiarLink}
-				class="inline-flex h-9 items-center rounded-md border border-hairline-strong px-4 text-sm font-medium text-ink transition hover:bg-surface-elevated"
-			>
-				{copiado ? 'Copiado!' : 'Copiar'}
-			</button>
-		</div>
-
-		<div class="mt-4 grid gap-4 sm:grid-cols-2">
+{#snippet secao(titulo: string, itens: Agendamento[], destaque = false)}
+	<section class="mt-4">
+		<div class="mb-2 flex items-baseline justify-between gap-3">
+			<h2 class="text-sm font-semibold text-ink">{titulo}</h2>
 			<a
 				href="/painel/agendamentos"
-				class="group rounded-xl border border-hairline-strong bg-surface-card p-6 transition hover:border-ink/40"
+				class="text-xs text-mute transition hover:text-ink"
 			>
-				<span class="block h-2 w-2 rounded-full bg-accent-orange" aria-hidden="true"></span>
-				<h2 class="mt-4 flex items-center justify-between text-base font-semibold text-ink">
-					Agendamentos
-					<span class="text-mute transition group-hover:translate-x-0.5 group-hover:text-ink">→</span>
-				</h2>
-				<p class="mt-2 text-sm text-body">
-					Confirme ou recuse solicitações e acompanhe os atendimentos confirmados.
-				</p>
-			</a>
-
-			{#if data.usuario.permiteMarcacaoPeloPrestador}
-				<a
-					href="/painel/marcar"
-					class="group rounded-xl border border-hairline-strong bg-surface-card p-6 transition hover:border-ink/40"
-				>
-					<span class="block h-2 w-2 rounded-full bg-accent-red" aria-hidden="true"></span>
-					<h2 class="mt-4 flex items-center justify-between text-base font-semibold text-ink">
-						Marcar para um cliente
-						<span class="text-mute transition group-hover:translate-x-0.5 group-hover:text-ink"
-							>→</span
-						>
-					</h2>
-					<p class="mt-2 text-sm text-body">
-						Cliente ligou? Registre você mesmo a marcação num horário livre da sua agenda.
-					</p>
-				</a>
-			{/if}
-
-			<a
-				href="/painel/disponibilidade"
-				class="group rounded-xl border border-hairline-strong bg-surface-card p-6 transition hover:border-ink/40"
-			>
-				<span class="block h-2 w-2 rounded-full bg-accent-green" aria-hidden="true"></span>
-				<h2 class="mt-4 flex items-center justify-between text-base font-semibold text-ink">
-					Disponibilidade
-					<span class="text-mute transition group-hover:translate-x-0.5 group-hover:text-ink">→</span>
-				</h2>
-				<p class="mt-2 text-sm text-body">
-					Veja o mês no calendário, bloqueie dias ou defina horários próprios para datas
-					específicas.
-				</p>
-			</a>
-
-			<a
-				href="/painel/preferencias"
-				class="group rounded-xl border border-hairline-strong bg-surface-card p-6 transition hover:border-ink/40"
-			>
-				<span class="block h-2 w-2 rounded-full bg-accent-blue" aria-hidden="true"></span>
-				<h2 class="mt-4 flex items-center justify-between text-base font-semibold text-ink">
-					Preferências
-					<span class="text-mute transition group-hover:translate-x-0.5 group-hover:text-ink">→</span>
-				</h2>
-				<p class="mt-2 text-sm text-body">
-					Ative a agenda, ajuste a duração dos atendimentos e monte seu expediente padrão.
-				</p>
+				Ver todos
 			</a>
 		</div>
-	{:else}
-		<div class="mt-10 grid gap-4 sm:grid-cols-2">
+		<ul
+			class="divide-y divide-hairline overflow-hidden rounded-xl border bg-surface-card {destaque
+				? 'border-accent-yellow/40'
+				: 'border-hairline-strong'}"
+		>
+			{#each itens.slice(0, 5) as a (a.id)}
+				<LinhaAgendamento agendamento={a} {ehPrestador} mostrarData />
+			{/each}
+		</ul>
+	</section>
+{/snippet}
+
+<PageHeader titulo="Olá, {primeiroNome}" descricao={data.usuario.email} />
+
+<Indicadores itens={indicadores} />
+
+{#if pendentes.length > 0}
+	{@render secao(tituloPendentes, pendentes, ehPrestador)}
+{/if}
+
+{#if proximos.length > 0}
+	{@render secao('Próximos atendimentos', proximos)}
+{/if}
+
+{#if semNada}
+	<div class="mt-4 rounded-xl border border-hairline-strong bg-surface-card px-5 py-8 text-center">
+		<p class="text-sm text-body">
+			{#if ehPrestador}
+				Nenhum atendimento na fila. Compartilhe seu link para começar a receber pedidos.
+			{:else}
+				Você ainda não tem agendamentos.
+			{/if}
+		</p>
+		{#if !ehPrestador}
 			<a
 				href="/painel/agendar"
-				class="group rounded-xl border border-hairline-strong bg-surface-card p-6 transition hover:border-ink/40"
+				class="mt-4 inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-on transition hover:opacity-90"
 			>
-				<span class="block h-2 w-2 rounded-full bg-accent-green" aria-hidden="true"></span>
-				<h2 class="mt-4 flex items-center justify-between text-base font-semibold text-ink">
-					Agendar
-					<span class="text-mute transition group-hover:translate-x-0.5 group-hover:text-ink">→</span>
-				</h2>
-				<p class="mt-2 text-sm text-body">
-					Escolha um prestador, veja os horários livres e solicite seu atendimento.
-				</p>
+				Agendar agora
 			</a>
+		{/if}
+	</div>
+{/if}
 
-			<a
-				href="/painel/agendamentos"
-				class="group rounded-xl border border-hairline-strong bg-surface-card p-6 transition hover:border-ink/40"
-			>
-				<span class="block h-2 w-2 rounded-full bg-accent-blue" aria-hidden="true"></span>
-				<h2 class="mt-4 flex items-center justify-between text-base font-semibold text-ink">
-					Meus agendamentos
-					<span class="text-mute transition group-hover:translate-x-0.5 group-hover:text-ink">→</span>
-				</h2>
-				<p class="mt-2 text-sm text-body">
-					Acompanhe suas solicitações, veja o que foi confirmado e cancele quando precisar.
-				</p>
-			</a>
+{#if ehPrestador}
+	<div
+		class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl border border-hairline-strong bg-surface-card p-4"
+	>
+		<div class="min-w-0 flex-1">
+			<p class="text-xs font-medium tracking-wide text-mute uppercase">Seu link de agendamento</p>
+			<p class="mt-1 truncate font-mono text-sm text-ink" data-link-agendamento>
+				{linkAgendamento}
+			</p>
+			<p class="mt-1 text-xs text-mute">
+				Compartilhe no Instagram ou WhatsApp — quem abrir vê seus horários livres e agenda.
+			</p>
 		</div>
-	{/if}
-</div>
+		<button
+			type="button"
+			onclick={copiarLink}
+			class="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border border-hairline-strong px-4 text-sm font-medium text-ink transition hover:bg-surface-elevated"
+		>
+			<Icone nome={copiado ? 'check' : 'copiar'} tamanho={15} />
+			{copiado ? 'Copiado' : 'Copiar'}
+		</button>
+	</div>
+{/if}

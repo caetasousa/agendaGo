@@ -13,6 +13,8 @@
 	} from '$lib/api/appointments';
 	import { chaveData } from '$lib/holidays';
 	import { dataLonga, minutosParaHHMM, rotuloStatus } from '$lib/format';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import LinhaAgendamento from '$lib/components/LinhaAgendamento.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -86,139 +88,173 @@
 		}
 	}
 
+	// O preenchimento branco é a ação primária da página; repetido em cada linha
+	// da lista ele competiria com o conteúdo. Ação de linha usa contorno, e a cor
+	// carrega o significado.
 	const botaoBase =
-		'inline-flex h-8 items-center rounded-md px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60';
-	const botaoPrimario = `${botaoBase} bg-primary text-primary-on hover:opacity-90`;
-	const botaoContorno = `${botaoBase} border border-hairline-strong text-ink hover:bg-surface-elevated`;
-	const botaoPerigo = `${botaoBase} border border-hairline-strong text-accent-red hover:bg-surface-elevated`;
+		'inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60';
+	const botaoPrimario = `${botaoBase} border-accent-green/45 text-accent-green hover:bg-accent-green/10`;
+	const botaoContorno = `${botaoBase} border-hairline-strong text-ink hover:bg-surface-elevated`;
+	const botaoPerigo = `${botaoBase} border-hairline-strong text-mute hover:border-accent-red/45 hover:text-accent-red`;
+
+	// ---- Agrupamento por dia ----
+
+	type Grupo = { chave: string; rotulo: string; ehHoje: boolean; itens: Agendamento[] };
+
+	type Filtro = 'tudo' | 'aguardando' | 'confirmados' | 'historico';
+	let filtro = $state<Filtro>('tudo');
+
+	const visiveis = $derived.by(() => {
+		switch (filtro) {
+			case 'aguardando':
+				return pendentes;
+			case 'confirmados':
+				return confirmados;
+			case 'historico':
+				return historico;
+			default:
+				return agendamentos;
+		}
+	});
+
+	function rotuloDia(data: string): string {
+		const [ano, mes, dia] = data.split('-').map(Number);
+		const texto = new Intl.DateTimeFormat('pt-BR', {
+			weekday: 'long',
+			day: 'numeric',
+			month: 'long'
+		}).format(new Date(ano, mes - 1, dia));
+		return texto.charAt(0).toUpperCase() + texto.slice(1);
+	}
+
+	// Dias futuros em ordem crescente (o mais próximo primeiro) e, depois deles,
+	// os dias passados em ordem decrescente — é como se lê uma agenda: o que vem
+	// primeiro, e só então o que já aconteceu.
+	const grupos = $derived.by<Grupo[]>(() => {
+		const porDia = new Map<string, Agendamento[]>();
+		for (const a of visiveis) {
+			const lista = porDia.get(a.data) ?? [];
+			lista.push(a);
+			porDia.set(a.data, lista);
+		}
+
+		const futuros: string[] = [];
+		const passados: string[] = [];
+		for (const chave of porDia.keys()) {
+			(chave >= chaveHoje ? futuros : passados).push(chave);
+		}
+		futuros.sort();
+		passados.sort().reverse();
+
+		return [...futuros, ...passados].map((chave) => ({
+			chave,
+			rotulo: rotuloDia(chave),
+			ehHoje: chave === chaveHoje,
+			itens: (porDia.get(chave) ?? []).sort((x, y) => x.inicioMinutos - y.inicioMinutos)
+		}));
+	});
+
 </script>
 
-{#snippet cartao(a: Agendamento)}
-	{@const rotulo = rotuloStatus(a.status)}
-	<li
-		data-agendamento={a.id}
-		data-status={a.status}
-		class="rounded-md border border-hairline-strong p-4"
-	>
-		<div class="flex flex-wrap items-center justify-between gap-2">
-			<div>
-				<p class="text-sm font-medium text-ink">
-					{dataLonga(a.data)} · {minutosParaHHMM(a.inicioMinutos)}–{minutosParaHHMM(a.fimMinutos)}
-				</p>
-				<p class="mt-0.5 text-sm text-body">
-					{ehPrestador ? a.nomeCliente : a.nomePrestador}
-				</p>
-				{#if ehPrestador && (a.telefoneCliente || a.emailCliente)}
-					<p class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-mute">
-						{#if a.telefoneCliente}
-							<a href="tel:{a.telefoneCliente}" class="transition hover:text-ink">{a.telefoneCliente}</a>
-						{/if}
-						{#if a.emailCliente}
-							<a href="mailto:{a.emailCliente}" class="transition hover:text-ink">{a.emailCliente}</a>
-						{/if}
-					</p>
-				{/if}
-				{#if a.observacao}
-					<p class="mt-1 text-xs text-mute">{a.observacao}</p>
-				{/if}
-			</div>
-			<span
-				class="inline-flex items-center gap-1.5 rounded-full border border-hairline-strong bg-surface-elevated px-2.5 py-0.5 text-xs text-body"
-			>
-				<span class="h-1.5 w-1.5 rounded-full {rotulo.cor}"></span>
-				{rotulo.texto}
-			</span>
-		</div>
-
+{#snippet acoesDe(a: Agendamento)}
+	<div class="mt-2.5 flex flex-wrap gap-2 empty:hidden">
 		{#if ehPrestador && a.marcadoPeloPrestador && a.status === 'CONFIRMADO'}
-			<p class="mt-3 whitespace-pre-wrap border-t border-hairline pt-3 text-xs text-mute">
-				{mensagemParaCliente(a)}
-			</p>
+			<button type="button" onclick={() => copiarMensagem(a)} class={botaoContorno}>
+				{copiadoId === a.id ? 'Copiado!' : 'Copiar para o cliente'}
+			</button>
 		{/if}
 
-		<div class="mt-3 flex flex-wrap gap-2 empty:hidden">
-			{#if ehPrestador && a.marcadoPeloPrestador && a.status === 'CONFIRMADO'}
-				<button type="button" onclick={() => copiarMensagem(a)} class={botaoContorno}>
-					{copiadoId === a.id ? 'Copiado!' : 'Copiar para o cliente'}
-				</button>
-			{/if}
+		{#if ehPrestador && a.status === 'SOLICITADO'}
+			<button
+				type="button"
+				disabled={agindo !== null}
+				onclick={() => executar(a.id, confirmarAgendamento)}
+				class={botaoPrimario}
+			>
+				Confirmar
+			</button>
+			<button
+				type="button"
+				disabled={agindo !== null}
+				onclick={() => executar(a.id, recusarAgendamento)}
+				class={botaoPerigo}
+			>
+				Cancelar
+			</button>
+		{/if}
 
-			{#if ehPrestador && a.status === 'SOLICITADO'}
-				<button
-					type="button"
-					disabled={agindo !== null}
-					onclick={() => executar(a.id, confirmarAgendamento)}
-					class={botaoPrimario}
-				>
-					Confirmar
-				</button>
-				<button
-					type="button"
-					disabled={agindo !== null}
-					onclick={() => executar(a.id, recusarAgendamento)}
-					class={botaoPerigo}
-				>
-					Cancelar
-				</button>
-			{/if}
+		{#if !ehPrestador && a.status === 'SOLICITADO'}
+			<button
+				type="button"
+				disabled={agindo !== null}
+				onclick={() => executar(a.id, cancelarAgendamento)}
+				class={botaoPerigo}
+			>
+				Cancelar solicitação
+			</button>
+		{/if}
 
-			{#if !ehPrestador && a.status === 'SOLICITADO'}
-				<button
-					type="button"
-					disabled={agindo !== null}
-					onclick={() => executar(a.id, cancelarAgendamento)}
-					class={botaoPerigo}
-				>
-					Cancelar solicitação
-				</button>
-			{/if}
+		{#if a.status === 'CONFIRMADO' && (a.marcadoPeloPrestador || !jaComecou(a))}
+			<button
+				type="button"
+				disabled={agindo !== null}
+				onclick={() => executar(a.id, cancelarAgendamento)}
+				class={botaoPerigo}
+			>
+				Cancelar
+			</button>
+		{/if}
 
-			{#if a.status === 'CONFIRMADO' && (a.marcadoPeloPrestador || !jaComecou(a))}
-				<button
-					type="button"
-					disabled={agindo !== null}
-					onclick={() => executar(a.id, cancelarAgendamento)}
-					class={botaoPerigo}
-				>
-					Cancelar
-				</button>
-			{/if}
-
-			{#if ehPrestador && a.status === 'CONFIRMADO' && jaComecou(a)}
-				<button
-					type="button"
-					disabled={agindo !== null}
-					onclick={() => executar(a.id, marcarRealizado)}
-					class={botaoPrimario}
-				>
-					Realizado
-				</button>
-				<button
-					type="button"
-					disabled={agindo !== null}
-					onclick={() => executar(a.id, marcarNaoCompareceu)}
-					class={botaoContorno}
-				>
-					Não compareceu
-				</button>
-			{/if}
-		</div>
-	</li>
+		{#if ehPrestador && a.status === 'CONFIRMADO' && jaComecou(a)}
+			<button
+				type="button"
+				disabled={agindo !== null}
+				onclick={() => executar(a.id, marcarRealizado)}
+				class={botaoPrimario}
+			>
+				Realizado
+			</button>
+			<button
+				type="button"
+				disabled={agindo !== null}
+				onclick={() => executar(a.id, marcarNaoCompareceu)}
+				class={botaoContorno}
+			>
+				Não compareceu
+			</button>
+		{/if}
+	</div>
 {/snippet}
 
-<div class="mx-auto max-w-2xl">
-	<a href="/painel" class="text-sm text-mute transition hover:text-ink">← Voltar ao painel</a>
+{#snippet chip(valor: Filtro, texto: string, total: number, cor?: string)}
+	<button
+		type="button"
+		onclick={() => (filtro = valor)}
+		aria-pressed={filtro === valor}
+		class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition {filtro ===
+		valor
+			? 'border-hairline-strong bg-surface-elevated font-medium text-ink'
+			: 'border-hairline text-mute hover:text-ink'}"
+	>
+		{#if cor}
+			<span class="h-1.5 w-1.5 rounded-full {cor}"></span>
+		{/if}
+		{texto}
+		<span class="tabular-nums">{total}</span>
+	</button>
+{/snippet}
 
-	<h1 class="display mt-4 text-4xl text-ink sm:text-5xl">Agendamentos</h1>
-	<p class="mt-3 text-body">
-		{ehPrestador
-			? 'Solicitações recebidas e atendimentos confirmados — você decide o que entra na agenda.'
-			: 'Acompanhe suas solicitações e atendimentos confirmados.'}
-	</p>
+<div>
+	<PageHeader
+		titulo="Agendamentos"
+		descricao={ehPrestador
+			? 'Sua agenda em ordem cronológica — a faixa colorida indica o estado de cada horário.'
+			: 'Seus atendimentos em ordem cronológica, do próximo ao mais antigo.'}
+	/>
 
 	{#if erro}
 		<div
-			class="mt-6 flex items-start gap-2 rounded-md border border-hairline-strong bg-surface-elevated p-3 text-sm"
+			class="mb-6 flex items-start gap-2 rounded-md border border-accent-red/40 bg-accent-red/10 p-3 text-sm"
 		>
 			<span class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent-red"></span>
 			<span class="text-body">{erro}</span>
@@ -226,48 +262,75 @@
 	{/if}
 
 	{#if agendamentos.length === 0}
-		<div class="mt-8 rounded-xl border border-hairline-strong bg-surface-card p-8">
+		<div class="rounded-xl border border-hairline-strong bg-surface-card px-5 py-8 text-center">
 			<p class="text-sm text-body">
 				{ehPrestador
-					? 'Nenhum agendamento recebido ainda. Ative a agenda em Preferências para aparecer aos clientes.'
+					? 'Nenhum agendamento recebido ainda. Compartilhe seu link de agendamento para começar.'
 					: 'Você ainda não tem agendamentos.'}
-				{#if !ehPrestador}
-					<a href="/painel/agendar" class="font-medium text-ink underline">Agendar agora</a>
-				{/if}
 			</p>
+			<a
+				href={ehPrestador ? '/painel' : '/painel/agendar'}
+				class="mt-4 inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-on transition hover:opacity-90"
+			>
+				{ehPrestador ? 'Ver meu link' : 'Agendar agora'}
+			</a>
 		</div>
-	{/if}
+	{:else}
+		<div class="mb-5 flex flex-wrap gap-2">
+			{@render chip('tudo', 'Tudo', agendamentos.length)}
+			{@render chip('aguardando', 'Aguardando', pendentes.length, 'bg-accent-yellow')}
+			{@render chip('confirmados', 'Confirmados', confirmados.length, 'bg-accent-green')}
+			{@render chip('historico', 'Histórico', historico.length)}
+		</div>
 
-	{#if pendentes.length > 0}
-		<div class="mt-8 rounded-xl border border-hairline-strong bg-surface-card p-5 sm:p-8">
-			<h2 class="text-lg font-semibold text-ink">Aguardando confirmação</h2>
-			<ul class="mt-4 space-y-3">
-				{#each pendentes as a (a.id)}
-					{@render cartao(a)}
-				{/each}
-			</ul>
-		</div>
-	{/if}
+		{#if grupos.length === 0}
+			<p
+				class="rounded-xl border border-hairline-strong bg-surface-card px-4 py-8 text-center text-sm text-mute"
+			>
+				Nada neste filtro.
+			</p>
+		{/if}
 
-	{#if confirmados.length > 0}
-		<div class="mt-8 rounded-xl border border-hairline-strong bg-surface-card p-5 sm:p-8">
-			<h2 class="text-lg font-semibold text-ink">Confirmados</h2>
-			<ul class="mt-4 space-y-3">
-				{#each confirmados as a (a.id)}
-					{@render cartao(a)}
-				{/each}
-			</ul>
-		</div>
-	{/if}
+		{#each grupos as grupo (grupo.chave)}
+			<section class="mb-5">
+				<div class="mb-2 flex flex-wrap items-baseline gap-2">
+					<h2 class="text-sm font-semibold text-ink">{grupo.rotulo}</h2>
+					{#if grupo.ehHoje}
+						<span
+							class="rounded-full border border-accent-green/40 bg-accent-green/10 px-2 py-0.5 text-[11px] tracking-wide text-accent-green uppercase"
+						>
+							Hoje
+						</span>
+					{/if}
+					<span class="text-xs text-mute">
+						{grupo.itens.length}
+						{grupo.itens.length === 1 ? 'atendimento' : 'atendimentos'}
+					</span>
+				</div>
 
-	{#if historico.length > 0}
-		<div class="mt-8 rounded-xl border border-hairline-strong bg-surface-card p-5 sm:p-8">
-			<h2 class="text-lg font-semibold text-ink">Histórico</h2>
-			<ul class="mt-4 space-y-3">
-				{#each historico as a (a.id)}
-					{@render cartao(a)}
-				{/each}
-			</ul>
-		</div>
+				<ul
+					class="divide-y divide-hairline overflow-hidden rounded-xl border border-hairline-strong bg-surface-card"
+				>
+					{#each grupo.itens as a (a.id)}
+						<LinhaAgendamento agendamento={a} {ehPrestador}>
+							{#snippet extra()}
+								{#if ehPrestador && a.marcadoPeloPrestador && a.status === 'CONFIRMADO'}
+									<!-- Marcação feita pelo prestador não dispara email: a mensagem
+									     pronta fica à vista para ele mandar pelo canal que quiser. -->
+									<p
+										class="mt-2 border-l-2 border-hairline-strong pl-3 text-xs whitespace-pre-wrap text-mute"
+									>
+										{mensagemParaCliente(a)}
+									</p>
+								{/if}
+							{/snippet}
+							{#snippet acoes()}
+								{@render acoesDe(a)}
+							{/snippet}
+						</LinhaAgendamento>
+					{/each}
+				</ul>
+			</section>
+		{/each}
 	{/if}
 </div>
