@@ -8,6 +8,7 @@
 	} from '$lib/api/appointments';
 	import { minutosParaHHMM, dataLonga } from '$lib/format';
 	import { chaveData, feriadosNacionais } from '$lib/holidays';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 
 	// Quantos meses à frente o prestador pode navegar no calendário.
 	const MESES_FUTUROS = 2;
@@ -170,17 +171,14 @@
 		'h-10 w-full rounded-md border border-hairline-strong bg-surface-elevated px-3 text-sm text-ink outline-none transition focus:border-ink';
 </script>
 
-<div class="mx-auto max-w-2xl">
-	<a href="/painel" class="text-sm text-mute transition hover:text-ink">← Voltar ao painel</a>
-
-	<h1 class="display mt-4 text-4xl text-ink sm:text-5xl">Marcar para um cliente</h1>
-	<p class="mt-3 text-body">
+<div>
+	<PageHeader titulo="Marcar para um cliente">
 		Cliente ligou? Registre a marcação você mesmo: escolha um horário livre e informe o contato.
 		A marcação entra como solicitação — confirme em
 		<a href="/painel/agendamentos" class="font-medium text-ink underline">Agendamentos</a>.
-	</p>
+	</PageHeader>
 
-	<div class="mt-8 rounded-xl border border-hairline-strong bg-surface-card p-5 sm:p-8">
+	<div class="rounded-xl border border-hairline-strong bg-surface-card p-5 sm:p-8">
 		<div class="flex flex-wrap items-center justify-between gap-3">
 			<h2 class="text-lg font-semibold text-ink">Escolha o dia</h2>
 
@@ -217,8 +215,13 @@
 		{/if}
 
 		<div class="mt-4 grid grid-cols-7 gap-1 sm:gap-1.5 {carregandoMes ? 'opacity-60' : ''}">
+			<!-- Mesmo recuo horizontal das células, para alinhar com o número do dia. -->
 			{#each ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'] as nome, i (nome)}
-				<div class="pb-1 text-center text-xs font-medium {i === 0 || i === 6 ? 'text-ash' : 'text-mute'}">
+				<div
+					class="px-1 pb-1 text-xs font-medium sm:px-1.5 {i === 0 || i === 6
+						? 'text-ash'
+						: 'text-mute'}"
+				>
 					{nome}
 				</div>
 			{/each}

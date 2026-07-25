@@ -9,6 +9,7 @@
 		type DiaAgenda
 	} from '$lib/api/availability';
 	import TimeSelect from '$lib/components/TimeSelect.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 	import { chaveData, feriadosNacionais } from '$lib/holidays';
 
 	let { data }: { data: PageData } = $props();
@@ -283,17 +284,14 @@
 	}}
 />
 
-<div class="mx-auto max-w-2xl">
-	<a href="/painel" class="text-sm text-mute transition hover:text-ink">← Voltar ao painel</a>
-
-	<h1 class="display mt-4 text-4xl text-ink sm:text-5xl">Disponibilidade</h1>
-	<p class="mt-3 text-body">
+<div>
+	<PageHeader titulo="Disponibilidade">
 		Seus dias úteis seguem o expediente padrão definido em
 		<a href="/painel/preferencias" class="font-medium text-ink underline">Preferências</a>. Clique
 		em um dia do calendário para bloqueá-lo ou definir horários próprios.
-	</p>
+	</PageHeader>
 
-	<div class="mt-8 rounded-xl border border-hairline-strong bg-surface-card p-5 sm:p-8">
+	<div class="rounded-xl border border-hairline-strong bg-surface-card p-5 sm:p-8">
 		<div class="flex flex-wrap items-center justify-between gap-3">
 			<h2 class="text-lg font-semibold text-ink">Calendário</h2>
 
@@ -359,8 +357,14 @@
 		{/if}
 
 		<div class="mt-4 grid grid-cols-7 gap-1 sm:gap-1.5 {carregandoMes ? 'opacity-60' : ''}">
+			<!-- Mesmo recuo horizontal das células, para o rótulo do dia da semana
+			     ficar alinhado com o número do dia abaixo dele. -->
 			{#each nomesDiasCurtos as nome, i (nome)}
-				<div class="pb-1 text-center text-xs font-medium {i === 0 || i === 6 ? 'text-ash' : 'text-mute'}">
+				<div
+					class="px-1 pb-1 text-xs font-medium sm:px-1.5 {i === 0 || i === 6
+						? 'text-ash'
+						: 'text-mute'}"
+				>
 					{nome}
 				</div>
 			{/each}
