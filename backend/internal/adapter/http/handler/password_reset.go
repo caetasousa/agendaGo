@@ -13,13 +13,19 @@ import (
 
 // PasswordResetHandler concentra os handlers de recuperação de senha.
 type PasswordResetHandler struct {
-	solicitar *ucauth.SolicitarRecuperacaoUseCase
-	redefinir *ucauth.RedefinirSenhaUseCase
+	solicitar         *ucauth.SolicitarRecuperacaoUseCase
+	redefinir         *ucauth.RedefinirSenhaUseCase
+	limitadorPorConta *LimitadorPorConta
 }
 
-// NovoPasswordResetHandler cria uma instância de PasswordResetHandler com os usecases injetados.
-func NovoPasswordResetHandler(solicitar *ucauth.SolicitarRecuperacaoUseCase, redefinir *ucauth.RedefinirSenhaUseCase) *PasswordResetHandler {
-	return &PasswordResetHandler{solicitar: solicitar, redefinir: redefinir}
+// NovoPasswordResetHandler cria uma instância de PasswordResetHandler com os
+// usecases injetados. limitadorPorConta pode ser nil (teto por conta desligado).
+func NovoPasswordResetHandler(
+	solicitar *ucauth.SolicitarRecuperacaoUseCase,
+	redefinir *ucauth.RedefinirSenhaUseCase,
+	limitadorPorConta *LimitadorPorConta,
+) *PasswordResetHandler {
+	return &PasswordResetHandler{solicitar: solicitar, redefinir: redefinir, limitadorPorConta: limitadorPorConta}
 }
 
 // Solicitar godoc
@@ -31,6 +37,7 @@ func NovoPasswordResetHandler(solicitar *ucauth.SolicitarRecuperacaoUseCase, red
 //	@Param			body	body	dto.RecuperarSenhaRequest	true	"Email da conta"
 //	@Success		204
 //	@Failure		400	{object}	map[string]string
+//	@Failure		429	{object}	map[string]string
 //	@Router			/auth/recuperar-senha [post]
 func (h *PasswordResetHandler) Solicitar(w http.ResponseWriter, r *http.Request) {
 	var req dto.RecuperarSenhaRequest
@@ -42,6 +49,16 @@ func (h *PasswordResetHandler) Solicitar(w http.ResponseWriter, r *http.Request)
 		responderErroValidacao(w, err)
 		return
 	}
+
+	// teto por conta: sem ele, o teto por IP não impede quem tem endereços de
+	// sobra de encher a caixa de entrada de uma pessoa com links de
+	// redefinição. Conta a solicitação exista ou não a conta — assim o 429
+	// também não revela quais emails estão cadastrados.
+	chave := chaveDeConta("recuperacao", req.Email)
+	if h.limitadorPorConta.Excedido(w, r, chave) {
+		return
+	}
+	h.limitadorPorConta.Registrar(w, r, chave)
 
 	if err := h.solicitar.Executar(req.Email); err != nil {
 		responderErroInterno(w, r, err)

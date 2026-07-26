@@ -13,14 +13,17 @@ import (
 
 type identidadeContextKey struct{}
 
-// Auth valida a sessão do cookie e injeta a identidade do usuário no contexto da requisição.
+// Auth valida a sessão do cookie e injeta a identidade do usuário no contexto
+// da requisição. cookieSeguro decide o nome do cookie procurado — em produção
+// ele leva o prefixo __Host- (ver handler.NomeCookieSessao).
 type Auth struct {
-	validar *ucauth.ValidarSessaoUseCase
+	validar      *ucauth.ValidarSessaoUseCase
+	cookieSeguro bool
 }
 
 // NovoAuth cria uma instância de Auth com o usecase de validação de sessão injetado.
-func NovoAuth(validar *ucauth.ValidarSessaoUseCase) *Auth {
-	return &Auth{validar: validar}
+func NovoAuth(validar *ucauth.ValidarSessaoUseCase, cookieSeguro bool) *Auth {
+	return &Auth{validar: validar, cookieSeguro: cookieSeguro}
 }
 
 // Autenticar responde 401 se o cookie de sessão estiver ausente, ou se a
@@ -28,7 +31,7 @@ func NovoAuth(validar *ucauth.ValidarSessaoUseCase) *Auth {
 // identidade do usuário no contexto e segue para o próximo handler.
 func (a *Auth) Autenticar(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cookie, err := r.Cookie(handler.NomeCookieSessao)
+		cookie, err := r.Cookie(handler.NomeCookieSessao(a.cookieSeguro))
 		if err != nil {
 			responderNaoAutenticado(w)
 			return

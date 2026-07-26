@@ -65,6 +65,35 @@ func RateLimitConvidadoPorMinuto() int {
 	return intDoAmbiente("RATE_LIMIT_CONVIDADO_POR_MINUTO", 10)
 }
 
+// RateLimitLoginPorConta é o teto de tentativas fracassadas de login (e de
+// pedidos de recuperação de senha) por CONTA, dentro de JanelaLimitePorConta
+// (env RATE_LIMIT_LOGIN_POR_CONTA; 0 desliga). Complementa o teto por IP, que
+// não vê nada quando o atacante troca de endereço a cada tentativa.
+func RateLimitLoginPorConta() int {
+	return intDoAmbiente("RATE_LIMIT_LOGIN_POR_CONTA", 5)
+}
+
+// JanelaLimitePorConta é a janela do teto por conta. Curta de propósito: o
+// preço de errar a senha cinco vezes é esperar alguns minutos, não perder o
+// acesso — e é tempo suficiente para inviabilizar brute-force.
+const JanelaLimitePorConta = 5 * time.Minute
+
+// RateLimitAutenticadoPorMinuto é o teto de escritas por SESSÃO por minuto
+// (env RATE_LIMIT_AUTENTICADO_POR_MINUTO; 0 desliga). Depois do login o IP
+// deixa de ser um identificador útil; sem esse teto, uma conta válida podia
+// disparar agendamentos e transições em laço.
+func RateLimitAutenticadoPorMinuto() int {
+	return intDoAmbiente("RATE_LIMIT_AUTENTICADO_POR_MINUTO", 60)
+}
+
+// RateLimitPublicoPorMinuto é o teto das leituras públicas por IP por minuto
+// (env RATE_LIMIT_PUBLICO_POR_MINUTO; 0 desliga) — vitrine, página do
+// prestador e consulta de horários livres, as únicas rotas que respondem a
+// quem não se identificou de forma nenhuma.
+func RateLimitPublicoPorMinuto() int {
+	return intDoAmbiente("RATE_LIMIT_PUBLICO_POR_MINUTO", 60)
+}
+
 // intDoAmbiente lê um inteiro não negativo da env var, caindo no padrão quando
 // ausente ou inválida.
 func intDoAmbiente(nome string, padrao int) int {

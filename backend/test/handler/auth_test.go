@@ -45,8 +45,8 @@ func novoRouterAuth(t *testing.T) (*chi.Mux, *provider.Provider, *client.Client)
 	identidadeDoContexto := func(r *http.Request) (ucauth.Identidade, bool) {
 		return middleware.IdentidadeDoContexto(r.Context())
 	}
-	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, nil, logout, perfil, false, identidadeDoContexto)
-	authMw := middleware.NovoAuth(validarSessao)
+	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, nil, logout, perfil, false, nil, identidadeDoContexto)
+	authMw := middleware.NovoAuth(validarSessao, false)
 
 	r := chi.NewRouter()
 	r.Post("/auth/provider/login", authHandler.LoginProvider)
@@ -84,8 +84,8 @@ func TestLoginProviderHandler(t *testing.T) {
 			t.Fatalf("esperava 1 cookie, got: %d", len(cookies))
 		}
 		cookie := cookies[0]
-		if cookie.Name != handler.NomeCookieSessao {
-			t.Errorf("esperava cookie %s, got: %s", handler.NomeCookieSessao, cookie.Name)
+		if cookie.Name != handler.NomeCookieSessao(false) {
+			t.Errorf("esperava cookie %s, got: %s", handler.NomeCookieSessao(false), cookie.Name)
 		}
 		if !cookie.HttpOnly {
 			t.Error("esperava cookie HttpOnly")
@@ -271,8 +271,8 @@ func TestFluxoLoginMeLogout(t *testing.T) {
 		if len(logoutCookies) != 1 {
 			t.Fatalf("esperava 1 cookie de limpeza no logout, got: %d", len(logoutCookies))
 		}
-		if logoutCookies[0].Name != handler.NomeCookieSessao {
-			t.Errorf("esperava cookie %s, got: %s", handler.NomeCookieSessao, logoutCookies[0].Name)
+		if logoutCookies[0].Name != handler.NomeCookieSessao(false) {
+			t.Errorf("esperava cookie %s, got: %s", handler.NomeCookieSessao(false), logoutCookies[0].Name)
 		}
 		if logoutCookies[0].MaxAge >= 0 {
 			t.Errorf("esperava MaxAge negativo (cookie expirado), got: %d", logoutCookies[0].MaxAge)

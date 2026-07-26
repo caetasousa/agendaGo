@@ -24,10 +24,12 @@ type AuthHandler struct {
 	logout               *ucauth.LogoutUseCase
 	perfil               *ucauth.PerfilUseCase
 	cookieSeguro         bool
+	limitadorPorConta    *LimitadorPorConta
 	identidadeDoContexto func(r *http.Request) (ucauth.Identidade, bool)
 }
 
 // NovoAuthHandler cria uma instância de AuthHandler com os usecases de autenticação injetados.
+// limitadorPorConta pode ser nil (teto por conta desligado).
 // identidadeDoContexto extrai a identidade posta no contexto pelo middleware de autenticação.
 func NovoAuthHandler(
 	loginProvider *ucauth.LoginProviderUseCase,
@@ -36,6 +38,7 @@ func NovoAuthHandler(
 	logout *ucauth.LogoutUseCase,
 	perfil *ucauth.PerfilUseCase,
 	cookieSeguro bool,
+	limitadorPorConta *LimitadorPorConta,
 	identidadeDoContexto func(r *http.Request) (ucauth.Identidade, bool),
 ) *AuthHandler {
 	return &AuthHandler{
@@ -45,8 +48,43 @@ func NovoAuthHandler(
 		logout:               logout,
 		perfil:               perfil,
 		cookieSeguro:         cookieSeguro,
+		limitadorPorConta:    limitadorPorConta,
 		identidadeDoContexto: identidadeDoContexto,
 	}
+}
+
+// login concentra o que os três logins têm em comum: decodificação do corpo,
+// teto de tentativas por conta e emissão do cookie de sessão. executar isola o
+// que muda entre eles (qual usecase autentica).
+func (h *AuthHandler) login(
+	w http.ResponseWriter,
+	r *http.Request,
+	tipo string,
+	executar func(ucauth.LoginInput) (*ucauth.LoginOutput, error),
+) {
+	req, ok := decodificarLogin(w, r)
+	if !ok {
+		return
+	}
+
+	chave := chaveDeConta("login", req.Email)
+	if h.limitadorPorConta.Excedido(w, r, chave) {
+		logging.RequisicaoLogger(r).Warn("login bloqueado: teto de tentativas da conta",
+			slog.String("tipo", tipo), slog.String("email", req.Email), slog.String("ip", r.RemoteAddr))
+		return
+	}
+
+	out, err := executar(ucauth.LoginInput{Email: req.Email, Senha: req.Senha})
+	if err != nil {
+		// só o fracasso conta para o teto — quem acerta a senha nunca fica
+		// trancado fora da própria conta por excesso de logins
+		h.limitadorPorConta.Registrar(w, r, chave)
+		responderErroLogin(w, r, tipo, req.Email, err)
+		return
+	}
+
+	http.SetCookie(w, novoCookieSessao(out.Token, out.ExpiraEm, h.cookieSeguro))
+	responderJSON(w, http.StatusOK, dto.LoginResponse{ID: out.UserID, Nome: out.Nome, Tipo: tipo})
 }
 
 // LoginProvider godoc
@@ -60,21 +98,10 @@ func NovoAuthHandler(
 //	@Success		200		{object}	dto.LoginResponse
 //	@Failure		400		{object}	map[string]string
 //	@Failure		401		{object}	map[string]string
+//	@Failure		429		{object}	map[string]string
 //	@Router			/auth/provider/login [post]
 func (h *AuthHandler) LoginProvider(w http.ResponseWriter, r *http.Request) {
-	req, ok := decodificarLogin(w, r)
-	if !ok {
-		return
-	}
-
-	out, err := h.loginProvider.Executar(ucauth.LoginInput{Email: req.Email, Senha: req.Senha})
-	if err != nil {
-		responderErroLogin(w, r, "provider", req.Email, err)
-		return
-	}
-
-	http.SetCookie(w, novoCookieSessao(out.Token, out.ExpiraEm, h.cookieSeguro))
-	responderJSON(w, http.StatusOK, dto.LoginResponse{ID: out.UserID, Nome: out.Nome, Tipo: "provider"})
+	h.login(w, r, "provider", h.loginProvider.Executar)
 }
 
 // LoginClient godoc
@@ -88,21 +115,10 @@ func (h *AuthHandler) LoginProvider(w http.ResponseWriter, r *http.Request) {
 //	@Success		200		{object}	dto.LoginResponse
 //	@Failure		400		{object}	map[string]string
 //	@Failure		401		{object}	map[string]string
+//	@Failure		429		{object}	map[string]string
 //	@Router			/auth/client/login [post]
 func (h *AuthHandler) LoginClient(w http.ResponseWriter, r *http.Request) {
-	req, ok := decodificarLogin(w, r)
-	if !ok {
-		return
-	}
-
-	out, err := h.loginClient.Executar(ucauth.LoginInput{Email: req.Email, Senha: req.Senha})
-	if err != nil {
-		responderErroLogin(w, r, "client", req.Email, err)
-		return
-	}
-
-	http.SetCookie(w, novoCookieSessao(out.Token, out.ExpiraEm, h.cookieSeguro))
-	responderJSON(w, http.StatusOK, dto.LoginResponse{ID: out.UserID, Nome: out.Nome, Tipo: "client"})
+	h.login(w, r, "client", h.loginClient.Executar)
 }
 
 // LoginAdmin godoc
@@ -116,21 +132,10 @@ func (h *AuthHandler) LoginClient(w http.ResponseWriter, r *http.Request) {
 //	@Success		200		{object}	dto.LoginResponse
 //	@Failure		400		{object}	map[string]string
 //	@Failure		401		{object}	map[string]string
+//	@Failure		429		{object}	map[string]string
 //	@Router			/auth/admin/login [post]
 func (h *AuthHandler) LoginAdmin(w http.ResponseWriter, r *http.Request) {
-	req, ok := decodificarLogin(w, r)
-	if !ok {
-		return
-	}
-
-	out, err := h.loginAdmin.Executar(ucauth.LoginInput{Email: req.Email, Senha: req.Senha})
-	if err != nil {
-		responderErroLogin(w, r, "admin", req.Email, err)
-		return
-	}
-
-	http.SetCookie(w, novoCookieSessao(out.Token, out.ExpiraEm, h.cookieSeguro))
-	responderJSON(w, http.StatusOK, dto.LoginResponse{ID: out.UserID, Nome: out.Nome, Tipo: "admin"})
+	h.login(w, r, "admin", h.loginAdmin.Executar)
 }
 
 // Logout godoc
@@ -141,7 +146,7 @@ func (h *AuthHandler) LoginAdmin(w http.ResponseWriter, r *http.Request) {
 //	@Success		204
 //	@Router			/auth/logout [post]
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
-	if cookie, err := r.Cookie(NomeCookieSessao); err == nil {
+	if cookie, err := r.Cookie(NomeCookieSessao(h.cookieSeguro)); err == nil {
 		h.logout.Executar(cookie.Value)
 	}
 	http.SetCookie(w, cookieSessaoExpirado(h.cookieSeguro))

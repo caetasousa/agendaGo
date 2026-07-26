@@ -38,7 +38,7 @@ func novoRouterPasswordReset(t *testing.T) (r *chi.Mux, mailer *email.MailerMemo
 
 	solicitar := ucauth.NovoSolicitarRecuperacaoUseCase(providerRepo, clientRepo, resetRepo, notificador)
 	redefinir := ucauth.NovoRedefinirSenhaUseCase(providerRepo, clientRepo, resetRepo, sessionRepo, hasher)
-	passwordResetHandler := handler.NovoPasswordResetHandler(solicitar, redefinir)
+	passwordResetHandler := handler.NovoPasswordResetHandler(solicitar, redefinir, nil)
 
 	router := chi.NewRouter()
 	router.Post("/auth/recuperar-senha", passwordResetHandler.Solicitar)

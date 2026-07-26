@@ -53,8 +53,8 @@ func novoRouterAdmin(t *testing.T) (r *chi.Mux, providerID, clientID string) {
 	listarAgendamentos := ucappointment.NovoListarUseCase(appointmentRepo, providerRepo, clientRepo)
 	detalhar := ucadmin.NovoDetalharUseCase(providerRepo, clientRepo, listarAgendamentos)
 	adminHandler := handler.NovoAdminHandler(moderar, detalhar)
-	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, loginAdmin, nil, nil, false, identidadeDoContexto)
-	authMw := middleware.NovoAuth(validarSessao)
+	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, loginAdmin, nil, nil, false, nil, identidadeDoContexto)
+	authMw := middleware.NovoAuth(validarSessao, false)
 
 	router := chi.NewRouter()
 	router.Post("/auth/provider/login", authHandler.LoginProvider)
