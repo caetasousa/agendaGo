@@ -347,12 +347,14 @@ func (h *AppointmentHandler) MarcarPeloPrestador(w http.ResponseWriter, r *http.
 // ListarDoPrestador godoc
 //
 //	@Summary		Listar agendamentos recebidos pelo prestador
-//	@Description	Lista os agendamentos do prestador autenticado; solicitações vencidas viram EXPIRADO na leitura
+//	@Description	Lista uma página dos agendamentos do prestador autenticado, do mais recente para o mais antigo; solicitações vencidas viram EXPIRADO na leitura
 //	@Tags			appointments
 //	@Produce		json
-//	@Success		200	{object}	dto.ListarAgendamentosResponse
-//	@Failure		401	{object}	map[string]string
-//	@Failure		403	{object}	map[string]string
+//	@Param			limite	query		int	false	"Itens por página (padrão 100, máximo 200)"
+//	@Param			offset	query		int	false	"Deslocamento a partir do início da lista"
+//	@Success		200		{object}	dto.ListarAgendamentosResponse
+//	@Failure		401		{object}	map[string]string
+//	@Failure		403		{object}	map[string]string
 //	@Router			/providers/me/agendamentos [get]
 func (h *AppointmentHandler) ListarDoPrestador(w http.ResponseWriter, r *http.Request) {
 	// incluiContato=true: o prestador precisa do email/telefone para falar com
@@ -363,12 +365,14 @@ func (h *AppointmentHandler) ListarDoPrestador(w http.ResponseWriter, r *http.Re
 // ListarDoCliente godoc
 //
 //	@Summary		Listar agendamentos do cliente
-//	@Description	Lista os agendamentos feitos pelo cliente autenticado; solicitações vencidas viram EXPIRADO na leitura
+//	@Description	Lista uma página dos agendamentos feitos pelo cliente autenticado, do mais recente para o mais antigo; solicitações vencidas viram EXPIRADO na leitura
 //	@Tags			appointments
 //	@Produce		json
-//	@Success		200	{object}	dto.ListarAgendamentosResponse
-//	@Failure		401	{object}	map[string]string
-//	@Failure		403	{object}	map[string]string
+//	@Param			limite	query		int	false	"Itens por página (padrão 100, máximo 200)"
+//	@Param			offset	query		int	false	"Deslocamento a partir do início da lista"
+//	@Success		200		{object}	dto.ListarAgendamentosResponse
+//	@Failure		401		{object}	map[string]string
+//	@Failure		403		{object}	map[string]string
 //	@Router			/clients/me/agendamentos [get]
 func (h *AppointmentHandler) ListarDoCliente(w http.ResponseWriter, r *http.Request) {
 	// incluiContato=false: o cliente não precisa ver o próprio contato repetido.
@@ -387,7 +391,8 @@ func (h *AppointmentHandler) listarAgendamentos(
 		return
 	}
 
-	out, err := listar(ucappointment.ListarInput{UsuarioID: id.UserID, Agora: time.Now()})
+	pag := paginaDaQuery(r)
+	out, err := listar(ucappointment.ListarInput{UsuarioID: id.UserID, Pagina: pag, Agora: time.Now()})
 	if err != nil {
 		responderErroAgendamento(w, r, err)
 		return
@@ -414,7 +419,10 @@ func (h *AppointmentHandler) listarAgendamentos(
 		agendamentos = append(agendamentos, resp)
 	}
 
-	responderJSON(w, http.StatusOK, dto.ListarAgendamentosResponse{Agendamentos: agendamentos})
+	responderJSON(w, http.StatusOK, dto.ListarAgendamentosResponse{
+		Agendamentos: agendamentos,
+		PaginacaoDTO: dto.NovaPaginacao(pag, out.Total),
+	})
 }
 
 // Confirmar godoc

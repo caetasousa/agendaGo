@@ -20,7 +20,10 @@
 
 	// svelte-ignore state_referenced_locally
 	let agendamentos = $state<Agendamento[]>(data.agendamentos);
+	// svelte-ignore state_referenced_locally
+	let total = $state(data.total);
 	let agindo = $state<string | null>(null);
+	let carregandoMais = $state(false);
 	let erro = $state<string | null>(null);
 
 	// O tipo do usuário não muda dentro da sessão da página — capturar o valor
@@ -50,14 +53,33 @@
 		agindo = id;
 		try {
 			await acao(id);
+			// recarrega mantendo a mesma quantidade já visível — sem isso, uma
+			// ação sobre um item além da primeira página encolheria a lista de
+			// volta ao padrão da API
+			const pagina = { limite: agendamentos.length };
 			const resposta = ehPrestador
-				? await listarAgendamentosDoPrestador()
-				: await listarAgendamentosDoCliente();
+				? await listarAgendamentosDoPrestador(pagina)
+				: await listarAgendamentosDoCliente(pagina);
 			agendamentos = resposta.agendamentos;
+			total = resposta.total;
 		} catch (e) {
 			erro = e instanceof ApiError ? e.message : 'Não foi possível concluir a ação.';
 		} finally {
 			agindo = null;
+		}
+	}
+
+	// O offset é o que já está carregado; o limite fica a cargo do padrão da API.
+	async function carregarMais() {
+		carregandoMais = true;
+		try {
+			const resposta = ehPrestador
+				? await listarAgendamentosDoPrestador({ offset: agendamentos.length })
+				: await listarAgendamentosDoCliente({ offset: agendamentos.length });
+			agendamentos = [...agendamentos, ...resposta.agendamentos];
+			total = resposta.total;
+		} finally {
+			carregandoMais = false;
 		}
 	}
 
@@ -332,5 +354,18 @@
 				</ul>
 			</section>
 		{/each}
+
+		{#if agendamentos.length < total}
+			<div class="mt-2 flex justify-center">
+				<button
+					type="button"
+					onclick={carregarMais}
+					disabled={carregandoMais}
+					class="rounded-full border border-hairline-strong bg-surface-card px-4 py-1.5 text-sm text-body transition hover:bg-surface-elevated/40 disabled:opacity-60"
+				>
+					{carregandoMais ? 'Carregando…' : 'Carregar mais'}
+				</button>
+			</div>
+		{/if}
 	{/if}
 </div>

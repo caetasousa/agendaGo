@@ -9,6 +9,7 @@ import (
 	"agendago/internal/domain/client"
 	"agendago/internal/domain/precadastro"
 	"agendago/internal/domain/provider"
+	"agendago/internal/pkg/paging"
 )
 
 var (
@@ -57,8 +58,8 @@ type repositorioAppointment interface {
 	SalvarSeLivre(a *appointment.Appointment, agora time.Time) error
 	BuscarPorID(id string) (*appointment.Appointment, error)
 	Atualizar(a *appointment.Appointment) error
-	ListarPorPrestador(providerID string) ([]*appointment.Appointment, error)
-	ListarPorCliente(clientID string) ([]*appointment.Appointment, error)
+	ListarPorPrestador(providerID string, pag paging.Pagina) ([]*appointment.Appointment, int, error)
+	ListarPorCliente(clientID string, pag paging.Pagina) ([]*appointment.Appointment, int, error)
 	ListarOcupantesPorPeriodo(providerID string, de, ate time.Time, agora time.Time) ([]*appointment.Appointment, error)
 	ListarConfirmadosSemLembrete(de, ate time.Time) ([]*appointment.Appointment, error)
 	MarcarLembreteEnviado(id string, quando time.Time) (bool, error)

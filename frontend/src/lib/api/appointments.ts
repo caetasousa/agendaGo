@@ -2,6 +2,7 @@
 // Espelham backend/internal/adapter/http/dto/appointment.go
 
 import { apiGet, apiPost, apiPostVazio } from './client';
+import { queryDaPagina, type Pagina, type Paginacao } from './paginacao';
 
 // StatusAgendamento é o ciclo de vida da reserva:
 // SOLICITADO → CONFIRMADO → REALIZADO, com saídas para
@@ -35,7 +36,7 @@ export interface Agendamento {
 	marcadoPeloPrestador?: boolean;
 }
 
-export interface ListarAgendamentosResponse {
+export interface ListarAgendamentosResponse extends Paginacao {
 	agendamentos: Agendamento[];
 }
 
@@ -120,14 +121,16 @@ export function marcarPeloPrestador(dados: MarcarPeloPrestadorRequest): Promise<
 	return apiPost<MarcarPeloPrestadorRequest, Agendamento>('/providers/me/agendamentos', dados);
 }
 
-// listarAgendamentosDoCliente lista os agendamentos feitos pelo cliente autenticado.
-export function listarAgendamentosDoCliente(): Promise<ListarAgendamentosResponse> {
-	return apiGet<ListarAgendamentosResponse>('/clients/me/agendamentos');
+// listarAgendamentosDoCliente lista uma página dos agendamentos feitos pelo
+// cliente autenticado, do mais recente para o mais antigo.
+export function listarAgendamentosDoCliente(pagina?: Pagina): Promise<ListarAgendamentosResponse> {
+	return apiGet<ListarAgendamentosResponse>(`/clients/me/agendamentos${queryDaPagina(pagina)}`);
 }
 
-// listarAgendamentosDoPrestador lista os agendamentos recebidos pelo prestador autenticado.
-export function listarAgendamentosDoPrestador(): Promise<ListarAgendamentosResponse> {
-	return apiGet<ListarAgendamentosResponse>('/providers/me/agendamentos');
+// listarAgendamentosDoPrestador lista uma página dos agendamentos recebidos
+// pelo prestador autenticado, do mais recente para o mais antigo.
+export function listarAgendamentosDoPrestador(pagina?: Pagina): Promise<ListarAgendamentosResponse> {
+	return apiGet<ListarAgendamentosResponse>(`/providers/me/agendamentos${queryDaPagina(pagina)}`);
 }
 
 // confirmarAgendamento aceita uma solicitação pendente (prestador).

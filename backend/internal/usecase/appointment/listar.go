@@ -6,6 +6,7 @@ import (
 	"agendago/internal/domain/appointment"
 	"agendago/internal/domain/client"
 	"agendago/internal/domain/provider"
+	"agendago/internal/pkg/paging"
 )
 
 // Resumo é um agendamento pronto para exibição. Além dos nomes das duas
@@ -29,15 +30,18 @@ type Resumo struct {
 	MarcadoPeloPrestador bool
 }
 
-// ListarInput identifica o dono da listagem e o instante da consulta.
+// ListarInput identifica o dono da listagem, a página pedida e o instante da consulta.
 type ListarInput struct {
 	UsuarioID string
+	Pagina    paging.Pagina
 	Agora     time.Time
 }
 
-// ListarOutput contém os agendamentos do usuário, ordenados por data e início.
+// ListarOutput contém uma página dos agendamentos do usuário, do mais recente
+// para o mais antigo, e o total dele.
 type ListarOutput struct {
 	Agendamentos []Resumo
+	Total        int
 }
 
 // ListarUseCase lista os agendamentos de um prestador ou de um cliente,
@@ -54,25 +58,25 @@ func NovoListarUseCase(repo repositorioAppointment, providerRepo repositorioProv
 	return &ListarUseCase{repo: repo, providerRepo: providerRepo, clientRepo: clientRepo}
 }
 
-// DoPrestador lista os agendamentos recebidos pelo prestador.
+// DoPrestador lista uma página dos agendamentos recebidos pelo prestador.
 func (uc *ListarUseCase) DoPrestador(in ListarInput) (*ListarOutput, error) {
-	agendamentos, err := uc.repo.ListarPorPrestador(in.UsuarioID)
+	agendamentos, total, err := uc.repo.ListarPorPrestador(in.UsuarioID, in.Pagina)
 	if err != nil {
 		return nil, err
 	}
-	return uc.montar(agendamentos, in.Agora)
+	return uc.montar(agendamentos, total, in.Agora)
 }
 
-// DoCliente lista os agendamentos feitos pelo cliente.
+// DoCliente lista uma página dos agendamentos feitos pelo cliente.
 func (uc *ListarUseCase) DoCliente(in ListarInput) (*ListarOutput, error) {
-	agendamentos, err := uc.repo.ListarPorCliente(in.UsuarioID)
+	agendamentos, total, err := uc.repo.ListarPorCliente(in.UsuarioID, in.Pagina)
 	if err != nil {
 		return nil, err
 	}
-	return uc.montar(agendamentos, in.Agora)
+	return uc.montar(agendamentos, total, in.Agora)
 }
 
-func (uc *ListarUseCase) montar(agendamentos []*appointment.Appointment, agora time.Time) (*ListarOutput, error) {
+func (uc *ListarUseCase) montar(agendamentos []*appointment.Appointment, total int, agora time.Time) (*ListarOutput, error) {
 	clientes := make(map[string]*client.Client)
 	prestadores := make(map[string]*provider.Provider)
 
@@ -114,7 +118,7 @@ func (uc *ListarUseCase) montar(agendamentos []*appointment.Appointment, agora t
 		resumos = append(resumos, resumo)
 	}
 
-	return &ListarOutput{Agendamentos: resumos}, nil
+	return &ListarOutput{Agendamentos: resumos, Total: total}, nil
 }
 
 func (uc *ListarUseCase) cliente(id string, cache map[string]*client.Client) (*client.Client, error) {

@@ -19,13 +19,29 @@
 	let prestadores = $state<UsuarioModeracao[]>(data.prestadores);
 	// svelte-ignore state_referenced_locally
 	let clientes = $state<UsuarioModeracao[]>(data.clientes);
+	// svelte-ignore state_referenced_locally
+	let totalPrestadores = $state(data.totalPrestadores);
+	// svelte-ignore state_referenced_locally
+	let totalClientes = $state(data.totalClientes);
 	let agindo = $state<string | null>(null);
+	let carregandoMais = $state<'prestadores' | 'clientes' | null>(null);
 	let erro = $state<string | null>(null);
 
+	const temMaisPrestadores = $derived(prestadores.length < totalPrestadores);
+	const temMaisClientes = $derived(clientes.length < totalClientes);
+
 	async function recarregar() {
-		const [ps, cs] = await Promise.all([listarPrestadores(), listarClientes()]);
+		// mantém a mesma quantidade já visível de cada lista — sem isso, uma
+		// ação sobre um item além da primeira página encolheria a lista de volta
+		// ao padrão da API
+		const [ps, cs] = await Promise.all([
+			listarPrestadores({ limite: prestadores.length || undefined }),
+			listarClientes({ limite: clientes.length || undefined })
+		]);
 		prestadores = ps.usuarios;
 		clientes = cs.usuarios;
+		totalPrestadores = ps.total;
+		totalClientes = cs.total;
 	}
 
 	async function executar(id: string, acao: (id: string) => Promise<void>) {
@@ -39,6 +55,29 @@
 			erro = e instanceof ApiError ? e.message : 'Não foi possível concluir a ação.';
 		} finally {
 			agindo = null;
+		}
+	}
+
+	// O offset é o que já está carregado; o limite fica a cargo do padrão da API.
+	async function carregarMaisPrestadores() {
+		carregandoMais = 'prestadores';
+		try {
+			const resposta = await listarPrestadores({ offset: prestadores.length });
+			prestadores = [...prestadores, ...resposta.usuarios];
+			totalPrestadores = resposta.total;
+		} finally {
+			carregandoMais = null;
+		}
+	}
+
+	async function carregarMaisClientes() {
+		carregandoMais = 'clientes';
+		try {
+			const resposta = await listarClientes({ offset: clientes.length });
+			clientes = [...clientes, ...resposta.usuarios];
+			totalClientes = resposta.total;
+		} finally {
+			carregandoMais = null;
 		}
 	}
 
@@ -93,6 +132,21 @@
 	</li>
 {/snippet}
 
+{#snippet carregarMais(temMais: boolean, carregando: boolean, acao: () => Promise<void>)}
+	{#if temMais}
+		<div class="mt-3 flex justify-center">
+			<button
+				type="button"
+				onclick={acao}
+				disabled={carregando}
+				class="rounded-full border border-hairline-strong bg-surface-card px-4 py-1.5 text-sm text-body transition hover:bg-surface-elevated/40 disabled:opacity-60"
+			>
+				{carregando ? 'Carregando…' : 'Carregar mais'}
+			</button>
+		</div>
+	{/if}
+{/snippet}
+
 <div>
 	<PageHeader
 		titulo="Moderação"
@@ -110,9 +164,9 @@
 
 	<Indicadores
 		itens={[
-			{ rotulo: 'Prestadores', valor: prestadores.length },
+			{ rotulo: 'Prestadores', valor: totalPrestadores },
 			{ rotulo: 'Prestadores ativos', valor: totalPrestadoresAtivos },
-			{ rotulo: 'Clientes', valor: clientes.length },
+			{ rotulo: 'Clientes', valor: totalClientes },
 			{ rotulo: 'Clientes ativos', valor: totalClientesAtivos }
 		]}
 	/>
@@ -121,7 +175,7 @@
 		<div class="mb-2 flex items-baseline justify-between gap-3">
 			<h2 class="text-sm font-semibold text-ink">Prestadores</h2>
 			<span class="text-xs text-mute tabular-nums">
-				{totalPrestadoresAtivos}/{prestadores.length} ativos
+				{prestadores.length}/{totalPrestadores}
 			</span>
 		</div>
 
@@ -139,6 +193,7 @@
 					{@render linha(p, '/admin/prestadores', banirPrestador, reativarPrestador)}
 				{/each}
 			</ul>
+			{@render carregarMais(temMaisPrestadores, carregandoMais === 'prestadores', carregarMaisPrestadores)}
 		{/if}
 	</section>
 
@@ -146,7 +201,7 @@
 		<div class="mb-2 flex items-baseline justify-between gap-3">
 			<h2 class="text-sm font-semibold text-ink">Clientes</h2>
 			<span class="text-xs text-mute tabular-nums">
-				{totalClientesAtivos}/{clientes.length} ativos
+				{clientes.length}/{totalClientes}
 			</span>
 		</div>
 
@@ -164,6 +219,7 @@
 					{@render linha(c, '/admin/clientes', banirCliente, reativarCliente)}
 				{/each}
 			</ul>
+			{@render carregarMais(temMaisClientes, carregandoMais === 'clientes', carregarMaisClientes)}
 		{/if}
 	</section>
 </div>

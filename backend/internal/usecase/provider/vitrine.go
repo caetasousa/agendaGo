@@ -1,10 +1,16 @@
 package provider
 
-import "agendago/internal/domain/provider"
+import (
+	"agendago/internal/domain/provider"
+	"agendago/internal/pkg/paging"
+)
 
-// repositorioListar busca os prestadores da vitrine.
+// repositorioListar busca os prestadores ativos da vitrine — o filtro roda no
+// SQL (ver ListarAtivos), não em memória: com LIMIT, filtrar depois de buscar
+// devolveria páginas mais curtas que o pedido e esconderia prestadores válidos
+// das páginas seguintes.
 type repositorioListar interface {
-	Listar() ([]*provider.Provider, error)
+	ListarAtivos(pag paging.Pagina) ([]*provider.Provider, int, error)
 }
 
 // PrestadorResumo identifica um prestador na vitrine e no link público de
@@ -16,13 +22,15 @@ type PrestadorResumo struct {
 	AceitaAgendamentos        bool
 }
 
-// ListarOutput contém os prestadores da vitrine.
+// ListarOutput contém a página de prestadores da vitrine e o total de ativos.
 type ListarOutput struct {
 	Prestadores []PrestadorResumo
+	Total       int
 }
 
-// ListarUseCase lista todos os prestadores, para o cliente escolher com quem
-// agendar. Quem está com a agenda desativada aparece sem horários.
+// ListarUseCase lista os prestadores ativos, para o cliente escolher com quem
+// agendar. Quem está com a agenda desativada aparece sem horários; quem foi
+// banido pelo admin não aparece.
 type ListarUseCase struct {
 	repo repositorioListar
 }
@@ -32,21 +40,19 @@ func NovoListarUseCase(repo repositorioListar) *ListarUseCase {
 	return &ListarUseCase{repo: repo}
 }
 
-// Executar devolve os prestadores ativos com os dados mínimos da vitrine.
-// Prestadores banidos pelo admin não aparecem na listagem pública.
-func (uc *ListarUseCase) Executar() (*ListarOutput, error) {
-	todos, err := uc.repo.Listar()
+// Executar devolve uma página dos prestadores ativos com os dados mínimos da
+// vitrine.
+func (uc *ListarUseCase) Executar(pag paging.Pagina) (*ListarOutput, error) {
+	ativos, total, err := uc.repo.ListarAtivos(pag)
 	if err != nil {
 		return nil, err
 	}
 
-	resumos := make([]PrestadorResumo, 0, len(todos))
-	for _, p := range todos {
-		if p.Ativo {
-			resumos = append(resumos, resumoDe(p))
-		}
+	resumos := make([]PrestadorResumo, 0, len(ativos))
+	for _, p := range ativos {
+		resumos = append(resumos, resumoDe(p))
 	}
-	return &ListarOutput{Prestadores: resumos}, nil
+	return &ListarOutput{Prestadores: resumos, Total: total}, nil
 }
 
 // BuscarResumoUseCase busca a identificação pública de um prestador — usada

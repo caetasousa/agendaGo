@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"agendago/internal/domain/appointment"
+	"agendago/internal/pkg/paging"
 )
 
 type AppointmentMemoria struct {
@@ -58,14 +59,35 @@ func (r *AppointmentMemoria) Atualizar(a *appointment.Appointment) error {
 	return nil
 }
 
-// ListarPorPrestador devolve os agendamentos do prestador ordenados por data e início.
-func (r *AppointmentMemoria) ListarPorPrestador(providerID string) ([]*appointment.Appointment, error) {
-	return r.listar(func(a *appointment.Appointment) bool { return a.ProviderID == providerID })
+// ListarPorPrestador devolve uma página dos agendamentos do prestador, do mais
+// recente para o mais antigo, e o total dele.
+func (r *AppointmentMemoria) ListarPorPrestador(providerID string, pag paging.Pagina) ([]*appointment.Appointment, int, error) {
+	return r.listarPaginado(func(a *appointment.Appointment) bool { return a.ProviderID == providerID }, pag)
 }
 
-// ListarPorCliente devolve os agendamentos do cliente ordenados por data e início.
-func (r *AppointmentMemoria) ListarPorCliente(clientID string) ([]*appointment.Appointment, error) {
-	return r.listar(func(a *appointment.Appointment) bool { return a.ClientID == clientID })
+// ListarPorCliente devolve uma página dos agendamentos do cliente, do mais
+// recente para o mais antigo, e o total dele.
+func (r *AppointmentMemoria) ListarPorCliente(clientID string, pag paging.Pagina) ([]*appointment.Appointment, int, error) {
+	return r.listarPaginado(func(a *appointment.Appointment) bool { return a.ClientID == clientID }, pag)
+}
+
+// listarPaginado espelha o repositório Postgres: ordem decrescente por data e
+// início (o mais recente primeiro) antes de aplicar a fatia.
+func (r *AppointmentMemoria) listarPaginado(filtro func(*appointment.Appointment) bool, pag paging.Pagina) ([]*appointment.Appointment, int, error) {
+	todos, err := r.listar(filtro)
+	if err != nil {
+		return nil, 0, err
+	}
+	inverter(todos)
+	return fatiar(todos, pag), len(todos), nil
+}
+
+// inverter reverte a lista já ordenada de forma crescente, produzindo a ordem
+// decrescente do ORDER BY ... DESC.
+func inverter(as []*appointment.Appointment) {
+	for i, j := 0, len(as)-1; i < j; i, j = i+1, j-1 {
+		as[i], as[j] = as[j], as[i]
+	}
 }
 
 // ListarOcupantesPorPeriodo devolve os agendamentos do prestador que ocupam

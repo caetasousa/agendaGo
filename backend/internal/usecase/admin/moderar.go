@@ -5,6 +5,7 @@ import (
 
 	"agendago/internal/domain/client"
 	"agendago/internal/domain/provider"
+	"agendago/internal/pkg/paging"
 )
 
 var (
@@ -16,14 +17,14 @@ var (
 
 // repositorioProvider lista, busca e persiste prestadores para a moderação.
 type repositorioProvider interface {
-	Listar() ([]*provider.Provider, error)
+	Listar(pag paging.Pagina) ([]*provider.Provider, int, error)
 	BuscarPorID(id string) (*provider.Provider, error)
 	Atualizar(p *provider.Provider) error
 }
 
 // repositorioClient lista, busca e persiste clientes para a moderação.
 type repositorioClient interface {
-	Listar() ([]*client.Client, error)
+	Listar(pag paging.Pagina) ([]*client.Client, int, error)
 	BuscarPorID(id string) (*client.Client, error)
 	Atualizar(c *client.Client) error
 }
@@ -55,11 +56,12 @@ func NovoModerarUseCase(providers repositorioProvider, clients repositorioClient
 	return &ModerarUseCase{providers: providers, clients: clients, sessoes: sessoes}
 }
 
-// ListarPrestadores devolve todos os prestadores com o status de moderação.
-func (uc *ModerarUseCase) ListarPrestadores() ([]UsuarioResumo, error) {
-	ps, err := uc.providers.Listar()
+// ListarPrestadores devolve uma página de prestadores com o status de
+// moderação e o total.
+func (uc *ModerarUseCase) ListarPrestadores(pag paging.Pagina) ([]UsuarioResumo, int, error) {
+	ps, total, err := uc.providers.Listar(pag)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	resumos := make([]UsuarioResumo, 0, len(ps))
 	for _, p := range ps {
@@ -71,14 +73,15 @@ func (uc *ModerarUseCase) ListarPrestadores() ([]UsuarioResumo, error) {
 			AceitaAgendamentos: p.AceitaAgendamentos,
 		})
 	}
-	return resumos, nil
+	return resumos, total, nil
 }
 
-// ListarClientes devolve todos os clientes com conta e o status de moderação.
-func (uc *ModerarUseCase) ListarClientes() ([]UsuarioResumo, error) {
-	cs, err := uc.clients.Listar()
+// ListarClientes devolve uma página de clientes com conta e o status de
+// moderação, e o total.
+func (uc *ModerarUseCase) ListarClientes(pag paging.Pagina) ([]UsuarioResumo, int, error) {
+	cs, total, err := uc.clients.Listar(pag)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	resumos := make([]UsuarioResumo, 0, len(cs))
 	for _, c := range cs {
@@ -89,7 +92,7 @@ func (uc *ModerarUseCase) ListarClientes() ([]UsuarioResumo, error) {
 			Ativo: c.Ativo,
 		})
 	}
-	return resumos, nil
+	return resumos, total, nil
 }
 
 // BanirPrestador desativa um prestador e revoga as sessões ativas dele.

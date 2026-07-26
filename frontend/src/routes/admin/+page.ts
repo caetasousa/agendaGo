@@ -11,6 +11,8 @@ export const ssr = false;
 export async function load(): Promise<{
 	prestadores: UsuarioModeracao[];
 	clientes: UsuarioModeracao[];
+	totalPrestadores: number;
+	totalClientes: number;
 }> {
 	let usuario;
 	try {
@@ -30,5 +32,10 @@ export async function load(): Promise<{
 	}
 
 	const [prestadores, clientes] = await Promise.all([listarPrestadores(), listarClientes()]);
-	return { prestadores: prestadores.usuarios, clientes: clientes.usuarios };
+	return {
+		prestadores: prestadores.usuarios,
+		clientes: clientes.usuarios,
+		totalPrestadores: prestadores.total,
+		totalClientes: clientes.total
+	};
 }

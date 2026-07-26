@@ -7,6 +7,7 @@ import (
 
 	"agendago/internal/domain/availability"
 	"agendago/internal/domain/provider"
+	"agendago/internal/pkg/paging"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -172,15 +173,35 @@ func salvarHorariosPadrao(ctx context.Context, tx pgx.Tx, providerID string, blo
 	return nil
 }
 
-// Listar devolve todos os prestadores, ordenados por nome, para a vitrine de
-// agendamento. HorariosPadrao não é carregado — a listagem só precisa de
-// identificação.
-func (r *ProviderPostgres) Listar() ([]*provider.Provider, error) {
-	rows, err := r.pool.Query(context.Background(),
+// Listar devolve uma página de prestadores (inclusive banidos, como a visão de
+// moderação), ordenados por nome, e o total existente. HorariosPadrao não é
+// carregado — a listagem só precisa de identificação.
+func (r *ProviderPostgres) Listar(pag paging.Pagina) ([]*provider.Provider, int, error) {
+	return r.listarPaginado("", pag)
+}
+
+// ListarAtivos devolve uma página de prestadores ativos, ordenados por nome, e
+// o total de ativos — a vitrine pública. O filtro roda no SQL, não em memória:
+// com LIMIT, filtrar depois de buscar devolveria páginas mais curtas que o
+// pedido e esconderia prestadores válidos das páginas seguintes.
+func (r *ProviderPostgres) ListarAtivos(pag paging.Pagina) ([]*provider.Provider, int, error) {
+	return r.listarPaginado("WHERE ativo", pag)
+}
+
+func (r *ProviderPostgres) listarPaginado(filtro string, pag paging.Pagina) ([]*provider.Provider, int, error) {
+	pag = pag.Valida()
+	ctx := context.Background()
+
+	var total int
+	if err := r.pool.QueryRow(ctx, `SELECT count(*) FROM providers `+filtro).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := r.pool.Query(ctx,
 		`SELECT id, nome, email, telefone, senha_hash, ativo, aceita_agendamentos, descanso_minutos, duracao_atendimento_minutos, permite_marcacao_pelo_prestador, criado_em, atualizado_em
-		 FROM providers ORDER BY nome`)
+		 FROM providers `+filtro+` ORDER BY nome, id LIMIT $1 OFFSET $2`, pag.Limite, pag.Offset)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
@@ -191,9 +212,9 @@ func (r *ProviderPostgres) Listar() ([]*provider.Provider, error) {
 			&p.ID, &p.Nome, &p.Email, &p.Telefone, &p.SenhaHash, &p.Ativo, &p.AceitaAgendamentos,
 			&p.DescansoMinutos, &p.DuracaoAtendimentoMinutos, &p.PermiteMarcacaoPeloPrestador, &p.CriadoEm, &p.AtualizadoEm,
 		); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		todos = append(todos, &p)
 	}
-	return todos, rows.Err()
+	return todos, total, rows.Err()
 }

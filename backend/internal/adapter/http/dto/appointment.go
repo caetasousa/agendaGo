@@ -66,9 +66,11 @@ type AgendamentoResponse struct {
 	MarcadoPeloPrestador bool   `json:"marcadoPeloPrestador,omitempty"`
 }
 
-// ListarAgendamentosResponse contém os agendamentos do usuário autenticado.
+// ListarAgendamentosResponse contém uma página dos agendamentos do usuário
+// autenticado — dos mais recentes para os mais antigos — e o total dele.
 type ListarAgendamentosResponse struct {
 	Agendamentos []AgendamentoResponse `json:"agendamentos"`
+	PaginacaoDTO
 }
 
 // DetalheCancelamentoResponse descreve o agendamento apontado por um token de
@@ -108,7 +110,9 @@ type PrestadorResumoDTO struct {
 	AceitaAgendamentos        bool   `json:"aceitaAgendamentos"`
 }
 
-// ListarPrestadoresResponse contém os prestadores com agenda ativa.
+// ListarPrestadoresResponse contém uma página da vitrine e o total de
+// prestadores ativos.
 type ListarPrestadoresResponse struct {
 	Prestadores []PrestadorResumoDTO `json:"prestadores"`
+	PaginacaoDTO
 }

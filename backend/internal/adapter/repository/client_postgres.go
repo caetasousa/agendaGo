@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"agendago/internal/domain/client"
+	"agendago/internal/pkg/paging"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -77,14 +78,23 @@ func (r *ClientPostgres) BuscarPorID(id string) (*client.Client, error) {
 		FROM clients WHERE id = $1`, id)
 }
 
-// Listar devolve todos os clientes com conta, ordenados por nome, para o
-// painel de moderação do admin. Convidados sem conta ficam de fora.
-func (r *ClientPostgres) Listar() ([]*client.Client, error) {
-	rows, err := r.pool.Query(context.Background(),
+// Listar devolve uma página de clientes com conta, ordenados por nome, para o
+// painel de moderação do admin, e o total. Convidados sem conta ficam de fora.
+func (r *ClientPostgres) Listar(pag paging.Pagina) ([]*client.Client, int, error) {
+	pag = pag.Valida()
+	ctx := context.Background()
+
+	var total int
+	if err := r.pool.QueryRow(ctx, `SELECT count(*) FROM clients WHERE senha_hash IS NOT NULL`).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := r.pool.Query(ctx,
 		`SELECT id, nome, email, telefone, senha_hash, ativo, criado_em, atualizado_em
-		 FROM clients WHERE senha_hash IS NOT NULL ORDER BY nome`)
+		 FROM clients WHERE senha_hash IS NOT NULL ORDER BY nome, id LIMIT $1 OFFSET $2`,
+		pag.Limite, pag.Offset)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
@@ -92,11 +102,11 @@ func (r *ClientPostgres) Listar() ([]*client.Client, error) {
 	for rows.Next() {
 		c, err := escanearClient(rows)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		todos = append(todos, c)
 	}
-	return todos, rows.Err()
+	return todos, total, rows.Err()
 }
 
 func (r *ClientPostgres) buscar(sql, arg string) (*client.Client, error) {

@@ -1,7 +1,8 @@
 // Tipos e chamadas da API de prestadores.
 // Espelham backend/internal/adapter/http/dto/provider.go
 
-import { apiGet, apiPost } from './client';
+import { apiGet, apiPostSemResposta } from './client';
+import { queryDaPagina, type Pagina, type Paginacao } from './paginacao';
 
 export interface CadastrarProviderRequest {
 	nome: string;
@@ -10,16 +11,17 @@ export interface CadastrarProviderRequest {
 	senha: string;
 }
 
-export interface CadastrarProviderResponse {
-	id: string;
-	nome: string;
-	email: string;
+// cadastrarProvider solicita o cadastro: a API envia um email de confirmação e
+// responde sempre igual, exista ou não o endereço. A conta só nasce quando a
+// pessoa clica no link — por isso não há resposta com o id.
+export function cadastrarProvider(dados: CadastrarProviderRequest): Promise<void> {
+	return apiPostSemResposta('/providers', dados);
 }
 
-export function cadastrarProvider(
-	dados: CadastrarProviderRequest
-): Promise<CadastrarProviderResponse> {
-	return apiPost<CadastrarProviderRequest, CadastrarProviderResponse>('/providers', dados);
+// confirmarCadastroPrestador conclui o cadastro a partir do token do email e
+// cria a conta do prestador.
+export function confirmarCadastroPrestador(token: string): Promise<void> {
+	return apiPostSemResposta('/providers/confirmar-cadastro', { token });
 }
 
 export interface PrestadorResumo {
@@ -29,14 +31,14 @@ export interface PrestadorResumo {
 	aceitaAgendamentos: boolean;
 }
 
-export interface ListarPrestadoresResponse {
+export interface ListarPrestadoresResponse extends Paginacao {
 	prestadores: PrestadorResumo[];
 }
 
-// listarPrestadores devolve todos os prestadores da vitrine — rota pública.
-// Quem está com a agenda desativada aparece sem horários.
-export function listarPrestadores(): Promise<ListarPrestadoresResponse> {
-	return apiGet<ListarPrestadoresResponse>('/providers');
+// listarPrestadores devolve uma página da vitrine — rota pública. Quem está
+// com a agenda desativada aparece sem horários.
+export function listarPrestadores(pagina?: Pagina): Promise<ListarPrestadoresResponse> {
+	return apiGet<ListarPrestadoresResponse>(`/providers${queryDaPagina(pagina)}`);
 }
 
 // buscarPrestador devolve a identificação pública de um prestador — usada

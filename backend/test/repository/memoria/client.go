@@ -1,9 +1,11 @@
 package memoria
 
 import (
+	"sort"
 	"sync"
 
 	"agendago/internal/domain/client"
+	"agendago/internal/pkg/paging"
 )
 
 type ClientMemoria struct {
@@ -54,16 +56,25 @@ func (r *ClientMemoria) ConverterEmConta(id, senhaHash, telefone string) error {
 }
 
 // Listar devolve os clientes com conta, para o painel de moderação do admin.
-func (r *ClientMemoria) Listar() ([]*client.Client, error) {
+func (r *ClientMemoria) Listar(pag paging.Pagina) ([]*client.Client, int, error) {
 	r.mu.RLock()
-	defer r.mu.RUnlock()
-	var todos []*client.Client
+	comConta := make([]*client.Client, 0, len(r.dados))
 	for _, c := range r.dados {
 		if c.TemConta() {
-			todos = append(todos, c)
+			comConta = append(comConta, c)
 		}
 	}
-	return todos, nil
+	r.mu.RUnlock()
+
+	// ordem estável (nome, id) como no ORDER BY do Postgres — sem ela a
+	// paginação sobre um mapa devolveria itens repetidos entre páginas
+	sort.Slice(comConta, func(i, j int) bool {
+		if comConta[i].Nome != comConta[j].Nome {
+			return comConta[i].Nome < comConta[j].Nome
+		}
+		return comConta[i].ID < comConta[j].ID
+	})
+	return fatiar(comConta, pag), len(comConta), nil
 }
 
 // BuscarPorEmail retorna (nil, nil) quando não há cliente com o email,

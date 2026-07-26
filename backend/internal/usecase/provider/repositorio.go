@@ -1,8 +1,11 @@
 package provider
 
 import (
+	"time"
+
 	"agendago/internal/domain/client"
 	"agendago/internal/domain/provider"
+	"agendago/internal/domain/signup"
 )
 
 type repositorioCadastrar interface {
@@ -14,6 +17,24 @@ type repositorioCadastrar interface {
 // email é único entre clientes e prestadores.
 type buscadorClient interface {
 	BuscarPorEmail(email string) (*client.Client, error)
+}
+
+// repositorioCadastroPendente persiste e consome os cadastros de prestador à
+// espera de confirmação por email. Consumir apaga o registro ao lê-lo (uso único).
+type repositorioCadastroPendente interface {
+	Salvar(p *signup.Pendente) error
+	Consumir(tokenHash string) (*signup.Pendente, error)
+	RemoverPorEmail(email string) error
+	RemoverExpirados() error
+}
+
+// enviadorCadastro envia os emails do fluxo de cadastro de prestador.
+type enviadorCadastro interface {
+	// EnviarConfirmacaoCadastroPrestador manda o link de confirmação.
+	EnviarConfirmacaoCadastroPrestador(email, nome, token string, expiraEm time.Time)
+	// EnviarAvisoContaExistente avisa que o email já tem conta, sem revelar
+	// isso na resposta HTTP.
+	EnviarAvisoContaExistente(email, nome string)
 }
 
 // repositorioPreferencias busca e persiste as preferências mutáveis do prestador.

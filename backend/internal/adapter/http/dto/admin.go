@@ -9,9 +9,11 @@ type UsuarioModeracaoDTO struct {
 	AceitaAgendamentos bool   `json:"aceitaAgendamentos"`
 }
 
-// ListarUsuariosResponse contém os usuários de um tipo (prestadores ou clientes).
+// ListarUsuariosResponse contém uma página de usuários de um tipo
+// (prestadores ou clientes) e o total existente.
 type ListarUsuariosResponse struct {
 	Usuarios []UsuarioModeracaoDTO `json:"usuarios"`
+	PaginacaoDTO
 }
 
 // AgendamentoAdminDTO é um agendamento na visão de detalhe do admin.
@@ -37,6 +39,7 @@ type DetalhePrestadorResponse struct {
 	DescansoMinutos    int                   `json:"descansoMinutos"`
 	DuracaoMinutos     int                   `json:"duracaoAtendimentoMinutos"`
 	Agendamentos       []AgendamentoAdminDTO `json:"agendamentos"`
+	PaginacaoDTO
 }
 
 // DetalheClienteResponse é o detalhe em leitura de um cliente.
@@ -48,4 +51,5 @@ type DetalheClienteResponse struct {
 	Ativo        bool                  `json:"ativo"`
 	TemConta     bool                  `json:"temConta"`
 	Agendamentos []AgendamentoAdminDTO `json:"agendamentos"`
+	PaginacaoDTO
 }

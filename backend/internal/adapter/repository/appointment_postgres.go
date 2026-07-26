@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"agendago/internal/domain/appointment"
+	"agendago/internal/pkg/paging"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -93,18 +94,35 @@ func (r *AppointmentPostgres) Atualizar(a *appointment.Appointment) error {
 	return err
 }
 
-// ListarPorPrestador devolve os agendamentos do prestador ordenados por data e início.
-func (r *AppointmentPostgres) ListarPorPrestador(providerID string) ([]*appointment.Appointment, error) {
-	return r.listar(
-		`SELECT id, provider_id, client_id, data, inicio_minutos, fim_minutos, status, expira_em, criado_em, atualizado_em, observacao, marcado_pelo_prestador
-		 FROM appointments WHERE provider_id = $1 ORDER BY data, inicio_minutos`, providerID)
+// ListarPorPrestador devolve uma página dos agendamentos do prestador, do mais
+// recente para o mais antigo, e o total dele.
+func (r *AppointmentPostgres) ListarPorPrestador(providerID string, pag paging.Pagina) ([]*appointment.Appointment, int, error) {
+	return r.listarPaginado("provider_id", providerID, pag)
 }
 
-// ListarPorCliente devolve os agendamentos do cliente ordenados por data e início.
-func (r *AppointmentPostgres) ListarPorCliente(clientID string) ([]*appointment.Appointment, error) {
-	return r.listar(
+// ListarPorCliente devolve uma página dos agendamentos do cliente, do mais
+// recente para o mais antigo, e o total dele.
+func (r *AppointmentPostgres) ListarPorCliente(clientID string, pag paging.Pagina) ([]*appointment.Appointment, int, error) {
+	return r.listarPaginado("client_id", clientID, pag)
+}
+
+func (r *AppointmentPostgres) listarPaginado(coluna, valor string, pag paging.Pagina) ([]*appointment.Appointment, int, error) {
+	pag = pag.Valida()
+	ctx := context.Background()
+
+	var total int
+	if err := r.pool.QueryRow(ctx, `SELECT count(*) FROM appointments WHERE `+coluna+` = $1`, valor).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	resultado, err := r.listar(
 		`SELECT id, provider_id, client_id, data, inicio_minutos, fim_minutos, status, expira_em, criado_em, atualizado_em, observacao, marcado_pelo_prestador
-		 FROM appointments WHERE client_id = $1 ORDER BY data, inicio_minutos`, clientID)
+		 FROM appointments WHERE `+coluna+` = $1 ORDER BY data DESC, inicio_minutos DESC, id LIMIT $2 OFFSET $3`,
+		valor, pag.Limite, pag.Offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	return resultado, total, nil
 }
 
 // ListarOcupantesPorPeriodo devolve os agendamentos do prestador que ocupam

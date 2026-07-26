@@ -86,7 +86,7 @@ func TestModeracaoPostgres(t *testing.T) {
 		convidado, _ := client.NovoConvidado("dddddddd-2222-2222-2222-222222222222", "Convidado", "convidado@email.com", "11999998888")
 		clientRepo.Salvar(convidado)
 
-		lista, err := clientRepo.Listar()
+		lista, _, err := clientRepo.Listar(paginaPadrao)
 		if err != nil {
 			t.Fatalf("esperava listar, got: %v", err)
 		}

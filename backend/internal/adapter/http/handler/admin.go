@@ -26,39 +26,51 @@ func NovoAdminHandler(moderar *ucadmin.ModerarUseCase, detalhar *ucadmin.Detalha
 // ListarPrestadores godoc
 //
 //	@Summary		Listar prestadores (admin)
-//	@Description	Lista todos os prestadores com o status de moderação (ativo/banido)
+//	@Description	Lista uma página de prestadores com o status de moderação (ativo/banido)
 //	@Tags			admin
 //	@Produce		json
-//	@Success		200	{object}	dto.ListarUsuariosResponse
-//	@Failure		401	{object}	map[string]string
-//	@Failure		403	{object}	map[string]string
+//	@Param			limite	query		int	false	"Itens por página (padrão 100, máximo 200)"
+//	@Param			offset	query		int	false	"Deslocamento a partir do início da lista"
+//	@Success		200		{object}	dto.ListarUsuariosResponse
+//	@Failure		401		{object}	map[string]string
+//	@Failure		403		{object}	map[string]string
 //	@Router			/admin/prestadores [get]
 func (h *AdminHandler) ListarPrestadores(w http.ResponseWriter, r *http.Request) {
-	usuarios, err := h.moderar.ListarPrestadores()
+	pag := paginaDaQuery(r)
+	usuarios, total, err := h.moderar.ListarPrestadores(pag)
 	if err != nil {
 		responderErroInterno(w, r, err)
 		return
 	}
-	responderJSON(w, http.StatusOK, dto.ListarUsuariosResponse{Usuarios: usuariosParaDTO(usuarios)})
+	responderJSON(w, http.StatusOK, dto.ListarUsuariosResponse{
+		Usuarios:     usuariosParaDTO(usuarios),
+		PaginacaoDTO: dto.NovaPaginacao(pag, total),
+	})
 }
 
 // ListarClientes godoc
 //
 //	@Summary		Listar clientes (admin)
-//	@Description	Lista os clientes com conta e o status de moderação (ativo/banido)
+//	@Description	Lista uma página de clientes com conta e o status de moderação (ativo/banido)
 //	@Tags			admin
 //	@Produce		json
-//	@Success		200	{object}	dto.ListarUsuariosResponse
-//	@Failure		401	{object}	map[string]string
-//	@Failure		403	{object}	map[string]string
+//	@Param			limite	query		int	false	"Itens por página (padrão 100, máximo 200)"
+//	@Param			offset	query		int	false	"Deslocamento a partir do início da lista"
+//	@Success		200		{object}	dto.ListarUsuariosResponse
+//	@Failure		401		{object}	map[string]string
+//	@Failure		403		{object}	map[string]string
 //	@Router			/admin/clientes [get]
 func (h *AdminHandler) ListarClientes(w http.ResponseWriter, r *http.Request) {
-	usuarios, err := h.moderar.ListarClientes()
+	pag := paginaDaQuery(r)
+	usuarios, total, err := h.moderar.ListarClientes(pag)
 	if err != nil {
 		responderErroInterno(w, r, err)
 		return
 	}
-	responderJSON(w, http.StatusOK, dto.ListarUsuariosResponse{Usuarios: usuariosParaDTO(usuarios)})
+	responderJSON(w, http.StatusOK, dto.ListarUsuariosResponse{
+		Usuarios:     usuariosParaDTO(usuarios),
+		PaginacaoDTO: dto.NovaPaginacao(pag, total),
+	})
 }
 
 // DetalharPrestador godoc
@@ -74,7 +86,8 @@ func (h *AdminHandler) ListarClientes(w http.ResponseWriter, r *http.Request) {
 //	@Failure		404	{object}	map[string]string
 //	@Router			/admin/prestadores/{id} [get]
 func (h *AdminHandler) DetalharPrestador(w http.ResponseWriter, r *http.Request) {
-	d, err := h.detalhar.Prestador(chi.URLParam(r, "id"), time.Now())
+	pag := paginaDaQuery(r)
+	d, err := h.detalhar.Prestador(chi.URLParam(r, "id"), pag, time.Now())
 	if err != nil {
 		h.responder(w, r, err)
 		return
@@ -89,6 +102,7 @@ func (h *AdminHandler) DetalharPrestador(w http.ResponseWriter, r *http.Request)
 		DescansoMinutos:    d.DescansoMinutos,
 		DuracaoMinutos:     d.DuracaoMinutos,
 		Agendamentos:       agendamentosAdminParaDTO(d.Agendamentos),
+		PaginacaoDTO:       dto.NovaPaginacao(pag, d.TotalAgendamentos),
 	})
 }
 
@@ -105,7 +119,8 @@ func (h *AdminHandler) DetalharPrestador(w http.ResponseWriter, r *http.Request)
 //	@Failure		404	{object}	map[string]string
 //	@Router			/admin/clientes/{id} [get]
 func (h *AdminHandler) DetalharCliente(w http.ResponseWriter, r *http.Request) {
-	d, err := h.detalhar.Cliente(chi.URLParam(r, "id"), time.Now())
+	pag := paginaDaQuery(r)
+	d, err := h.detalhar.Cliente(chi.URLParam(r, "id"), pag, time.Now())
 	if err != nil {
 		h.responder(w, r, err)
 		return
@@ -119,6 +134,7 @@ func (h *AdminHandler) DetalharCliente(w http.ResponseWriter, r *http.Request) {
 		Ativo:        d.Ativo,
 		TemConta:     d.TemConta,
 		Agendamentos: agendamentosAdminParaDTO(d.Agendamentos),
+		PaginacaoDTO: dto.NovaPaginacao(pag, d.TotalAgendamentos),
 	})
 }
 

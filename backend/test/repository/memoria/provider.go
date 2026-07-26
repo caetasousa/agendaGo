@@ -1,9 +1,11 @@
 package memoria
 
 import (
+	"sort"
 	"sync"
 
 	"agendago/internal/domain/provider"
+	"agendago/internal/pkg/paging"
 )
 
 type ProviderMemoria struct {
@@ -66,13 +68,36 @@ func (r *ProviderMemoria) AtualizarSenha(id, senhaHash string) error {
 	return nil
 }
 
-// Listar devolve todos os prestadores, para a vitrine de agendamento.
-func (r *ProviderMemoria) Listar() ([]*provider.Provider, error) {
+// Listar devolve uma página de prestadores (inclusive banidos, como a visão de
+// moderação) e o total. A ordenação por nome+id espelha o ORDER BY do
+// Postgres: sem ela, a ordem viria do mapa — aleatória — e a paginação
+// devolveria itens repetidos ou omitidos entre páginas.
+func (r *ProviderMemoria) Listar(pag paging.Pagina) ([]*provider.Provider, int, error) {
+	todos := r.ordenadosPorNome(func(*provider.Provider) bool { return true })
+	return fatiar(todos, pag), len(todos), nil
+}
+
+// ListarAtivos devolve uma página de prestadores ativos e o total de ativos —
+// a vitrine pública.
+func (r *ProviderMemoria) ListarAtivos(pag paging.Pagina) ([]*provider.Provider, int, error) {
+	ativos := r.ordenadosPorNome(func(p *provider.Provider) bool { return p.Ativo })
+	return fatiar(ativos, pag), len(ativos), nil
+}
+
+func (r *ProviderMemoria) ordenadosPorNome(inclui func(*provider.Provider) bool) []*provider.Provider {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	var todos []*provider.Provider
+	var selecionados []*provider.Provider
 	for _, p := range r.dados {
-		todos = append(todos, p)
+		if inclui(p) {
+			selecionados = append(selecionados, p)
+		}
 	}
-	return todos, nil
+	sort.Slice(selecionados, func(i, j int) bool {
+		if selecionados[i].Nome != selecionados[j].Nome {
+			return selecionados[i].Nome < selecionados[j].Nome
+		}
+		return selecionados[i].ID < selecionados[j].ID
+	})
+	return selecionados
 }

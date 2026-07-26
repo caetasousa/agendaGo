@@ -109,12 +109,12 @@ func TestAppointmentPostgres(t *testing.T) {
 	})
 
 	t.Run("listagens por prestador, cliente e ocupantes do período", func(t *testing.T) {
-		doPrestador, err := repo.ListarPorPrestador(providerID)
+		doPrestador, _, err := repo.ListarPorPrestador(providerID, paginaPadrao)
 		if err != nil || len(doPrestador) != 4 {
 			t.Errorf("esperava 4 agendamentos do prestador, got: %d (%v)", len(doPrestador), err)
 		}
 
-		doCliente, err := repo.ListarPorCliente(clientID)
+		doCliente, _, err := repo.ListarPorCliente(clientID, paginaPadrao)
 		if err != nil || len(doCliente) != 4 {
 			t.Errorf("esperava 4 agendamentos do cliente, got: %d (%v)", len(doCliente), err)
 		}

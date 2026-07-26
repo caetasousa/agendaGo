@@ -24,7 +24,8 @@ import (
 // recebida como função para evitar um import cycle entre os pacotes handler
 // e middleware (mesmo padrão do AuthHandler).
 type ProviderHandler struct {
-	cadastrar             *ucprovider.CadastrarUseCase
+	solicitarCadastro     *ucprovider.SolicitarCadastroUseCase
+	confirmarCadastro     *ucprovider.ConfirmarCadastroUseCase
 	atualizarPreferencias *ucprovider.AtualizarPreferenciasUseCase
 	listar                *ucprovider.ListarUseCase
 	buscarResumo          *ucprovider.BuscarResumoUseCase
@@ -32,14 +33,16 @@ type ProviderHandler struct {
 }
 
 func NovoProviderHandler(
-	cadastrar *ucprovider.CadastrarUseCase,
+	solicitarCadastro *ucprovider.SolicitarCadastroUseCase,
+	confirmarCadastro *ucprovider.ConfirmarCadastroUseCase,
 	atualizarPreferencias *ucprovider.AtualizarPreferenciasUseCase,
 	listar *ucprovider.ListarUseCase,
 	buscarResumo *ucprovider.BuscarResumoUseCase,
 	identidadeDoContexto func(r *http.Request) (ucauth.Identidade, bool),
 ) *ProviderHandler {
 	return &ProviderHandler{
-		cadastrar:             cadastrar,
+		solicitarCadastro:     solicitarCadastro,
+		confirmarCadastro:     confirmarCadastro,
 		atualizarPreferencias: atualizarPreferencias,
 		listar:                listar,
 		buscarResumo:          buscarResumo,
@@ -49,15 +52,13 @@ func NovoProviderHandler(
 
 // Cadastrar godoc
 //
-//	@Summary		Cadastrar prestador
-//	@Description	Cria um novo prestador de serviço
+//	@Summary		Solicitar cadastro de prestador
+//	@Description	Inicia o cadastro e envia um email de confirmação. Responde sempre 204 — exista ou não o email — para não revelar quais emails estão cadastrados. A conta só nasce na confirmação.
 //	@Tags			providers
 //	@Accept			json
-//	@Produce		json
-//	@Param			body	body		dto.CadastrarProviderRequest	true	"Dados do prestador"
-//	@Success		201		{object}	dto.CadastrarProviderResponse
-//	@Failure		400		{object}	map[string]string
-//	@Failure		409		{object}	map[string]string
+//	@Param			body	body	dto.CadastrarProviderRequest	true	"Dados do prestador"
+//	@Success		204
+//	@Failure		400	{object}	map[string]string
 //	@Router			/providers [post]
 func (h *ProviderHandler) Cadastrar(w http.ResponseWriter, r *http.Request) {
 	var req dto.CadastrarProviderRequest
@@ -76,27 +77,50 @@ func (h *ProviderHandler) Cadastrar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	output, err := h.cadastrar.Executar(ucprovider.CadastrarInput{
+	if err := h.solicitarCadastro.Executar(ucprovider.SolicitarCadastroInput{
 		Nome:     req.Nome,
 		Email:    req.Email,
 		Telefone: req.Telefone,
 		Senha:    req.Senha,
-	})
-	if err != nil {
-		switch {
-		case errors.Is(err, ucprovider.ErrEmailJaCadastrado):
-			responderErro(w, http.StatusConflict, err.Error())
-		default:
-			responderErroInterno(w, r, err)
-		}
+	}); err != nil {
+		responderErroInterno(w, r, err)
 		return
 	}
 
-	responderJSON(w, http.StatusCreated, dto.CadastrarProviderResponse{
-		ID:    output.ID,
-		Nome:  output.Nome,
-		Email: output.Email,
-	})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ConfirmarCadastro godoc
+//
+//	@Summary		Confirmar cadastro de prestador
+//	@Description	Conclui o cadastro a partir do token do email e cria a conta do prestador
+//	@Tags			providers
+//	@Accept			json
+//	@Param			body	body	dto.ConfirmarCadastroRequest	true	"Token de confirmação"
+//	@Success		204
+//	@Failure		400	{object}	map[string]string
+//	@Router			/providers/confirmar-cadastro [post]
+func (h *ProviderHandler) ConfirmarCadastro(w http.ResponseWriter, r *http.Request) {
+	var req dto.ConfirmarCadastroRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		responderErro(w, http.StatusBadRequest, "corpo da requisição inválido")
+		return
+	}
+	if err := req.Validar(); err != nil {
+		responderErroValidacao(w, err)
+		return
+	}
+
+	if _, err := h.confirmarCadastro.Executar(req.Token); err != nil {
+		if errors.Is(err, ucprovider.ErrCadastroInvalido) {
+			responderErro(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		responderErroInterno(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // AtualizarPreferencias godoc
@@ -222,13 +246,16 @@ func responderErroInterno(w http.ResponseWriter, r *http.Request, err error) {
 // Listar godoc
 //
 //	@Summary		Listar prestadores
-//	@Description	Lista todos os prestadores da vitrine; quem está com a agenda desativada aparece sem horários
+//	@Description	Lista uma página da vitrine; quem está com a agenda desativada aparece sem horários
 //	@Tags			providers
 //	@Produce		json
-//	@Success		200	{object}	dto.ListarPrestadoresResponse
+//	@Param			limite	query		int	false	"Itens por página (padrão 100, máximo 200)"
+//	@Param			offset	query		int	false	"Deslocamento a partir do início da lista"
+//	@Success		200		{object}	dto.ListarPrestadoresResponse
 //	@Router			/providers [get]
 func (h *ProviderHandler) Listar(w http.ResponseWriter, r *http.Request) {
-	out, err := h.listar.Executar()
+	pag := paginaDaQuery(r)
+	out, err := h.listar.Executar(pag)
 	if err != nil {
 		responderErroInterno(w, r, err)
 		return
@@ -239,7 +266,10 @@ func (h *ProviderHandler) Listar(w http.ResponseWriter, r *http.Request) {
 		prestadores = append(prestadores, resumoParaDTO(p))
 	}
 
-	responderJSON(w, http.StatusOK, dto.ListarPrestadoresResponse{Prestadores: prestadores})
+	responderJSON(w, http.StatusOK, dto.ListarPrestadoresResponse{
+		Prestadores:  prestadores,
+		PaginacaoDTO: dto.NovaPaginacao(pag, out.Total),
+	})
 }
 
 // BuscarResumo godoc

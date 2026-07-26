@@ -2,6 +2,7 @@
 // Espelham backend/internal/adapter/http/dto/admin.go
 
 import { apiGet, apiPostVazio } from './client';
+import { queryDaPagina, type Pagina, type Paginacao } from './paginacao';
 
 export interface UsuarioModeracao {
 	id: string;
@@ -11,7 +12,7 @@ export interface UsuarioModeracao {
 	aceitaAgendamentos: boolean;
 }
 
-export interface ListarUsuariosResponse {
+export interface ListarUsuariosResponse extends Paginacao {
 	usuarios: UsuarioModeracao[];
 }
 
@@ -29,7 +30,7 @@ export interface AgendamentoAdmin {
 	nomePrestador?: string;
 }
 
-export interface DetalhePrestador {
+export interface DetalhePrestador extends Paginacao {
 	id: string;
 	nome: string;
 	email: string;
@@ -40,7 +41,7 @@ export interface DetalhePrestador {
 	agendamentos: AgendamentoAdmin[];
 }
 
-export interface DetalheCliente {
+export interface DetalheCliente extends Paginacao {
 	id: string;
 	nome: string;
 	email: string;
@@ -50,26 +51,26 @@ export interface DetalheCliente {
 	agendamentos: AgendamentoAdmin[];
 }
 
-// listarPrestadores devolve todos os prestadores com o status de moderação.
-export function listarPrestadores(): Promise<ListarUsuariosResponse> {
-	return apiGet<ListarUsuariosResponse>('/admin/prestadores');
+// listarPrestadores devolve uma página de prestadores com o status de moderação.
+export function listarPrestadores(pagina?: Pagina): Promise<ListarUsuariosResponse> {
+	return apiGet<ListarUsuariosResponse>(`/admin/prestadores${queryDaPagina(pagina)}`);
 }
 
-// listarClientes devolve os clientes com conta e o status de moderação.
-export function listarClientes(): Promise<ListarUsuariosResponse> {
-	return apiGet<ListarUsuariosResponse>('/admin/clientes');
+// listarClientes devolve uma página de clientes com conta e o status de moderação.
+export function listarClientes(pagina?: Pagina): Promise<ListarUsuariosResponse> {
+	return apiGet<ListarUsuariosResponse>(`/admin/clientes${queryDaPagina(pagina)}`);
 }
 
-// detalharPrestador devolve os dados cadastrais do prestador e os agendamentos
-// que ele recebeu (leitura).
-export function detalharPrestador(id: string): Promise<DetalhePrestador> {
-	return apiGet<DetalhePrestador>(`/admin/prestadores/${id}`);
+// detalharPrestador devolve os dados cadastrais do prestador e uma página dos
+// agendamentos que ele recebeu (leitura).
+export function detalharPrestador(id: string, pagina?: Pagina): Promise<DetalhePrestador> {
+	return apiGet<DetalhePrestador>(`/admin/prestadores/${id}${queryDaPagina(pagina)}`);
 }
 
-// detalharCliente devolve os dados cadastrais do cliente e os agendamentos que
-// ele fez (leitura).
-export function detalharCliente(id: string): Promise<DetalheCliente> {
-	return apiGet<DetalheCliente>(`/admin/clientes/${id}`);
+// detalharCliente devolve os dados cadastrais do cliente e uma página dos
+// agendamentos que ele fez (leitura).
+export function detalharCliente(id: string, pagina?: Pagina): Promise<DetalheCliente> {
+	return apiGet<DetalheCliente>(`/admin/clientes/${id}${queryDaPagina(pagina)}`);
 }
 
 export function banirPrestador(id: string): Promise<void> {

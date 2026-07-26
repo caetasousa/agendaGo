@@ -6,13 +6,15 @@ import { carregarUsuarioDoPainel } from '$lib/auth-guard';
 // nunca teria acesso a ele — a checagem de autenticação só pode rodar no browser.
 export const ssr = false;
 
-export async function load(): Promise<{ prestadores: PrestadorResumo[] }> {
+export async function load(): Promise<{ prestadores: PrestadorResumo[]; total: number }> {
 	const usuario = await carregarUsuarioDoPainel();
 
 	if (usuario.tipo !== 'client') {
 		throw redirect(302, '/painel');
 	}
 
+	// primeira página da vitrine (limite padrão da API); a tela pede as
+	// seguintes sob demanda
 	const resposta = await listarPrestadores();
-	return { prestadores: resposta.prestadores };
+	return { prestadores: resposta.prestadores, total: resposta.total };
 }

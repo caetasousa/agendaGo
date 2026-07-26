@@ -32,7 +32,7 @@ func TestVitrine(t *testing.T) {
 	t.Run("lista só prestadores não banidos, com o status da agenda", func(t *testing.T) {
 		uc := ucprovider.NovoListarUseCase(novoRepo(t))
 
-		out, err := uc.Executar()
+		out, err := uc.Executar(paginaPadrao)
 		if err != nil {
 			t.Fatalf("esperava sucesso, got: %v", err)
 		}

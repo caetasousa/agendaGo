@@ -111,7 +111,7 @@ func TestLoginSocialClient(t *testing.T) {
 			t.Errorf("esperava mesmo UserID nos dois logins, got: %s e %s", primeiro.UserID, segundo.UserID)
 		}
 
-		todos, _ := amb.clients.Listar()
+		todos, _, _ := amb.clients.Listar(paginaPadrao)
 		if len(todos) != 1 {
 			t.Errorf("esperava 1 cliente só, got: %d", len(todos))
 		}

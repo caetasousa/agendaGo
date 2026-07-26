@@ -94,12 +94,12 @@ func TestModerar(t *testing.T) {
 	t.Run("lista prestadores e clientes com status de moderação", func(t *testing.T) {
 		uc := novoAmbiente().uc
 
-		ps, err := uc.ListarPrestadores()
+		ps, _, err := uc.ListarPrestadores(paginaPadrao)
 		if err != nil || len(ps) != 1 || !ps[0].Ativo || !ps[0].AceitaAgendamentos {
 			t.Errorf("esperava 1 prestador ativo que aceita agendamentos, got: %+v (%v)", ps, err)
 		}
 
-		cs, _ := uc.ListarClientes()
+		cs, _, _ := uc.ListarClientes(paginaPadrao)
 		if len(cs) != 1 || !cs[0].Ativo {
 			t.Errorf("esperava 1 cliente ativo, got: %+v", cs)
 		}
@@ -124,7 +124,7 @@ func TestModerar(t *testing.T) {
 		if _, err := login.Executar(ucauth.LoginInput{Email: "joao@email.com", Senha: "12345678"}); err != ucauth.ErrUsuarioInativo {
 			t.Errorf("esperava ErrUsuarioInativo no login do banido, got: %v", err)
 		}
-		ps, _ := uc.ListarPrestadores()
+		ps, _, _ := uc.ListarPrestadores(paginaPadrao)
 		if ps[0].Ativo {
 			t.Error("esperava prestador inativo na listagem")
 		}
@@ -237,7 +237,7 @@ func TestDetalhar(t *testing.T) {
 	t.Run("detalha o prestador com dados cadastrais e agendamentos recebidos", func(t *testing.T) {
 		uc, _, _ := novoAmbiente()
 
-		d, err := uc.Prestador("p-1", agora)
+		d, err := uc.Prestador("p-1", paginaPadrao, agora)
 		if err != nil {
 			t.Fatalf("esperava sucesso, got: %v", err)
 		}
@@ -260,7 +260,7 @@ func TestDetalhar(t *testing.T) {
 	t.Run("detalha o cliente com telefone e agendamentos feitos", func(t *testing.T) {
 		uc, _, _ := novoAmbiente()
 
-		d, err := uc.Cliente("c-1", agora)
+		d, err := uc.Cliente("c-1", paginaPadrao, agora)
 		if err != nil {
 			t.Fatalf("esperava sucesso, got: %v", err)
 		}
@@ -280,10 +280,10 @@ func TestDetalhar(t *testing.T) {
 
 	t.Run("id inexistente retorna não encontrado", func(t *testing.T) {
 		uc, _, _ := novoAmbiente()
-		if _, err := uc.Prestador("fantasma", agora); err != ucadmin.ErrProviderNaoEncontrado {
+		if _, err := uc.Prestador("fantasma", paginaPadrao, agora); err != ucadmin.ErrProviderNaoEncontrado {
 			t.Errorf("esperava ErrProviderNaoEncontrado, got: %v", err)
 		}
-		if _, err := uc.Cliente("fantasma", agora); err != ucadmin.ErrClientNaoEncontrado {
+		if _, err := uc.Cliente("fantasma", paginaPadrao, agora); err != ucadmin.ErrClientNaoEncontrado {
 			t.Errorf("esperava ErrClientNaoEncontrado, got: %v", err)
 		}
 	})
