@@ -1,10 +1,40 @@
 package config_test
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"agendago/config"
 )
+
+// A doc do swagger expõe a superfície inteira da API e não pode existir em
+// produção. O Caddy também devolve 404 nesse caminho, mas isso é configuração
+// de infraestrutura — aqui garantimos que a própria API não serve a rota.
+func TestSwaggerSoForaDeProducao(t *testing.T) {
+	requisitar := func(t *testing.T) int {
+		t.Helper()
+		r := config.NovoRouter()
+		req := httptest.NewRequest(http.MethodGet, "/swagger/index.html", nil)
+		resp := httptest.NewRecorder()
+		r.ServeHTTP(resp, req)
+		return resp.Code
+	}
+
+	t.Run("em produção a rota não existe", func(t *testing.T) {
+		t.Setenv("APP_ENV", "production")
+		if got := requisitar(t); got != http.StatusNotFound {
+			t.Errorf("esperava 404 em production, got: %d", got)
+		}
+	})
+
+	t.Run("em desenvolvimento a doc continua disponível", func(t *testing.T) {
+		t.Setenv("APP_ENV", "development")
+		if got := requisitar(t); got == http.StatusNotFound {
+			t.Error("esperava a doc montada em development, got: 404")
+		}
+	})
+}
 
 func TestCookieSeguro(t *testing.T) {
 	t.Run("retorna false sem APP_ENV", func(t *testing.T) {
