@@ -257,9 +257,14 @@ jobs:
           USUARIO: ${{ secrets.VPS_USER }}
           PORTA: ${{ secrets.VPS_PORT || '22' }}
         run: |
-          ssh -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" 'mkdir -p ~/agendago'
+          ssh -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" 'mkdir -p ~/agendago/scripts'
           scp -i ~/.ssh/id_deploy -P "$PORTA" \
             docker-compose.prod.yml Caddyfile "$USUARIO@$HOST:~/agendago/"
+          # O script de backup também é versionado: assim ele chega na VPS
+          # revisado, em vez de virar um arquivo solto que ninguém sabe de onde veio.
+          scp -i ~/.ssh/id_deploy -P "$PORTA" \
+            scripts/backup.sh "$USUARIO@$HOST:~/agendago/scripts/"
+          ssh -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" 'chmod +x ~/agendago/scripts/backup.sh'
 
       # Fixa a tag no SHA deste commit: o servidor sobe exatamente o artefato
       # que passou nos testes, não um `latest` que pode ter mudado no meio.
