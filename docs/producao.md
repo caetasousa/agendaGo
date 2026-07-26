@@ -645,12 +645,110 @@ de acesso ao erro correspondente.
 
 <br>
 
+O script `scripts/backup.sh` é **versionado e sincronizado pelo CI** — chega em
+`~/agendago/scripts/backup.sh` a cada deploy. Ele faz um dump lógico completo,
+comprime, **verifica a integridade**, **pula backups idênticos** e aplica rotação.
+
 ```bash
-docker compose -f docker-compose.prod.yml exec postgres \
-  pg_dump -U agendago agendago > backup-$(date +%F).sql
+~/agendago/scripts/backup.sh
 ```
 
-Agende por cron.
+**Agendar por cron** (como `deploy`, `crontab -e`):
+
+```cron
+0 3 * * * /home/deploy/agendago/scripts/backup.sh >> /home/deploy/backups/backup.log 2>&1
+```
+
+Variáveis opcionais: `PASTA_BACKUP` (padrão `~/backups`) e `RETENCAO_DIAS`
+(padrão `7`).
+
+### Por que full, e não incremental
+
+| Estratégia | No Postgres | Veredito |
+|---|---|---|
+| **Full** (`pg_dump`) | dump lógico completo | ✅ **usado aqui** |
+| **Incremental** | `pg_basebackup` + arquivamento de WAL (PITR) | complexidade sem ganho nesta escala |
+| **Diferencial** | não existe nativamente; só via restic/borg sobre o data dir | exige snapshot consistente |
+
+O banco é pequeno — um dump completo leva segundos e ocupa dezenas de KB. Mais
+importante: **a restauração é um comando só**, e é isso que importa no dia em que
+ela for necessária. Dump lógico ainda sobrevive a upgrade de versão maior do
+Postgres e restaura em outra máquina, o que backup físico não faz.
+
+O preço é um RPO de 24h: na pior hipótese, perde-se um dia de agendamentos.
+Quando isso deixar de ser aceitável — ou o banco passar de alguns GB —, o caminho
+é WAL archiving com [pgBackRest](https://pgbackrest.org/) ou
+[barman](https://pgbarman.org/).
+
+### Dia sem alteração não gera backup novo
+
+O script calcula o **SHA-256 do conteúdo** do dump e o guarda num arquivo
+`.sha256` ao lado. Se o hash bater com o do backup anterior, nenhum arquivo novo
+é criado — só uma linha no log:
+
+```
+2026-07-26 03:00:02  sem alteração desde agendago-2026-07-25-030001.sql.gz; nenhum backup novo criado
+```
+
+Dois detalhes fazem isso funcionar:
+
+> [!WARNING]
+> **O `pg_dump` não é reprodutível byte a byte.** Ele envolve o dump em
+> `\restrict`/`\unrestrict` com um **token aleatório** a cada execução — proteção
+> contra injeção de meta-comandos do `psql`. Dois dumps do mesmo banco intocado
+> têm hashes diferentes se você não descartar essas linhas antes de calcular.
+
+> [!CAUTION]
+> **Quando pula, o script dá `touch` no backup anterior.** Sem isso, um banco
+> parado por mais tempo que a retenção teria seu último backup apagado pela
+> rotação — e você terminaria com **zero backups**. Como consequência, a data no
+> nome do arquivo deixa de indicar quando o backup rodou; essa informação passa a
+> viver no log.
+
+Uma ressalva sobre o sentido do erro: a ordem das linhas do `COPY` acompanha a
+ordem física das tuplas, que muda com `UPDATE` e `VACUUM`. O hash pode então
+diferir sem mudança lógica — gerando um backup a mais, o que é inofensivo. O
+inverso (dados diferentes com o mesmo hash) não acontece.
+
+O `.sha256` tem um segundo uso, mais valioso que a deduplicação: **verificar
+corrupção silenciosa** do arquivo com o tempo, e conferir se a cópia enviada para
+fora da VPS chegou íntegra.
+
+> [!CAUTION]
+> **Backup que mora só na VPS morre com a VPS.** Se o disco corromper ou a conta
+> for suspensa, os sete dumps vão junto. Puxe uma cópia para fora, da sua
+> máquina:
+>
+> ```bash
+> rsync -avz -e "ssh -i ~/.ssh/agendago_deploy" \
+>   deploy@SEU_IP:~/backups/ ~/agendago-backups/
+> ```
+>
+> E lembre que o dump tem **email e telefone de pessoas reais** — o script já
+> aplica `chmod 600`, mas fora da VPS a proteção é sua.
+
+### Testar a restauração
+
+> [!IMPORTANT]
+> **Backup nunca restaurado é só um arquivo com esperança dentro.** Rode isto ao
+> menos uma vez, e sempre que mudar algo no processo:
+
+```bash
+docker run -d --name pg-teste \
+  -e POSTGRES_PASSWORD=teste -e POSTGRES_USER=agendago -e POSTGRES_DB=agendago \
+  postgres:16-alpine
+
+gzip -dc ~/backups/agendago-AAAA-MM-DD-HHMM.sql.gz \
+  | docker exec -i pg-teste psql -U agendago -d agendago
+
+docker exec pg-teste psql -U agendago -d agendago -c "\dt"
+docker exec pg-teste psql -U agendago -d agendago -c "select count(*) from providers;"
+
+docker rm -f pg-teste
+```
+
+Restaura num Postgres descartável, sem tocar na produção. Você deve ver as
+**15 tabelas** e as contagens compatíveis com o que existe no ar.
 
 ⚠️ **Backup de VM do provedor não substitui isto.** Ele restaura a máquina
 inteira — serve para desastre, não para "recuperar o banco de ontem" nem para
