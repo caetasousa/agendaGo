@@ -29,6 +29,21 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     logging: *logging
+    # O entrypoint do Postgres sobe como root e larga privilégio para o usuário
+    # `postgres`: por isso ele não pode ficar sem NENHUMA capability. Estas cinco
+    # são o mínimo para essa troca de usuário e para ajustar o dono do datadir.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    pids_limit: 512
+    mem_limit: 512m
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -63,12 +78,29 @@ services:
     image: ${IMAGE_REPO:-ghcr.io/caetasousa}/agendago-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
     logging: *logging
+    # Binário estático rodando como usuário sem privilégio: não precisa de
+    # capability nenhuma nem de escrever em disco. read_only impede que um
+    # comprometimento deixe qualquer coisa gravada no container.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    pids_limit: 256
+    # Teto, não reserva. Argon2id usa ~19 MiB por hash simultâneo; suba se o
+    # log mostrar OOM em rajada de login.
+    mem_limit: 384m
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: ${POSTGRES_DB}
-      DB_USER: ${POSTGRES_USER}
-      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      # Usuário da APLICAÇÃO: só DML, sem poder criar/alterar/derrubar tabela.
+      # Sem DB_USER definido, cai no dono do banco (comportamento antigo) — ver
+      # scripts/criar-usuario-app.sh e docs/producao.md.
+      DB_USER: ${DB_USER:-${POSTGRES_USER}}
+      DB_PASSWORD: ${DB_PASSWORD:-${POSTGRES_PASSWORD}}
       # production liga o atributo Secure do cookie de sessão (exige HTTPS,
       # que o Caddy fornece).
       APP_ENV: production
@@ -78,9 +110,14 @@ services:
       FRONTEND_ORIGIN: https://${DOMINIO}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_SENHA: ${ADMIN_SENHA}
-      # Rate limiting por IP (padrão 10/min quando ausente). NÃO deixe 0 em produção.
+      # Rate limiting. NÃO deixe nenhum em 0 em produção — cada um cobre um
+      # ângulo: por IP (anônimo), por conta (brute-force com IPs rotativos) e
+      # por sessão (abuso depois do login).
       RATE_LIMIT_LOGIN_POR_MINUTO: ${RATE_LIMIT_LOGIN_POR_MINUTO:-10}
       RATE_LIMIT_CONVIDADO_POR_MINUTO: ${RATE_LIMIT_CONVIDADO_POR_MINUTO:-10}
+      RATE_LIMIT_PUBLICO_POR_MINUTO: ${RATE_LIMIT_PUBLICO_POR_MINUTO:-60}
+      RATE_LIMIT_LOGIN_POR_CONTA: ${RATE_LIMIT_LOGIN_POR_CONTA:-5}
+      RATE_LIMIT_AUTENTICADO_POR_MINUTO: ${RATE_LIMIT_AUTENTICADO_POR_MINUTO:-60}
       # SMTP real (ex.: Brevo). Vazio desliga o envio (emails só são logados).
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT:-587}
@@ -104,6 +141,27 @@ services:
     image: ${IMAGE_REPO:-ghcr.io/caetasousa}/agendago-web:${IMAGE_TAG:-latest}
     restart: unless-stopped
     logging: *logging
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    pids_limit: 256
+    mem_limit: 256m
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
     environment:
       # adapter-node atrás de proxy: conhece a origem pública e confia nos
       # cabeçalhos X-Forwarded-* do Caddy.
@@ -115,6 +173,16 @@ services:
     image: caddy:2-alpine
     restart: unless-stopped
     logging: *logging
+    # Precisa só de NET_BIND_SERVICE, para abrir as portas 80 e 443 (abaixo de
+    # 1024). Escreve em /data (certificados), então não pode ser read_only.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    pids_limit: 256
+    mem_limit: 128m
     ports:
       - '80:80'
       - '443:443'
