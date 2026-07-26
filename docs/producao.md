@@ -35,15 +35,39 @@ login quebraria silenciosamente.)
 
 Emails saem por um SMTP externo (ex.: Brevo) — não há servidor de email na stack.
 
+## O host não recebe o código-fonte
+
+As imagens de produção (API, web e migrations) são buildadas pelo **CI** e
+publicadas no **GHCR** (`ghcr.io/caetasousa/agendago-*`). O
+`docker-compose.prod.yml` só as consome — ele não tem nenhuma diretiva `build`.
+Na VPS ficam **três arquivos**, e nada além disso:
+
+```
+~/agendago/
+├── docker-compose.prod.yml
+├── Caddyfile
+└── .env
+```
+
+Isso não é só arrumação: a VPS não precisa de Go, Node nem do repositório, o
+redeploy vira um `pull` de segundos em vez de uma compilação de minutos, e uma
+máquina de 1 vCPU dá conta (buildar SvelteKit + Go num core único, com o site
+no ar, é o caminho mais rápido para um deploy que derruba o serviço).
+
 ## Opções de hospedagem (grátis / barato)
 
 Como tudo roda em `docker compose`, o encaixe mais direto é **um VPS pequeno**.
-Precisa de ~2 GB de RAM (o build do Go + npm aperta em 1 GB; use 2 GB ou ligue
-swap).
+Como o host só puxa imagens prontas, ~1 GB de RAM basta para rodar (Postgres +
+API + Node + Caddy); 2 GB dá folga confortável.
+
+> **Arquitetura:** o CI publica imagens **`linux/amd64`**. Hosts ARM (Oracle
+> Ampere, Hetzner CAX) exigiriam adicionar `linux/arm64` ao `platforms` do job
+> `publicar-imagens` em `.github/workflows/ci.yml`.
 
 | Opção | Custo | Observações |
 |---|---|---|
-| **Oracle Cloud — Always Free** | **R$0** (para sempre) | VM ARM Ampere (até 4 vCPU / 24 GB). Genuinamente grátis; pede cartão no cadastro e a disponibilidade de ARM varia por região. As imagens do projeto são multi-arch (rodam em ARM64). |
+| **Hostinger — KVM 1** | ~R$30/mês (plano de 24 meses; ~R$60 na renovação) | 1 vCPU / 4 GB / 50 GB NVMe, x86, IP dedicado e root completo. Sobra folga: o host não builda nada. |
+| **Oracle Cloud — Always Free** | **R$0** (para sempre) | VM ARM Ampere (até 4 vCPU / 24 GB). Genuinamente grátis; pede cartão no cadastro e a disponibilidade de ARM varia por região. Exige publicar imagens `arm64` (veja o aviso acima). |
 | **Hetzner Cloud** | ~€3,8–4,5/mês (~R$25/mês) | CAX11 (ARM, 2 vCPU/4 GB) ou CX22 (x86). Ótimo custo, painel simples. Pede verificação de identidade. |
 | **DigitalOcean / Vultr / Linode** | ~US$4–6/mês | Droplets fáceis, costumam dar crédito inicial para contas novas. |
 
@@ -75,34 +99,100 @@ confiável para um IP puro). Se você não tem um domínio, use o
 2. No campo **current ip** dele, coloque o IP público do seu VPS e salve.
 3. Pronto: `agendago.duckdns.org` aponta para o seu host.
 
-### 3. Clone e configure
+### 3. Baixe os três arquivos e configure
+
+Sem clone: só o compose, o Caddyfile e o `.env`.
 
 ```bash
-git clone https://github.com/<voce>/agendaGo.git && cd agendaGo
-cp .env.prod.example .env
+mkdir -p ~/agendago && cd ~/agendago
+BASE=https://raw.githubusercontent.com/caetasousa/agendaGo/main
+curl -O $BASE/docker-compose.prod.yml
+curl -O $BASE/Caddyfile
+curl -o .env $BASE/.env.prod.example
+
 nano .env      # preencha DOMINIO, senhas, SMTP (veja os comentários do arquivo)
 ```
 
 No mínimo ajuste: `DOMINIO`, `POSTGRES_PASSWORD`, `ADMIN_SENHA` e o bloco SMTP.
 
-### 4. Suba
+(Se o repositório for privado, o `curl` não funciona — use `scp` da sua máquina:
+`scp docker-compose.prod.yml Caddyfile usuario@IP:~/agendago/`.)
+
+### 4. Autentique no GHCR (se as imagens forem privadas)
+
+Pacotes publicados no GHCR nascem **privados**, mesmo em repositório público.
+Escolha um dos caminhos:
+
+- **Tornar públicas** (mais simples): GitHub → seu perfil → *Packages* → cada
+  pacote `agendago-*` → *Package settings* → *Change visibility* → Public. A
+  VPS então dá `pull` sem login.
+- **Manter privadas**: crie um *classic PAT* só com o escopo `read:packages` e,
+  na VPS: `echo SEU_PAT | docker login ghcr.io -u caetasousa --password-stdin`.
+
+### 5. Suba
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 ```
 
-Isso builda as imagens de produção, roda as migrations (job Flyway), sobe API +
-web e o Caddy — que pega o certificado HTTPS sozinho no primeiro acesso.
+Isso baixa as imagens publicadas pelo CI, roda as migrations (job Flyway), sobe
+API + web e o Caddy — que pega o certificado HTTPS sozinho no primeiro acesso.
 
-### 5. Verifique
+### 6. Verifique
 
 ```bash
-curl -I https://SEU_DOMINIO/api/health     # 200, e cadeado válido
+# saúde da API (GET, não HEAD: a rota é registrada como GET e devolveria 405)
+curl -s https://SEU_DOMINIO/api/health              # {"status":"ok"}
+
+# HTTP tem que redirecionar para HTTPS
+curl -sI http://SEU_DOMINIO/ | head -1              # 308 Permanent Redirect
+
+# HSTS e demais cabeçalhos de segurança
+curl -sI https://SEU_DOMINIO/ | grep -i strict-transport
+
+# a documentação Swagger não pode estar exposta
+curl -so /dev/null -w '%{http_code}\n' https://SEU_DOMINIO/api/swagger/index.html   # 404
 ```
 
 Abra `https://SEU_DOMINIO` no navegador, crie um prestador, ative a agenda,
 agende como convidado e confirme que o email chega (e que o link dele aponta
-para o seu domínio, não para localhost).
+para o seu domínio, não para localhost). No DevTools, confirme que o cookie
+`agendago_session` veio com **Secure**, **HttpOnly** e **SameSite=Lax**, e que
+as chamadas XHR vão para `https://SEU_DOMINIO/api/...` — nunca para
+`localhost:8080`.
+
+### Ensaiar a VPS na sua máquina
+
+O jeito fiel de ensaiar é reproduzir o host: uma pasta **fora do repositório**
+com os mesmos três arquivos. Assim o comando é idêntico ao que você vai rodar
+no servidor, sem flag nenhuma, e o `.env` de desenvolvimento fica intocado.
+
+```bash
+mkdir -p ~/agendago-vps && cd ~/agendago-vps
+cp ~/agendaGo/docker-compose.prod.yml ~/agendaGo/Caddyfile .
+cp ~/agendaGo/.env.prod.example .env
+# no .env: DOMINIO=localhost (o Caddy usa a CA interna dele, sem Let's Encrypt
+# e sem DNS) e senhas descartáveis.
+
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Enquanto o CI ainda não publicou as imagens, builde-as antes com as tags que o
+compose procura — é o único passo que **não** existe na VPS de verdade (lá o
+`up` puxa do GHCR sozinho):
+
+```bash
+cd ~/agendaGo
+docker build -t ghcr.io/caetasousa/agendago-api:latest        -f backend/Dockerfile.prod       backend/
+docker build -t ghcr.io/caetasousa/agendago-web:latest        -f frontend/Dockerfile.prod      frontend/
+docker build -t ghcr.io/caetasousa/agendago-migrations:latest -f backend/Dockerfile.migrations backend/
+```
+
+Depois é só `https://localhost` no navegador (aceitando o aviso do certificado,
+que é da CA interna) e `curl -k` nos comandos de verificação. Mudou código?
+Rebuilde a imagem e rode `up -d` de novo na pasta do ensaio. Mudou o compose ou
+o Caddyfile? Copie-os outra vez — a pasta é uma cópia, não um link.
 
 ## Checklist de go-live (segurança)
 
@@ -114,7 +204,9 @@ Antes de anunciar o link, confirme:
 - [ ] **`POSTGRES_PASSWORD` forte** — idem.
 - [ ] **SMTP com remetente verificado** — nunca um `@gmail/@outlook/@yahoo` (DMARC → spam). Se você já usou uma chave SMTP em outro lugar/commit, **rotacione**.
 - [ ] **Postgres sem porta pública** — o compose de produção já não expõe 5432; confirme que o firewall também não.
-- [ ] **Swagger fora do ar** — o Caddyfile já responde 404 em `/api/swagger*`.
+- [ ] **Swagger fora do ar** — duas camadas: com `APP_ENV=production` a API nem
+      monta a rota (`config.NovoRouter`), e o Caddyfile responde 404 em
+      `/api/swagger*`. Confirme com o `curl` do passo 6.
 
 ## Variáveis de ambiente
 
@@ -136,20 +228,95 @@ O `docker-compose.prod.yml` já injeta na API os valores certos a partir do
 | `SMTP_STARTTLS` | não | `true` | exige STARTTLS |
 | `EMAIL_REMETENTE/_NOME` | não | — | remetente (precisa ser verificado no provedor) |
 | `EMAIL_REPLY_TO` | não | — | endereço de resposta (seu email pessoal) |
+| `GOOGLE_CLIENT_ID/SECRET` | não | — | login social; **vazio desliga** o recurso (rotas e botão somem) |
+| `GOOGLE_REDIRECT_URL` | se usar Google | — | callback **com o prefixo `/api`** (veja abaixo) |
+
+### Login social com Google
+
+Duas armadilhas, ambas silenciosas até o usuário tentar entrar:
+
+1. **A URL de callback leva `/api`.** O callback é rota da API
+   (`/auth/google/callback`), e atrás do Caddy a API vive sob `/api`. O valor
+   correto é `https://SEU_DOMINIO/api/auth/google/callback`. Sem o prefixo, o
+   Google devolve o usuário no frontend, que não tem essa rota: o consentimento
+   funciona e o login morre num 404.
+2. **A URL precisa estar cadastrada no Google Cloud Console**, em *Authorized
+   redirect URIs* do cliente OAuth, **idêntica** (mesmo esquema, sem barra
+   final). Divergiu, o Google recusa com `redirect_uri_mismatch` antes mesmo da
+   tela de consentimento. O mesmo cliente aceita várias URIs, então dev, ensaio
+   local e produção convivem:
+
+   ```
+   http://localhost:8080/auth/google/callback      (dev, API direta)
+   https://localhost/api/auth/google/callback      (ensaio da VPS)
+   https://SEU_DOMINIO/api/auth/google/callback    (produção)
+   ```
+
+Para conferir sem abrir o navegador, veja o `redirect_uri` que a API manda ao
+Google:
+
+```bash
+curl -sD - -o /dev/null https://SEU_DOMINIO/api/auth/client/google/start | grep -i location
+```
+
+### Entrega de email
+
+O remetente **não pode** ser `@gmail`/`@outlook`/`@yahoo`: quem envia é a Brevo,
+o DMARC desses provedores não a autoriza, e a mensagem cai em spam ou é
+rejeitada. É preciso um endereço de **domínio próprio** autenticado na Brevo
+(SPF + DKIM). Um subdomínio DuckDNS não resolve — você não controla o DNS de
+`duckdns.org`, então não consegue publicar os registros. Se for usar email de
+verdade (e é: confirmação de cadastro, recuperação de senha e cancelamento
+dependem dele), inclua um domínio no orçamento.
+
+Para ver os emails localmente sem enviar nada, aponte o SMTP para um Mailpit —
+lembrando de **zerar usuário e senha**, porque o Mailpit não faz AUTH e a API
+falha com `server does not support SMTP AUTH`:
+
+```bash
+docker run -d --name mailpit --network agendago-vps_default -p 8025:8025 axllent/mailpit
+SMTP_HOST=mailpit SMTP_PORT=1025 SMTP_STARTTLS=false SMTP_USER= SMTP_PASSWORD= \
+  docker compose -f docker-compose.prod.yml up -d api
+# caixa de entrada em http://localhost:8025
+```
+
+Para validar as credenciais reais da Brevo sem disparar mensagem, basta o
+handshake de autenticação (`235` = ok):
+
+```bash
+U=$(printf '%s' "$SMTP_USER" | base64 -w0); P=$(printf '%s' "$SMTP_PASSWORD" | base64 -w0)
+printf 'EHLO teste\r\nAUTH LOGIN\r\n%s\r\n%s\r\nQUIT\r\n' "$U" "$P" \
+  | openssl s_client -quiet -starttls smtp -connect smtp-relay.brevo.com:587 2>/dev/null | grep '^235'
+```
 
 ## Atualizar (redeploy)
 
+Todo push na `main` que passa nos testes publica imagens `:latest` novas. Na
+VPS, o redeploy inteiro é:
+
 ```bash
-git pull
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 O Flyway aplica só as migrations novas; a API sobe depois. O desligamento é
 gracioso (a API dá até 10s para as requisições em andamento terminarem antes de
 sair), então o redeploy não derruba requests no meio.
 
-> Se você **mudar o `DOMINIO`**, rebuilde a imagem do front — `PUBLIC_API_URL` é
-> resolvida em tempo de build. O `--build` acima já cobre isso.
+**Rollback** — o CI também tagueia cada imagem com o SHA do commit. Para voltar,
+fixe a versão no `.env` e suba de novo:
+
+```bash
+echo 'IMAGE_TAG=<sha-do-commit-bom>' >> .env
+docker compose -f docker-compose.prod.yml up -d
+```
+
+(Migrations não voltam sozinhas: se o commit ruim adicionou uma migration, o
+rollback do schema é manual.)
+
+> Trocar o `DOMINIO` **não** exige rebuild do front: `PUBLIC_API_URL` é assada
+> como `/api` (relativa), então a imagem serve qualquer domínio. Basta ajustar o
+> `.env` e subir de novo — o Caddy pega o certificado do novo nome.
 
 ## Manutenção
 
@@ -179,30 +346,43 @@ o caminho — tokens não aparecem no log), `status`, `duracao` e `ip` (o do
 cliente real, resolvido do `X-Real-IP` que o Caddy define). O mesmo `request_id`
 liga a linha de acesso ao log de erro/segurança da mesma requisição.
 
-## Build manual das imagens (sem compose)
+## Build manual das imagens (sem CI)
 
-Para quem for orquestrar de outro jeito (Kubernetes, PaaS), as imagens de
-produção são autônomas:
+O CI faz isso a cada push na `main`, mas as três imagens são autônomas e podem
+ser buildadas na sua máquina — útil para testar antes de publicar, ou para
+orquestrar de outro jeito (Kubernetes, PaaS):
 
 ```bash
 # API — binário Go estático, usuário sem privilégios, healthcheck em /health
 docker build -f backend/Dockerfile.prod -t agendago-api backend/
 
-# Web — PUBLIC_API_URL resolvida em tempo de BUILD
-docker build -f frontend/Dockerfile.prod \
-  --build-arg PUBLIC_API_URL=https://api.seudominio.com \
-  -t agendago-web frontend/
+# Migrations — Flyway com os .sql embutidos
+docker build -f backend/Dockerfile.migrations -t agendago-migrations backend/
+
+# Web — servidor Node do adapter-node. O padrão de PUBLIC_API_URL (/api) serve
+# para qualquer domínio atrás do Caddy; só passe --build-arg se front e API
+# ficarem em origens diferentes.
+docker build -f frontend/Dockerfile.prod -t agendago-web frontend/
 ```
 
-As migrations de `backend/migrations/` devem rodar **antes** de subir a API:
+Para empurrar manualmente para o GHCR, taguear com o destino e dar push:
 
 ```bash
-docker run --rm -v ./backend/migrations:/flyway/sql \
-  -e FLYWAY_URL=jdbc:postgresql://SEU_HOST:5432/agendago \
-  -e FLYWAY_USER=... -e FLYWAY_PASSWORD=... \
-  flyway/flyway:10-alpine migrate
+docker tag agendago-api ghcr.io/caetasousa/agendago-api:latest
+docker push ghcr.io/caetasousa/agendago-api:latest
 ```
 
-Neste modo você mesmo precisa terminar o TLS (proxy reverso na frente), garantir
-a mesma origem para front e API (ou lidar com o cookie cross-site), e não expor
-o Postgres nem o Swagger publicamente.
+As migrations devem rodar **antes** de subir a API — a imagem já carrega os
+`.sql`, então não precisa de volume:
+
+```bash
+docker run --rm \
+  -e FLYWAY_URL=jdbc:postgresql://SEU_HOST:5432/agendago \
+  -e FLYWAY_USER=... -e FLYWAY_PASSWORD=... \
+  agendago-migrations migrate
+```
+
+Fora do compose de produção você mesmo precisa terminar o TLS (proxy reverso na
+frente), garantir a mesma origem para front e API (ou lidar com o cookie
+cross-site) e não expor o Postgres. O Swagger não exige cuidado extra: basta
+`APP_ENV=production` na API, que a rota deixa de existir.

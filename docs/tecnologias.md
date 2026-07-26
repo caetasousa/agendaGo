@@ -88,6 +88,8 @@ Validação declarativa via struct tags — em vez de escrever `if` para cada ca
 
 Gera a especificação OpenAPI a partir de comentários no código (`@Summary`, `@Router` etc., visíveis em `internal/adapter/http/handler/provider.go`). A documentação nunca fica desatualizada em relação ao handler, porque é gerada dele.
 
+É **ferramenta de desenvolvimento**: a UI publica a superfície inteira da API para quem alcançar a porta. Por isso `config.NovoRouter` só monta `/swagger/*` fora de produção — em produção a rota não existe, e o 404 do Caddy vira segunda linha de defesa em vez de única (a API pode ser servida por outro proxy, ou alcançada de dentro da rede do compose). O teste `test/config/server_test.go` trava esse comportamento.
+
 **Para estudar:**
 - [Swaggo — README oficial](https://github.com/swaggo/swag) (sintaxe das anotações)
 - [OpenAPI Specification](https://swagger.io/specification/) (o formato por trás do Swagger)
@@ -191,11 +193,24 @@ Cada mudança de schema é um arquivo SQL versionado (`backend/migrations/V1__..
 
 ### Docker Compose
 
-Orquestra Postgres + Flyway + API (com hot reload via [Air](https://github.com/air-verse/air)) + frontend em um único `docker compose up`, documentado no `docker-compose.yml` da raiz. Produção tem um compose próprio (`docker-compose.prod.yml`) com as imagens `Dockerfile.prod` e o Caddy na frente — ver `docs/producao.md`.
+Orquestra Postgres + Flyway + API (com hot reload via [Air](https://github.com/air-verse/air)) + frontend em um único `docker compose up`, documentado no `docker-compose.yml` da raiz. Produção tem um compose próprio (`docker-compose.prod.yml`) que **não builda nada**: consome as imagens já publicadas no GHCR e põe o Caddy na frente — ver `docs/producao.md`.
 
 **Para estudar:**
 - [Docker Compose — visão geral](https://docs.docker.com/compose/)
 - [Docker — build multi-stage](https://docs.docker.com/build/building/multi-stage/) (como o `Dockerfile.prod` gera uma imagem final mínima)
+
+### Registry de imagens: GHCR (GitHub Container Registry)
+
+O CI builda as três imagens de produção (`agendago-api`, `agendago-web`, `agendago-migrations`) e publica no GHCR a cada push na `main` que passa nos testes — job `publicar-imagens` em `.github/workflows/ci.yml`. É por isso que o `docker-compose.prod.yml` só tem `image:` e nenhum `build:`.
+
+A decisão é sobre **o que precisa existir no servidor**. Buildando no host, a VPS precisaria do repositório inteiro, de toolchain Go e Node, e de RAM/CPU para compilar — num plano de 1 vCPU, cada deploy competiria com o site no ar por minutos. Puxando imagem pronta, o host guarda três arquivos (`docker-compose.prod.yml`, `Caddyfile`, `.env`), o deploy é um `pull` de segundos, e o que roda em produção é exatamente o artefato que passou no CI — não uma recompilação que pode divergir. Como brinde, a tag por SHA do commit dá rollback sem rebuild.
+
+Detalhe que morde: pacotes no GHCR nascem **privados** mesmo em repositório público — ou a visibilidade é trocada nas configurações do pacote, ou o host precisa de `docker login` com um PAT de `read:packages`.
+
+**Para estudar:**
+- [GitHub Packages — Working with the Container registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
+- [docker/build-push-action](https://github.com/docker/build-push-action)
+- [GitHub Actions — permissões do GITHUB_TOKEN](https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication) (por que o job declara `packages: write`)
 
 ### Caddy (proxy reverso de produção)
 
@@ -263,7 +278,14 @@ Framework utility-first: classes como `rounded-md border px-4` compõem o design
 
 ### adapter-node (build de produção)
 
-O SvelteKit delega o formato do build final a um *adapter*. O projeto usa o `@sveltejs/adapter-node` (configurado em `frontend/vite.config.ts`): `npm run build` gera um servidor Node autônomo em `build/index.js`, empacotado na imagem `frontend/Dockerfile.prod`. Atenção ao detalhe de `PUBLIC_API_URL`: por ser `import.meta.env` do Vite, o valor é **embutido no build** — em produção ela é um argumento de build da imagem, não uma env de runtime. Ver `docs/producao.md`.
+O SvelteKit delega o formato do build final a um *adapter*. O projeto usa o `@sveltejs/adapter-node` (configurado em `frontend/vite.config.ts`): `npm run build` gera um servidor Node autônomo em `build/index.js`, empacotado na imagem `frontend/Dockerfile.prod`. Atenção ao detalhe de `PUBLIC_API_URL`: por ser `import.meta.env` do Vite, o valor é **embutido no build** — é um argumento de build da imagem, não uma env de runtime.
+
+Dois detalhes que já custaram caro nesse caminho:
+
+- **`envPrefix: 'PUBLIC_'` em `frontend/vite.config.ts` é obrigatório.** O Vite só expõe variáveis com prefixo `VITE_` por padrão, e o plugin do SvelteKit **não** ajusta isso para quem usa `import.meta.env` (o prefixo `PUBLIC_` só é convenção nos módulos `$env/*`). Sem a linha, `import.meta.env.PUBLIC_API_URL` sai `undefined` e o `frontend/src/lib/api/client.ts` cai calado no fallback `http://localhost:8080` — o build passa, os testes passam, e só o site publicado quebra.
+- **O valor padrão é `/api`, relativo.** Uma URL absoluta amarraria a imagem a um domínio, o que impede publicá-la pronta no registry. Como o Caddy serve frontend e API na mesma origem, o caminho relativo resolve no domínio corrente; funciona porque toda página que consome a API declara `ssr = false`, então o `fetch` nunca roda no servidor Node (onde não haveria base para resolver o caminho).
+
+Ver `docs/producao.md`.
 
 **Para estudar:**
 - [SvelteKit — Adapters](https://svelte.dev/docs/kit/adapters)
