@@ -15,6 +15,10 @@ Thumbs.db
 /test-results/
 /playwright-report/
 
+# Scripts avulsos de screenshot/depuração escritos com a API do Playwright
+# (uso pontual, não fazem parte da suíte em frontend/e2e/)
+/frontend/shot*.mjs
+
 # Variáveis de ambiente
 .env
 .env.*
