@@ -506,6 +506,7 @@ entra sem senha, e tem acesso ao Docker.
 | `VPS_PORT` | 🔒 Secrets | opcional, padrão `22` |
 | `VPS_KNOWN_HOSTS` | 🔒 Secrets | saída de `ssh-keyscan SEU_IP` |
 | `DOMINIO` | 📢 Variables | seu domínio, para a verificação pós-deploy |
+| `BACKUP_CRON` | 📢 Variables | opcional; horário do backup diário (padrão `0 3 * * *`) |
 
 > [!TIP]
 > `VPS_KNOWN_HOSTS` é opcional mas recomendado: sem ele o CI aceita a identidade
@@ -653,14 +654,23 @@ comprime, **verifica a integridade**, **pula backups idênticos** e aplica rota�
 ~/agendago/scripts/backup.sh
 ```
 
-**Agendar por cron** (como `deploy`, `crontab -e`):
+> [!TIP]
+> **O agendamento é instalado pelo próprio deploy.** O job `implantar` registra
+> a entrada no crontab do usuário `deploy` de forma idempotente — reescreve só a
+> linha do agendaGo e preserva qualquer outra tarefa. Não há passo manual: um
+> cron esquecido não avisa, e a descoberta viria no dia em que o backup fosse
+> necessário.
 
-```cron
-0 3 * * * /home/deploy/agendago/scripts/backup.sh >> /home/deploy/backups/backup.log 2>&1
-```
+Para mudar o horário, crie a variável de repositório **`BACKUP_CRON`**
+(*Settings → Secrets and variables → Actions → Variables*) com uma expressão
+cron, por exemplo `30 4 * * *`. O padrão é `0 3 * * *`.
 
-Variáveis opcionais: `PASTA_BACKUP` (padrão `~/backups`) e `RETENCAO_DIAS`
-(padrão `7`).
+> [!WARNING]
+> Como o crontab passa a ser gerenciado pelo CI, **editar a linha do agendaGo à
+> mão na VPS não adianta** — o próximo deploy a reescreve. Mude pela variável.
+
+Variáveis opcionais do script: `PASTA_BACKUP` (padrão `~/backups`) e
+`RETENCAO_DIAS` (padrão `7`).
 
 ### Por que full, e não incremental
 
