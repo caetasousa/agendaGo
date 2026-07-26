@@ -103,10 +103,11 @@ const maxBytesCorpo = 1 << 20 // 1 MiB
 
 // NovoRouter cria um roteador chi com middlewares de request ID, IP real
 // (atrás do proxy), log estruturado de acesso, recuperação de panics, limite
-// de corpo, CORS e swagger. A ordem importa: RequestID primeiro (para o log e
-// os handlers terem o id); IPReal antes do log e do rate limit por IP (para
-// verem o cliente, não o proxy); o log de acesso por fora do Recoverer (para
-// registrar também os 500 que o Recoverer produz).
+// de corpo e CORS; a doc do swagger só é montada fora de produção. A ordem
+// importa: RequestID primeiro (para o log e os handlers terem o id); IPReal
+// antes do log e do rate limit por IP (para verem o cliente, não o proxy); o
+// log de acesso por fora do Recoverer (para registrar também os 500 que o
+// Recoverer produz).
 func NovoRouter() *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -120,6 +121,13 @@ func NovoRouter() *chi.Mux {
 		AllowedHeaders:   []string{"Content-Type"},
 		AllowCredentials: true,
 	}))
-	r.Get("/swagger/*", httpSwagger.WrapHandler)
+	// A doc interativa é ferramenta de desenvolvimento: publica a superfície
+	// inteira da API (rotas, formatos, exemplos) para quem alcançar a porta.
+	// Em produção a rota nem chega a existir — o 404 do Caddy passa a ser a
+	// segunda linha de defesa, não a única, e a API continua protegida se for
+	// servida por outro proxy ou alcançada de dentro da rede interna.
+	if !EhProducao() {
+		r.Get("/swagger/*", httpSwagger.WrapHandler)
+	}
 	return r
 }
