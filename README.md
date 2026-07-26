@@ -92,12 +92,13 @@ Ele entra pela [mesma tela de login](http://localhost:5173/login) e cai no paine
 | Método | Rota | Descrição |
 |--------|------|-----------|
 | `GET` | [`/health`](http://localhost:8080/swagger/index.html#/infra/get_health) | Status do servidor |
-| `POST` | [`/providers`](http://localhost:8080/swagger/index.html#/providers/post_providers) | Cadastrar prestador |
+| `POST` | [`/providers`](http://localhost:8080/swagger/index.html#/providers/post_providers) | Solicitar cadastro de prestador (envia email de confirmação) |
+| `POST` | [`/providers/confirmar-cadastro`](http://localhost:8080/swagger/index.html#/providers/post_providers_confirmar_cadastro) | Confirmar cadastro de prestador pelo token do email |
 | `POST` | [`/clients`](http://localhost:8080/swagger/index.html#/clients/post_clients) | Solicitar cadastro de cliente (envia email de confirmação) |
-| `POST` | [`/clients/confirmar-cadastro`](http://localhost:8080/swagger/index.html#/clients/post_clients_confirmar_cadastro) | Confirmar cadastro pelo token do email |
+| `POST` | [`/clients/confirmar-cadastro`](http://localhost:8080/swagger/index.html#/clients/post_clients_confirmar_cadastro) | Confirmar cadastro de cliente pelo token do email |
 | `GET` | [`/clients/pre-cadastro/{token}`](http://localhost:8080/swagger/index.html#/clients/get_clients_pre_cadastro__token_) | Consultar dados de pré-cadastro para pré-preencher o formulário |
 | `POST` | [`/clients/pre-cadastro/{token}`](http://localhost:8080/swagger/index.html#/clients/post_clients_pre_cadastro__token_) | Concluir cadastro a partir do pré-cadastro, sem segunda confirmação |
-| `GET` | [`/providers`](http://localhost:8080/swagger/index.html#/providers/get_providers) | Listar prestadores (vitrine) |
+| `GET` | [`/providers`](http://localhost:8080/swagger/index.html#/providers/get_providers) | Listar prestadores (vitrine, paginada) |
 | `GET` | [`/providers/{id}`](http://localhost:8080/swagger/index.html#/providers/get_providers__id_) | Buscar prestador (página pública de agendamento) |
 | `GET` | [`/providers/{id}/slots`](http://localhost:8080/swagger/index.html#/appointments/get_providers__id__slots) | Consultar horários livres de um prestador |
 | `POST` | [`/agendamentos/convidado`](http://localhost:8080/swagger/index.html#/appointments/post_agendamentos_convidado) | Agendar sem cadastro (nome/e-mail/telefone) |
@@ -137,7 +138,7 @@ Ele entra pela [mesma tela de login](http://localhost:5173/login) e cai no paine
 | `GET` | [`/providers/me/agenda`](http://localhost:8080/swagger/index.html#/availability/get_providers_me_agenda) | Consultar agenda resolvida (por período) |
 | `PUT` | [`/providers/me/dias/{data}`](http://localhost:8080/swagger/index.html#/availability/put_providers_me_dias__data_) | Definir um dia (bloqueio ou horários personalizados) |
 | `DELETE` | [`/providers/me/dias/{data}`](http://localhost:8080/swagger/index.html#/availability/delete_providers_me_dias__data_) | Remover a definição de um dia (volta ao padrão) |
-| `GET` | [`/providers/me/agendamentos`](http://localhost:8080/swagger/index.html#/appointments/get_providers_me_agendamentos) | Listar agendamentos recebidos |
+| `GET` | [`/providers/me/agendamentos`](http://localhost:8080/swagger/index.html#/appointments/get_providers_me_agendamentos) | Listar agendamentos recebidos (paginado) |
 | `GET` | [`/providers/me/slots`](http://localhost:8080/swagger/index.html#/appointments/get_providers_me_slots) | Slots livres da própria agenda (inclusive fechada ao público) |
 | `POST` | [`/providers/me/agendamentos`](http://localhost:8080/swagger/index.html#/appointments/post_providers_me_agendamentos) | Marcar para um cliente que ligou |
 | `POST` | [`/agendamentos/{id}/confirmar`](http://localhost:8080/swagger/index.html#/appointments/post_agendamentos__id__confirmar) | Confirmar uma solicitação |
@@ -155,7 +156,7 @@ Ele entra pela [mesma tela de login](http://localhost:5173/login) e cai no paine
 | Método | Rota | Descrição |
 |--------|------|-----------|
 | `POST` | [`/agendamentos`](http://localhost:8080/swagger/index.html#/appointments/post_agendamentos) | Solicitar um agendamento |
-| `GET` | [`/clients/me/agendamentos`](http://localhost:8080/swagger/index.html#/appointments/get_clients_me_agendamentos) | Listar agendamentos do cliente |
+| `GET` | [`/clients/me/agendamentos`](http://localhost:8080/swagger/index.html#/appointments/get_clients_me_agendamentos) | Listar agendamentos do cliente (paginado) |
 | `POST` | [`/agendamentos/{id}/cancelar`](http://localhost:8080/swagger/index.html#/appointments/post_agendamentos__id__cancelar) | Cancelar um agendamento (cliente ou prestador) |
 
 </details>
@@ -167,9 +168,9 @@ Ele entra pela [mesma tela de login](http://localhost:5173/login) e cai no paine
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| `GET` | [`/admin/prestadores`](http://localhost:8080/swagger/index.html#/admin/get_admin_prestadores) | Listar prestadores para moderação |
+| `GET` | [`/admin/prestadores`](http://localhost:8080/swagger/index.html#/admin/get_admin_prestadores) | Listar prestadores para moderação (paginado) |
 | `GET` | [`/admin/prestadores/{id}`](http://localhost:8080/swagger/index.html#/admin/get_admin_prestadores__id_) | Detalhar prestador: cadastro + agendamentos recebidos |
-| `GET` | [`/admin/clientes`](http://localhost:8080/swagger/index.html#/admin/get_admin_clientes) | Listar clientes para moderação |
+| `GET` | [`/admin/clientes`](http://localhost:8080/swagger/index.html#/admin/get_admin_clientes) | Listar clientes para moderação (paginado) |
 | `GET` | [`/admin/clientes/{id}`](http://localhost:8080/swagger/index.html#/admin/get_admin_clientes__id_) | Detalhar cliente: cadastro + agendamentos feitos |
 | `POST` | [`/admin/prestadores/{id}/banir`](http://localhost:8080/swagger/index.html#/admin/post_admin_prestadores__id__banir) | Banir um prestador |
 | `POST` | [`/admin/prestadores/{id}/reativar`](http://localhost:8080/swagger/index.html#/admin/post_admin_prestadores__id__reativar) | Reativar um prestador |

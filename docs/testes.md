@@ -131,6 +131,17 @@ npm run test:e2e
 > `.github/workflows/ci.yml`, que resolve isso instalando as dependências
 > **antes** de subir o compose.
 
+> [!IMPORTANT]
+> **A suíte depende do Mailpit.** Nenhuma conta nasce sem confirmação por email
+> — prestador e cliente —, então os helpers de `e2e/helpers.ts` leem o link
+> direto da API do Mailpit (`localhost:8025`). Com o SMTP apontando para um
+> provedor real, os testes travam esperando um email que nunca chega ali.
+
+> [!TIP]
+> **Desligue o rate limit ao rodar a suíte local** (`RATE_LIMIT_*=0` no `.env`):
+> são centenas de requisições do mesmo IP em poucos minutos, e o teto por conta
+> também alcança os testes que erram a senha de propósito.
+
 </details>
 
 **Onde cada coisa mora:**

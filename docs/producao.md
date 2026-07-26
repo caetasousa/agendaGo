@@ -298,6 +298,45 @@ Para ver a configuração já resolvida, **sem subir nada**:
 docker compose -f docker-compose.prod.yml config | grep -E "DOMINIO|image:"
 ```
 
+### 🔐 Usuário de banco sem poder de DDL
+
+Por padrão a API se conecta com o **dono** do banco, que pode criar, alterar e
+derrubar qualquer tabela — uma falha de execução remota na API herdaria esse
+poder. O script abaixo cria um usuário só com `SELECT/INSERT/UPDATE/DELETE`.
+Rode **uma vez**, com a stack no ar (é idempotente: rodar de novo só atualiza a
+senha e reaplica os GRANTs):
+
+```bash
+cd ~/agendago
+curl -o scripts/criar-usuario-app.sh $BASE/scripts/criar-usuario-app.sh
+chmod +x scripts/criar-usuario-app.sh
+
+DB_PASSWORD=$(openssl rand -base64 24) ./scripts/criar-usuario-app.sh
+```
+
+O script imprime o que falta: acrescente ao `.env` e recrie a API.
+
+```bash
+# no .env
+DB_USER=agendago_app
+DB_PASSWORD=<a senha gerada acima>
+
+docker compose -f docker-compose.prod.yml up -d api
+```
+
+> [!NOTE]
+> Sem `DB_USER` no `.env`, a API continua usando o dono do banco — o
+> comportamento antigo. Nada quebra por esquecer; só não se ganha a contenção.
+
+Quem aplica migration continua sendo o dono, pelo Flyway. Para conferir que a
+restrição pegou:
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T postgres \
+  psql -U agendago_app -d agendago -c "DROP TABLE providers;"
+# ERROR: must be owner of table providers  ✅
+```
+
 ---
 
 ## 5️⃣ Conferir
@@ -351,9 +390,15 @@ curl -so /dev/null -w '%{http_code}\n' https://SEU_DOMINIO/api/swagger/index.htm
 > interno). Aqui, a ausência dele **é o próprio teste**: se responder, o
 > certificado é publicamente confiável e nenhum visitante verá aviso.
 
-No navegador, confirme no DevTools que o cookie `agendago_session` veio com
-**Secure**, **HttpOnly** e **SameSite=Lax**, e que as chamadas XHR vão para
-`https://SEU_DOMINIO/api/...` — nunca para `localhost:8080`.
+No navegador, confirme no DevTools que o cookie **`__Host-agendago_session`**
+veio com **Secure**, **HttpOnly**, **SameSite=Lax**, `Path=/` e **sem Domain** —
+o prefixo `__Host-` é justamente o contrato que exige esses atributos, e o
+navegador ignora o cookie se algum faltar. Em desenvolvimento o nome é
+`agendago_session`, sem prefixo: não há HTTPS, logo não há `Secure`.
+
+Confirme também que as chamadas XHR vão para `https://SEU_DOMINIO/api/...` —
+nunca para `localhost:8080` — e que o **Console não acusa violação de CSP** em
+nenhuma tela.
 
 ---
 
@@ -838,14 +883,18 @@ Como o host não compila nada, o requisito de RAM caiu — era o build que exigi
 
 # ✅ Checklist de go-live
 
-- [ ] **`APP_ENV=production`** — já fixado no compose; liga `Secure` no cookie
+- [ ] **`APP_ENV=production`** — já fixado no compose; liga `Secure` e o prefixo `__Host-` no cookie
 - [ ] **Certificado da Let's Encrypt** — `curl` **sem** `-k` responde
-- [ ] **Rate limit > 0** — `RATE_LIMIT_*` não podem ser `0`
+- [ ] **Rate limit > 0** — nenhum `RATE_LIMIT_*` pode ser `0` (são cinco: IP, conta e sessão)
 - [ ] **`ADMIN_SENHA` e `POSTGRES_PASSWORD` fortes** — `openssl rand -base64 24`
+- [ ] **`DB_USER` sem DDL** — `scripts/criar-usuario-app.sh` rodado e `DB_USER`/`DB_PASSWORD` no `.env`
 - [ ] **`.env` com `chmod 600`**
 - [ ] **SMTP com remetente de domínio autenticado** — se já usou a chave em outro lugar, **rotacione**
+- [ ] **SMTP funcionando de verdade** — sem email, ninguém mais cria conta: prestador **e** cliente dependem do link de confirmação
 - [ ] **Postgres sem porta pública** — o compose não expõe; confirme o firewall
 - [ ] **Swagger fora do ar** — duas camadas: a API não monta a rota em produção **e** o Caddy responde 404
+- [ ] **CSP e cabeçalhos de segurança** — `curl -I https://SEU_DOMINIO` mostra `content-security-policy`, `strict-transport-security`, `permissions-policy` e `cross-origin-opener-policy`
+- [ ] **Sem violação de CSP no Console** — abra painel, admin e a página pública de agendamento
 - [ ] **Backup do banco agendado**
 
 ---
@@ -884,8 +933,13 @@ Como o host não compila nada, o requisito de RAM caiu — era o build que exigi
 | `APP_ENV` | ✅ | `production` (fixo) | liga `Secure` no cookie, log em JSON e **remove a rota do Swagger** |
 | `FRONTEND_ORIGIN` | ✅ | `https://${DOMINIO}` (fixo) | origem no CORS e base dos links dos emails |
 | `ADMIN_EMAIL/SENHA` | recomendado | — | semeiam o admin no boot (vazias = sem admin) |
+| `DB_USER` | recomendado | dono do banco | usuário da API; use o criado por `scripts/criar-usuario-app.sh` (só DML) |
+| `DB_PASSWORD` | se usar `DB_USER` | senha do dono | senha desse usuário |
 | `RATE_LIMIT_LOGIN_POR_MINUTO` | — | `10` | teto de logins por IP/min (⚠️ **não use 0**) |
 | `RATE_LIMIT_CONVIDADO_POR_MINUTO` | — | `10` | teto de agendamentos de convidado por IP/min |
+| `RATE_LIMIT_PUBLICO_POR_MINUTO` | — | `60` | teto das leituras públicas (vitrine, slots) por IP/min |
+| `RATE_LIMIT_LOGIN_POR_CONTA` | — | `5` | falhas de login/pedidos de recuperação por **conta** a cada 5 min |
+| `RATE_LIMIT_AUTENTICADO_POR_MINUTO` | — | `60` | teto de escritas por **sessão**/min |
 | `SMTP_HOST` | — | — | servidor SMTP. **Vazio desliga o envio** |
 | `SMTP_PORT` | — | `587` | porta SMTP |
 | `SMTP_USER/PASSWORD` | — | — | credenciais SMTP |

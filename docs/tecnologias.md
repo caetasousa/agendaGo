@@ -177,6 +177,10 @@ O login (`internal/usecase/auth/login_provider.go`) gera um token opaco de 256 b
 
 O atributo `HttpOnly` do cookie impede que JavaScript no browser leia o token — é a defesa de primeira linha contra roubo de sessão via XSS.
 
+Em produção o cookie ganha ainda o prefixo **`__Host-`** (`internal/adapter/http/handler/cookie.go`): é um contrato com o navegador, que só aceita um cookie com esse nome se ele vier com `Secure`, `Path=/` e **sem** atributo `Domain`. O efeito prático é amarrar a sessão a esta origem exata — um subdomínio comprometido não consegue escrever um cookie que o domínio principal aceite. Em desenvolvimento o prefixo não existe, porque sem HTTPS não há `Secure` e o navegador recusaria o cookie inteiro.
+
+As respostas das rotas autenticadas saem com **`Cache-Control: no-store`** (`internal/adapter/http/middleware/cache.go`): sem esse cabeçalho, o navegador pode guardar em disco, por heurística própria, JSONs com dados pessoais — o histórico de agendamentos com nome, email e telefone de clientes, por exemplo.
+
 **Para estudar:**
 - [OWASP Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)
 - [MDN — Using HTTP cookies](https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies) (atributos `HttpOnly`, `Secure`, `SameSite`)
@@ -212,18 +216,64 @@ Repare também na postura **anti-enumeração**: o cadastro e a recuperação de
 
 Repare em `internal/usecase/auth/auth.go`: quando o email não existe, o código ainda executa um `Verificar` contra um hash dummy antes de retornar erro. Sem isso, um invasor poderia medir o tempo de resposta e descobrir quais emails estão cadastrados (busca no banco + hash é mais lento que só retornar erro).
 
+A mesma disciplina vale para os **dois** cadastros (`internal/usecase/client/solicitar_cadastro.go` e `internal/usecase/provider/cadastrar.go`): a resposta é sempre a mesma, exista ou não o email, e o que muda é só a mensagem que sai por email — link de confirmação para quem é dono de um endereço livre, aviso de "esse email já está em uso" para o resto. A senha é hasheada em todos os caminhos, inclusive nos que não criam nada, para o tempo de resposta não denunciar o desfecho.
+
+O cadastro de prestador seguiu por um tempo o caminho oposto (criava a conta na hora e respondia `409 email já cadastrado`), e isso custava duas coisas: qualquer um podia sondar quem tem conta, e dava para publicar na vitrine um prestador com o email de outra pessoa, já que ninguém provava posse do endereço.
+
 **Para estudar:**
 - [OWASP Authentication Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html) (seção sobre respostas genéricas de erro)
+- [OWASP WSTG — Testing for Account Enumeration](https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/03-Identity_Management_Testing/04-Testing_for_Account_Enumeration_and_Guessable_User_Account) (como se testa isso de fora)
 
-### Rate limiting: go-chi/httprate
+### Rate limiting em três chaves: go-chi/httprate
 
-Middleware de limitação de requisições por IP, da própria família do chi. Aplicado em `cmd/api/main.go` sobre as rotas de **login** (mitiga brute-force e rajadas de Argon2id, que é caro de CPU por design) e sobre o **agendamento de convidado** (rota pública — sem teto, uma rajada encheria a agenda de um prestador com reservas falsas). Os limites vêm de env vars (`RATE_LIMIT_*_POR_MINUTO`, 0 desliga — ver `config/server.go`); em dev ficam desligados porque os testes e2e disparam dezenas de logins do mesmo IP.
+Middleware de limitação de requisições da própria família do chi. O ponto que vale estudar aqui não é a biblioteca — é **por qual chave** contar, já que cada uma tapa um buraco que as outras deixam aberto:
+
+| Chave | Onde | O que pega |
+|---|---|---|
+| **IP** | login, cadastro, convidado e leituras públicas | brute-force simples, rajadas de Argon2id (caro de CPU por design), raspagem da vitrine |
+| **Conta** (email) | dentro dos handlers de login e recuperação de senha | o atacante com endereços de sobra — uma botnet ou uma faixa IPv6 inteira nunca encosta no teto por IP, porque cada tentativa chega de um endereço novo |
+| **Sessão** (usuário autenticado) | rotas de escrita depois do login | abuso por quem já entrou, quando o IP deixa de identificar alguém |
+
+Duas decisões de projeto no teto por conta (`internal/adapter/http/handler/ratelimit.go`): só **tentativa fracassada** é contabilizada, para o uso normal nunca aproximar a conta do teto; e a resposta 429 é idêntica para email existente e inexistente, senão o próprio bloqueio viraria um jeito de descobrir quem tem conta.
+
+Estourado o teto, a janela barra **também a senha certa** — barrar só a senha errada não pararia o atacante que acerta na enésima tentativa. Isso admite um abuso conhecido: quem sabe o email de alguém consegue mantê-lo trancado enquanto insistir. A escolha é deliberada — a janela é curta e se renova sozinha, então o pior caso é um atraso de minutos, contra o risco de uma conta tomada.
+
+O IP vem do `X-Real-IP` que o Caddy escreve (`internal/adapter/http/middleware/real_ip.go`) — o cliente não consegue forjá-lo, porque o proxy sobrescreve o cabeçalho. A chave é canonizada com `httprate.CanonicalizeIP`, que agrupa a faixa /64 de um cliente IPv6: sem isso, trocar de endereço dentro da própria faixa zeraria o contador.
+
+Os limites vêm de env vars (`RATE_LIMIT_*`, 0 desliga cada um — ver `config/server.go`); os testes e2e desligam todos, porque a suíte dispara centenas de requisições do mesmo IP em poucos minutos.
 
 Complementa o limite de **tamanho de corpo** (`internal/adapter/http/middleware/body.go`, via `http.MaxBytesReader`): a API só troca JSONs pequenos, então qualquer corpo acima de 1 MiB é rejeitado antes de ocupar memória.
 
 **Para estudar:**
 - [go-chi/httprate](https://github.com/go-chi/httprate)
 - [OWASP — Denial of Service Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Denial_of_Service_Cheat_Sheet.html)
+- [OWASP Authentication Cheat Sheet — bloqueio de conta](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html#account-lockout) (o trade-off entre travar a conta e deixar o brute-force correr)
+
+### Content-Security-Policy
+
+A CSP é a rede que segura um XSS que escape de tudo o mais — uma dependência comprometida, um `@html` distraído. Ela é declarada em `frontend/vite.config.ts` (`kit.csp`, com `mode: 'hash'`) e não no Caddy: o SvelteKit gera um `<script>` inline por build, calcula o hash dele e o publica na política, o que permite `script-src 'self'` sem `unsafe-inline`. Uma CSP estática no proxy teria de liberar todo inline para não quebrar a cada build — e duas CSPs na mesma resposta valem pela interseção, então a mais frouxa não ajudaria e a mais rígida quebraria o app.
+
+Detalhe que só aparece na prática: o SvelteKit **só** hasheia os scripts que ele mesmo gera. O script de tema, que precisa rodar antes da primeira pintura, teve de sair do `app.html` para um arquivo estático (`frontend/static/tema.js`) — inline, seria bloqueado.
+
+No Caddy ficam os cabeçalhos que não dependem do build: HSTS, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` e `Cross-Origin-Opener-Policy`.
+
+**Para estudar:**
+- [MDN — Content Security Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP)
+- [SvelteKit — Content Security Policy](https://svelte.dev/docs/kit/configuration#csp) (o modo `hash` e o que ele cobre)
+- [OWASP Secure Headers Project](https://owasp.org/www-project-secure-headers/) (o conjunto completo, com o que cada cabeçalho resolve)
+
+### Varredura de dependências: govulncheck, npm audit, Trivy e Dependabot
+
+Num projeto pequeno em produção, a via mais provável de comprometimento não é uma falha escrita aqui — é uma CVE numa biblioteca que ninguém percebeu que envelheceu. O CI (`.github/workflows/ci.yml`, job `seguranca`) cobre as três camadas onde isso mora:
+
+- **[govulncheck](https://go.dev/blog/govulncheck)** — o diferencial dele é a análise de alcançabilidade: só acusa vulnerabilidade em código **realmente chamado** a partir do binário, em vez de listar tudo que existe na árvore de dependências. Por isso o que ele aponta trava o deploy. Cobre também a stdlib da versão de Go usada no build.
+- **`npm audit`** — roda duas vezes: `--omit=dev` (só o que vai para a imagem) travando o CI, e completo em modo relatório, porque uma CVE no Vite ou no Playwright não roda em produção e não pode barrar um deploy de correção.
+- **[Trivy](https://trivy.dev/)** — varre a imagem pronta: sistema base (alpine, node) e bibliotecas de sistema, que os dois anteriores não enxergam. `CRITICAL` trava a publicação; `HIGH` sai como relatório.
+- **[Dependabot](https://docs.github.com/en/code-security/dependabot)** (`.github/dependabot.yml`) — apontar não corrige: sem alguém abrindo o PR, a dependência envelhece até virar incidente. Semanal para gomod, npm, GitHub Actions e as imagens base dos Dockerfiles.
+
+**Para estudar:**
+- [Go — Vulnerability Management](https://go.dev/doc/security/vuln/) (como o banco de vulnerabilidades e a análise de chamadas funcionam)
+- [OWASP — Vulnerable and Outdated Components](https://owasp.org/Top10/A06_2021-Vulnerable_and_Outdated_Components/) (o item do Top 10 que essas ferramentas atacam)
 
 ---
 
@@ -244,6 +294,20 @@ Driver Postgres para Go — usado via `pgxpool` (pool de conexões) em vez de `d
 **Para estudar:**
 - [pgx — documentação oficial](https://pkg.go.dev/github.com/jackc/pgx/v5)
 
+### Paginação: LIMIT/OFFSET e o `total`
+
+Vitrine, painel de moderação e histórico de agendamentos são listas que só crescem. Enquanto a base é pequena, uma consulta sem teto parece inofensiva — e é justamente por isso que ela sobrevive até o dia em que buscar "todos os agendamentos" significa carregar anos de histórico na memória a cada abertura de tela. Pior: numa rota pública, isso é o jeito mais barato de derrubar a API.
+
+Toda listagem passa por `internal/pkg/paging`: limite padrão de 100, teto de 200, e um `Valida()` que os repositórios chamam antes de montar o SQL — uma `Pagina{}` zerada que escapasse de um caller viraria `LIMIT 0` e devolveria lista vazia calada, o tipo de defeito que só aparece em produção com o usuário achando que perdeu os dados. A resposta devolve `total` junto dos itens: é comparando o acumulado com o total que a tela sabe se ainda há o que carregar, sem adivinhar pelo tamanho da página.
+
+Dois detalhes que a paginação obriga a acertar:
+
+- **Ordem estável.** Todo `ORDER BY` termina em `id`. Sem desempate, duas linhas de mesmo nome (ou mesma data) podem trocar de posição entre uma página e a seguinte, e o item que estava na fronteira aparece duas vezes ou some.
+- **Filtro no SQL, não em memória.** A vitrine mostra só prestadores ativos. Enquanto a consulta trazia tudo, dava para descartar os banidos no Go; com `LIMIT`, esse filtro devolveria páginas mais curtas que o pedido e esconderia prestadores válidos das páginas seguintes (ver `ListarAtivos` em `internal/adapter/repository/provider_postgres.go`).
+
+**Para estudar:**
+- [Use The Index, Luke! — Paginação](https://use-the-index-luke.com/sql/partial-results/fetch-next-page) (por que OFFSET fica caro e o que é paginação por keyset)
+
 ### Flyway
 
 Cada mudança de schema é um arquivo SQL versionado (`backend/migrations/V1__...sql`, `V2__...sql`) aplicado em ordem, uma única vez, e nunca editado depois de mergeado. É o princípio de **migrations imutáveis**, que garante que qualquer ambiente (dev, CI, produção) chegue ao mesmo schema pela mesma sequência de passos.
@@ -258,6 +322,24 @@ Orquestra Postgres + Flyway + API (com hot reload via [Air](https://github.com/a
 **Para estudar:**
 - [Docker Compose — visão geral](https://docs.docker.com/compose/)
 - [Docker — build multi-stage](https://docs.docker.com/build/building/multi-stage/) (como o `Dockerfile.prod` gera uma imagem final mínima)
+
+### Contenção dos containers e usuário de banco sem DDL
+
+Container não é fronteira de segurança por si só — ele é o que o `docker run` deixou passar. O compose de produção fecha o que a aplicação não usa:
+
+| Ajuste | O que muda |
+|---|---|
+| `no-new-privileges:true` | um binário `setuid` dentro da imagem não consegue escalar privilégio |
+| `cap_drop: [ALL]` | API e frontend rodam sem capability nenhuma; Postgres fica com as cinco que o entrypoint precisa para largar privilégio, e o Caddy só com `NET_BIND_SERVICE`, para abrir as portas 80/443 |
+| `read_only: true` + `tmpfs: /tmp` | API e frontend não escrevem em disco: um comprometimento não deixa nada gravado no container |
+| `pids_limit` / `mem_limit` | um laço acidental (ou provocado) não leva o host junto |
+
+Do lado do banco, a API se conecta com um usuário que **só faz DML** — sem `CREATE`, `ALTER` ou `DROP` (`scripts/criar-usuario-app.sh`). Quem aplica migration continua sendo o dono do banco, pelo Flyway. É o princípio do menor privilégio aplicado ao ponto que mais interessa: uma falha de execução remota na API não vira poder de derrubar tabela.
+
+**Para estudar:**
+- [Docker — Security](https://docs.docker.com/engine/security/) (capabilities, no-new-privileges e o modelo de isolamento)
+- [OWASP — Docker Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html)
+- [PostgreSQL — GRANT](https://www.postgresql.org/docs/current/sql-grant.html) (e `ALTER DEFAULT PRIVILEGES`, que estende os GRANTs às tabelas que ainda vão nascer)
 
 ### Registry de imagens: GHCR (GitHub Container Registry)
 
