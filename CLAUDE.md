@@ -55,3 +55,12 @@ Mensagens de commit seguem o padrão Conventional Commits, sempre em português:
 - **chore** — tarefa de manutenção que não afeta o código de produção (configuração, build, `.gitignore`, dependências)
 - **refactor** — reorganização de código sem mudar comportamento
 - **test** — adição ou ajuste de testes
+
+### Nunca commitar sem perguntar
+
+**Sempre perguntar antes de fazer `git commit`**, sem exceção — mesmo com a
+alteração pronta, revisada e os testes passando. Terminar o trabalho, apresentar
+o que mudou e **aguardar confirmação explícita**. Vale igualmente para `git push`.
+
+Uma autorização vale só para os commits daquele pedido: pedir de novo na próxima
+vez.
