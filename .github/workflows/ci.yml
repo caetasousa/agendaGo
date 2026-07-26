@@ -281,6 +281,30 @@ jobs:
              && IMAGE_TAG=${{ github.sha }} docker compose -f docker-compose.prod.yml up -d \
              && docker image prune -f"
 
+      # Agenda o backup diário. Deixar isso manual seria o elo fraco da
+      # estratégia: um cron esquecido não avisa, e a descoberta viria no dia em
+      # que o backup fosse necessário.
+      #
+      # Idempotente: reescreve apenas a linha do agendago, preservando qualquer
+      # outra entrada do crontab do usuário.
+      - name: agenda o backup diário do banco
+        if: steps.cfg.outputs.configurado == 'true'
+        env:
+          HOST: ${{ secrets.VPS_HOST }}
+          USUARIO: ${{ secrets.VPS_USER }}
+          PORTA: ${{ secrets.VPS_PORT || '22' }}
+          # Horário configurável por variável do repositório, sem mexer no código.
+          AGENDA: ${{ vars.BACKUP_CRON || '0 3 * * *' }}
+        run: |
+          ssh -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" "
+            mkdir -p \$HOME/backups
+            ( crontab -l 2>/dev/null | grep -v 'agendago/scripts/backup.sh'
+              echo '$AGENDA \$HOME/agendago/scripts/backup.sh >> \$HOME/backups/backup.log 2>&1'
+            ) | crontab -
+          "
+          echo 'crontab do servidor após a sincronização:'
+          ssh -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" 'crontab -l | grep backup.sh'
+
       # Deploy sem verificação é deploy no escuro: se a API não responder, o
       # job falha e o erro aparece no commit.
       - name: verifica se a aplicação respondeu
