@@ -4,18 +4,9 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
-		<script>
-			// Aplica o tema salvo antes da primeira pintura (evita flash de tema errado).
-			// Padrão da marca é escuro; só troca para claro se o usuário escolheu.
-			(function () {
-				try {
-					var salvo = localStorage.getItem('theme');
-					document.documentElement.dataset.theme = salvo === 'light' ? 'light' : 'dark';
-				} catch (e) {
-					document.documentElement.dataset.theme = 'dark';
-				}
-			})();
-		</script>
+		<!-- Tema antes da primeira pintura. Script externo (não inline) para
+		     passar na CSP `script-src 'self'` — ver static/tema.js. -->
+		<script src="./tema.js"></script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

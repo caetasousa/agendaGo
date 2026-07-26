@@ -13,11 +13,22 @@
 
 	# Cabeçalhos de segurança seguros (não quebram o app). HSTS assume
 	# compromisso com HTTPS — correto atrás do Caddy.
+	#
+	# A Content-Security-Policy NÃO fica aqui: ela é emitida pelo SvelteKit
+	# (kit.csp no vite.config.ts), que sabe o hash dos scripts que gera a cada
+	# build. Duas CSPs na mesma resposta valem pela interseção — a daqui
+	# quebraria o app na primeira divergência de build.
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
+		# O app não usa nenhuma dessas APIs; negar todas evita que um script
+		# injetado (ou um iframe de terceiro) as alcance.
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+		# Isola a janela de popups de outra origem (o consentimento do Google
+		# abre e volta na mesma aba, então nada do fluxo depende disso).
+		Cross-Origin-Opener-Policy "same-origin"
 		-Server
 	}
 
