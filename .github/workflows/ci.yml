@@ -75,6 +75,81 @@ jobs:
         working-directory: frontend
         run: npm run test:unit
 
+  # Varredura de vulnerabilidades: as três camadas onde uma CVE esquecida mora.
+  # govulncheck cobre o código Go (só o que é realmente alcançável a partir do
+  # binário); npm audit cobre as dependências JS — travando só nas que vão pra
+  # imagem (--omit=dev), porque uma CVE no Vite ou no Playwright não roda em
+  # produção e não deveria barrar um deploy de correção; Trivy varre a imagem
+  # pronta (sistema base + libs de SO), que os dois anteriores não enxergam.
+  seguranca:
+    name: Varredura de vulnerabilidades
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache-dependency-path: backend/go.sum
+
+      - name: govulncheck (backend)
+        working-directory: backend
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: install (frontend)
+        working-directory: frontend
+        run: npm ci
+
+      - name: npm audit — dependências de produção (trava o CI)
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: npm audit — relatório completo (não trava)
+        working-directory: frontend
+        if: always()
+        run: npm audit || true
+
+      - name: build das imagens (só para varrer, sem publicar)
+        run: |
+          docker build -t agendago-api:scan -f backend/Dockerfile.prod backend
+          docker build -t agendago-web:scan -f frontend/Dockerfile.prod frontend
+
+      - name: Trivy — agendago-api
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: agendago-api:scan
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+
+      - name: Trivy — agendago-api (trava em CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: agendago-api:scan
+          severity: 'CRITICAL'
+          exit-code: '1'
+
+      - name: Trivy — agendago-web
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: agendago-web:scan
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+
+      - name: Trivy — agendago-web (trava em CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: agendago-web:scan
+          severity: 'CRITICAL'
+          exit-code: '1'
+
   e2e:
     name: E2E (Playwright sobre o docker-compose)
     runs-on: ubuntu-latest
@@ -99,14 +174,14 @@ jobs:
           npx playwright install --with-deps chromium
 
       # O compose consome o .env; o .example já aponta para o Mailpit (nenhum
-      # email real é enviado). Desliga o rate limit porque os testes fazem
-      # dezenas de logins do mesmo IP, e fixa as credenciais do admin nos
-      # valores que os specs de admin esperam (e2e/admin.spec.ts).
+      # email real é enviado). Desliga TODO rate limit (a regex pega os tetos
+      # novos automaticamente) porque a suíte faz centenas de requisições do
+      # mesmo IP em poucos minutos, e fixa as credenciais do admin nos valores
+      # que os specs de admin esperam (e2e/admin.spec.ts).
       - name: prepara .env
         run: |
           cp .env.example .env
-          sed -i 's/^RATE_LIMIT_LOGIN_POR_MINUTO=.*/RATE_LIMIT_LOGIN_POR_MINUTO=0/' .env
-          sed -i 's/^RATE_LIMIT_CONVIDADO_POR_MINUTO=.*/RATE_LIMIT_CONVIDADO_POR_MINUTO=0/' .env
+          sed -i -E 's/^(RATE_LIMIT_[A-Z_]+)=.*/\1=0/' .env
           sed -i 's/^ADMIN_EMAIL=.*/ADMIN_EMAIL=admin@agendago.dev/' .env
           sed -i 's/^ADMIN_SENHA=.*/ADMIN_SENHA=admin12345/' .env
 
@@ -148,7 +223,7 @@ jobs:
   publicar-imagens:
     name: Publica imagens no GHCR
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: [backend, frontend, e2e]
+    needs: [backend, frontend, e2e, seguranca]
     runs-on: ubuntu-latest
     permissions:
       contents: read

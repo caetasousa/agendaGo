@@ -1,0 +1,46 @@
+# Atualização automática de dependências. O CI já sabe apontar vulnerabilidade
+# (job `seguranca`), mas apontar não corrige: sem alguém abrindo o PR, a
+# dependência envelhece até virar incidente. O Dependabot é esse alguém.
+#
+# Semanal, e não diário, de propósito: um PR por semana por ecossistema é uma
+# revisão que cabe na rotina; uma enxurrada diária vira ruído ignorado.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+    groups:
+      # As dependências de desenvolvimento sobem juntas num PR só — são muitas
+      # (vite, svelte, playwright, tailwind) e nenhuma vai para a imagem.
+      desenvolvimento:
+        dependency-type: development
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+
+  # As imagens base do Dockerfile de produção (golang, node, alpine) e a do
+  # Flyway — é onde mora a maior parte do que o Trivy acusa.
+  - package-ecosystem: docker
+    directories:
+      - /backend
+      - /frontend
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
