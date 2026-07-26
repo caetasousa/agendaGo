@@ -1,158 +1,250 @@
-# Produção
+# 🚀 Produção
 
-Como o agendaGo vai para o ar, na ordem em que as coisas precisam acontecer.
-Este documento é o roteiro que foi realmente percorrido — inclusive os erros que
-apareceram no caminho e o que os causou. A referência seca (tabela de variáveis,
-comandos de operação) está no fim.
+> Como o agendaGo vai para o ar, **na ordem em que as coisas precisam acontecer**.
+> Este é o roteiro que foi realmente percorrido no primeiro deploy — com os erros
+> que apareceram no caminho e o que os causou.
 
-O `docker-compose.yml` da raiz é **só para desenvolvimento** (hot reload, portas
-expostas, Mailpit). Produção usa o **`docker-compose.prod.yml`**.
+![Caddy](https://img.shields.io/badge/Caddy-2-1F88C0?logo=caddy&logoColor=white)
+![Let's Encrypt](https://img.shields.io/badge/TLS-Let's%20Encrypt-003A70?logo=letsencrypt&logoColor=white)
+![GHCR](https://img.shields.io/badge/Registry-GHCR-181717?logo=github&logoColor=white)
+![Deploy](https://img.shields.io/badge/Deploy-CI%20automático-2088FF?logo=githubactions&logoColor=white)
 
-## Arquitetura no ar
+| | |
+|---|---|
+| **Onde roda** | uma VPS pequena (1 vCPU / 4 GB dá folga) |
+| **O que fica no servidor** | 3 arquivos — nunca o código-fonte |
+| **Como atualiza** | `git push` na `main` |
+| **Quanto demora um deploy** | segundos (é só download de imagem) |
 
-```
-                    Internet (HTTPS)
-                          │
-                    ┌─────▼─────┐
-                    │   Caddy   │  TLS automático (Let's Encrypt)
-                    │  :80/:443 │  origem única
-                    └─────┬─────┘
-             /api/* ──────┤────── /*
-            (sem /api)    │
-              ┌───────────▼──┐   ┌──────────────┐
-              │  API (Go)    │   │  Web (Svelte)│
-              │   :8080      │   │    :3000     │
-              └──────┬───────┘   └──────────────┘
-                     │
-              ┌──────▼───────┐
-              │  Postgres    │  (interno; sem porta pública)
-              └──────────────┘
+> [!NOTE]
+> O `docker-compose.yml` da raiz é **só para desenvolvimento** (hot reload,
+> portas expostas, Mailpit). Produção usa o **`docker-compose.prod.yml`**.
+
+---
+
+## 🏗️ Arquitetura no ar
+
+```mermaid
+flowchart TD
+    U([🌐 Internet]) -->|HTTPS| C
+
+    subgraph VPS["🖥️ VPS — uma única máquina"]
+        C["🔐 <b>Caddy</b><br/>:80 · :443<br/><i>TLS automático</i>"]
+        C -->|"/api/*<br/>(prefixo removido)"| A["⚙️ <b>API</b> · Go<br/>:8080"]
+        C -->|"/*"| W["🎨 <b>Web</b> · SvelteKit<br/>:3000"]
+        A --> P[("🐘 <b>Postgres</b><br/>sem porta pública")]
+    end
+
+    A -.->|SMTP| S([📧 Brevo])
+
+    style C fill:#1f88c0,stroke:#0d5a85,color:#fff
+    style A fill:#00add8,stroke:#007d9c,color:#fff
+    style W fill:#ff3e00,stroke:#c33000,color:#fff
+    style P fill:#4169e1,stroke:#2a4bb0,color:#fff
 ```
 
 O Caddy serve **frontend e API na mesma origem**: `/api/*` vai para a API (o
 prefixo é removido antes de repassar) e todo o resto vai para o frontend.
 
-Isso não é estética. O cookie de sessão é `SameSite=Lax`, e é a origem única que
-faz o navegador enviá-lo de volta nas chamadas do front para a API — sem mudar
-código e sem CORS. Se front e API ficassem em domínios diferentes, o login
-quebraria silenciosamente. Essa decisão também é o que permite o frontend usar
-`/api` relativo e a imagem publicada não ficar amarrada a um domínio.
-
-Emails saem por um SMTP externo (ex.: Brevo) — não há servidor de email na stack.
-
-## O host não recebe o código-fonte
-
-As imagens de produção (API, web e migrations) são buildadas pelo **CI** e
-publicadas no **GHCR**. O `docker-compose.prod.yml` só as consome: ele não tem
-nenhuma diretiva `build`. Na VPS ficam **três arquivos**, e nada além disso:
-
-```
-~/agendago/
-├── docker-compose.prod.yml
-├── Caddyfile
-└── .env
-```
-
-O ganho não é arrumação. Buildar no servidor exigiria repositório, toolchain Go
-e Node, e RAM/CPU para compilar — num plano de 1 vCPU, cada deploy competiria
-com o site no ar por vários minutos. Puxando imagem pronta, o deploy é um
-download de segundos, e o que roda em produção é exatamente o artefato que
-passou no CI, não uma recompilação que pode divergir.
+> [!IMPORTANT]
+> **Origem única não é estética.** O cookie de sessão é `SameSite=Lax`, e é a
+> origem única que faz o navegador enviá-lo de volta nas chamadas do front para
+> a API — sem mudar código e sem CORS. Se front e API ficassem em domínios
+> diferentes, **o login quebraria silenciosamente**. Essa decisão também é o que
+> permite o frontend usar `/api` relativo, e a imagem publicada não ficar
+> amarrada a um domínio.
 
 ---
 
-# Roteiro do primeiro deploy
+## 📦 O host não recebe o código-fonte
 
-## 1. Um nome de domínio
+```mermaid
+flowchart LR
+    G["📝 git push<br/><i>main</i>"] --> CI
 
-**Por que não dá para usar o IP puro:** nenhuma autoridade pública emite
-certificado para endereço IP. O Caddy, ao receber um IP como endereço do site,
-cai na CA interna dele — e o handshake TLS falha na prática, porque clientes não
-enviam SNI quando o destino é um IP, e sem SNI o servidor não sabe qual
-certificado apresentar. O resultado é um redirect para HTTPS que morre em
-`tlsv1 alert internal error`.
+    subgraph CI["⚡ GitHub Actions"]
+        T["✅ testes"] --> B["🔨 build das<br/>3 imagens"]
+    end
 
-**E servir em HTTP puro também não resolve:** com `APP_ENV=production` o cookie
-de sessão vai com o atributo `Secure`, e o navegador se recusa a guardar cookie
-`Secure` recebido por HTTP. O site abriria e **ninguém conseguiria logar**, sem
-mensagem de erro.
+    B --> R[("📦 <b>GHCR</b><br/>ghcr.io/caetasousa")]
+    CI -->|SSH| V
 
-Sem domínio próprio, a saída gratuita é o [DuckDNS](https://www.duckdns.org):
-entre com GitHub, crie um subdomínio e coloque o IP da VPS no campo *current
-ip*. Confirme antes de seguir:
+    subgraph V["🖥️ VPS"]
+        D["docker compose<br/>pull + up -d"]
+    end
 
-```bash
-getent hosts SEU_SUBDOMINIO.duckdns.org
+    R -.->|pull| D
+
+    style CI fill:#2088ff,stroke:#0366d6,color:#fff
+    style R fill:#181717,stroke:#000,color:#fff
+    style V fill:#7b4397,stroke:#5a2f6f,color:#fff
 ```
 
-Use `getent` em vez de `dig`: o `dig` não vem no Ubuntu mínimo. A resposta tem
-de ser o IP público da VPS, que você confere com `curl -s https://api.ipify.org`.
+As imagens são buildadas pelo **CI** e publicadas no **GHCR**. O
+`docker-compose.prod.yml` só as consome — ele não tem nenhuma diretiva `build`.
+Na VPS ficam **três arquivos**, e nada além disso:
 
-**Não pule esta verificação.** Se o Caddy tentar emitir com o DNS errado, o
-Let's Encrypt bloqueia novas tentativas por uma hora depois de cinco falhas.
+```
+~/agendago/
+├── 📄 docker-compose.prod.yml   ← sincronizado pelo CI
+├── 📄 Caddyfile                 ← sincronizado pelo CI
+└── 🔒 .env                      ← só você. Nunca sai daqui
+```
 
-## 2. Preparar o servidor
+> [!TIP]
+> **Por que isso importa:** buildar no servidor exigiria repositório, toolchain
+> Go e Node, e RAM/CPU para compilar — num plano de 1 vCPU, cada deploy
+> competiria com o site no ar por vários minutos. Puxando imagem pronta, o
+> deploy é um download de segundos, e o que roda em produção é **exatamente o
+> artefato que passou no CI**, não uma recompilação que pode divergir.
 
-Conecte como root e instale o Docker:
+---
+
+# 🧭 Roteiro do primeiro deploy
+
+```mermaid
+flowchart LR
+    F1["1️⃣ Domínio<br/><i>DNS → IP</i>"] --> F2["2️⃣ Servidor<br/><i>Docker + firewall</i>"]
+    F2 --> F3["3️⃣ Imagens<br/><i>públicas no GHCR</i>"]
+    F3 --> F4["4️⃣ Stack<br/><i>3 arquivos + up</i>"]
+    F4 --> F5["5️⃣ Conferir<br/><i>TLS + saúde</i>"]
+    F5 --> F6["6️⃣ Google<br/><i>callback</i>"]
+
+    style F1 fill:#f9a825,color:#000
+    style F5 fill:#43a047,color:#fff
+```
+
+---
+
+## 1️⃣ Um nome de domínio
+
+> [!CAUTION]
+> **Não dá para usar o IP puro.** Nenhuma autoridade pública emite certificado
+> para endereço IP. O Caddy cai na CA interna dele — e o handshake TLS falha na
+> prática, porque clientes **não enviam SNI** quando o destino é um IP, e sem SNI
+> o servidor não sabe qual certificado apresentar. O resultado é um redirect para
+> HTTPS que morre em `tlsv1 alert internal error`.
+>
+> **E HTTP puro também não resolve:** com `APP_ENV=production` o cookie de sessão
+> vai com o atributo `Secure`, e o navegador se recusa a guardar cookie `Secure`
+> recebido por HTTP. O site abriria e **ninguém conseguiria logar** — sem
+> mensagem de erro.
+
+Sem domínio próprio, a saída gratuita é o **[DuckDNS](https://www.duckdns.org)**:
+entre com GitHub, crie um subdomínio e coloque o IP da VPS no campo *current ip*.
+
+**Confirme antes de seguir:**
+
+```bash
+curl -s https://api.ipify.org; echo          # o IP público da VPS
+getent hosts SEU_SUBDOMINIO.duckdns.org      # tem que devolver o mesmo IP
+```
+
+<table><tr><td>
+
+💡 **Por que `getent` e não `dig`?** O `dig` não vem instalado no Ubuntu mínimo;
+o `getent` sempre existe.
+
+</td></tr></table>
+
+> [!WARNING]
+> **Não pule esta verificação.** Se o Caddy tentar emitir com o DNS errado, o
+> Let's Encrypt bloqueia novas tentativas **por uma hora** depois de cinco falhas.
+
+---
+
+## 2️⃣ Preparar o servidor
+
+**Instale o Docker** (como root):
 
 ```bash
 curl -fsSL https://get.docker.com | sh
 ```
 
-Crie um usuário sem privilégios para a aplicação e o deploy:
+**Crie um usuário sem privilégios** para a aplicação e o deploy:
 
 ```bash
 adduser --disabled-password --gecos '' deploy
 usermod -aG docker deploy
 ```
 
-`--disabled-password` significa que ninguém entra nesse usuário por senha, só
-por chave SSH. `-aG docker` (com o `a`, de *append* — sem ele os grupos atuais
-seriam substituídos) dá acesso ao daemon do Docker sem `sudo`.
+| Flag | O que faz |
+|---|---|
+| `--disabled-password` | ninguém entra nesse usuário por senha, só por chave SSH |
+| `--gecos ''` | pula o formulário interativo (nome, telefone, sala) |
+| `-aG docker` | **a**crescenta ao grupo (sem o `a`, os grupos atuais seriam substituídos) |
 
-> **Armadilha:** o `deploy` não tem senha e não está no grupo `sudo`. Qualquer
-> `sudo` executado por ele falha com "3 incorrect password attempts". É
-> intencional: comandos de sistema são do root, comandos de Docker e da
-> aplicação são do `deploy`.
+> [!WARNING]
+> **`sudo` não funciona para o `deploy`** — ele não tem senha e não está no grupo
+> `sudo`. Qualquer tentativa falha com *"3 incorrect password attempts"*. É
+> intencional: **root** para comandos de sistema, **deploy** para Docker e
+> aplicação.
 
-Firewall com o mínimo aberto:
+**Firewall com o mínimo aberto:**
 
 ```bash
 ufw allow 22/tcp && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable
 ```
 
-A **porta 80 não é opcional**: é por onde chega o desafio de validação do Let's
-Encrypt. Fechada, não sai certificado — mesmo que o site seja todo HTTPS.
-Postgres (5432) e API (8080) não são expostos; os containers conversam por uma
-rede interna do Docker.
+| Porta | Para quê |
+|---|---|
+| **22** | SSH — seu acesso. Esquecer essa **tranca você para fora** |
+| **80** | desafio do Let's Encrypt + redirect. **Não é opcional** |
+| **443** | o site |
 
-Confira:
+Postgres (5432) e API (8080) **não** são expostos — os containers conversam por
+uma rede interna do Docker.
+
+**Confira:**
 
 ```bash
 docker --version && ufw status && id deploy
 ```
 
-O `id deploy` precisa mostrar `docker` entre os grupos.
+✅ O `id deploy` precisa mostrar `docker` entre os grupos.
 
-## 3. Liberar as imagens no GHCR
+---
 
-Pacotes publicados no GHCR nascem **privados**, mesmo em repositório público.
-Sem este passo o `docker compose up` falha com `denied`.
+## 3️⃣ Liberar as imagens no GHCR
 
-GitHub → seu perfil → *Packages* → cada `agendago-*` → *Package settings* →
-*Danger Zone* → *Change visibility* → **Public**.
+> [!IMPORTANT]
+> Pacotes publicados no GHCR nascem **privados**, mesmo em repositório público.
+> Sem este passo o `docker compose up` falha com **`denied`**.
 
-**Isso é seguro?** Com repositório público, sim: a imagem é o código-fonte
-compilado, e o fonte já está aberto. Nenhum segredo entra nas imagens — os
-Dockerfiles buildam a partir de `./backend` e `./frontend`, onde não existe
-arquivo `.env`. A alternativa (pacotes privados) exige `docker login` na VPS com
-um PAT, que fica gravado em texto quase claro em `~/.docker/config.json` e
-expira sem avisar. Se um dia o repositório virar privado, torne os pacotes
-privados junto.
+**GitHub → seu perfil → Packages →** cada `agendago-*` **→ Package settings →
+Danger Zone → Change visibility → Public**
 
-## 4. Instalar a stack
+<details>
+<summary><b>🔐 Isso é uma falha de segurança?</b></summary>
 
-Como `deploy`:
+<br>
+
+**Com repositório público, não.** A imagem é o código-fonte compilado, e o fonte
+já está aberto. O que vai dentro delas:
+
+| Imagem | Conteúdo |
+|---|---|
+| `agendago-api` | só o binário, em alpine, usuário não-root |
+| `agendago-web` | só o `build/` — o mesmo bundle que qualquer visitante baixa |
+| `agendago-migrations` | os `.sql`, que já estão no repositório |
+
+**Nenhum segredo entra nas imagens:** os Dockerfiles buildam a partir de
+`./backend` e `./frontend`, onde não existe arquivo `.env`.
+
+A alternativa (pacotes privados) exige `docker login` na VPS com um PAT, que fica
+gravado **em texto quase claro** em `~/.docker/config.json` e expira sem avisar —
+você trocaria "meu código já público pode ser baixado" por "existe uma credencial
+do meu GitHub guardada no servidor".
+
+⚠️ **Se um dia o repositório virar privado, torne os pacotes privados junto.**
+
+</details>
+
+---
+
+## 4️⃣ Instalar a stack
+
+**Como `deploy`:**
 
 ```bash
 su - deploy
@@ -164,11 +256,15 @@ curl -O $BASE/Caddyfile
 curl -o .env $BASE/.env.prod.example
 ```
 
-O `-` em `su - deploy` carrega o ambiente de login do zero, o que inclui a
+<table><tr><td>
+
+💡 O `-` em `su - deploy` carrega o ambiente de login **do zero**, o que inclui a
 participação nova no grupo `docker`. `-O` salva com o nome original; `-o .env`
 renomeia o exemplo para o arquivo real.
 
-Gere as senhas e preencha:
+</td></tr></table>
+
+**Gere as senhas e preencha:**
 
 ```bash
 openssl rand -base64 24    # POSTGRES_PASSWORD
@@ -178,46 +274,66 @@ chmod 600 .env
 ```
 
 No mínimo: `DOMINIO`, `POSTGRES_PASSWORD`, `ADMIN_EMAIL`, `ADMIN_SENHA` e
-`GOOGLE_REDIRECT_URL`. O `chmod 600` restringe a leitura ao dono — o arquivo tem
-a senha do banco, a do admin e as credenciais de SMTP e OAuth.
+`GOOGLE_REDIRECT_URL`.
 
-Suba **de dentro da pasta**:
+🔒 O `chmod 600` restringe a leitura ao dono — o arquivo tem a senha do banco, a
+do admin e as credenciais de SMTP e OAuth.
+
+**Suba — de dentro da pasta:**
 
 ```bash
 cd ~/agendago
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-> **Armadilha:** o Compose lê o `.env` do **diretório atual**, não do diretório
-> onde está o arquivo de compose. Rodando de outro lugar, todas as variáveis
-> chegam vazias: o Caddy pede certificado para um domínio em branco e o Postgres
-> sobe sem senha — e nada disso diz "faltou o .env".
+> [!CAUTION]
+> **O Compose lê o `.env` do diretório atual**, não do diretório onde está o
+> arquivo de compose. Rodando de outro lugar, **todas** as variáveis chegam
+> vazias: o Caddy pede certificado para um domínio em branco e o Postgres sobe
+> sem senha — e nada disso diz *"faltou o .env"*.
 
-Para ver a configuração já resolvida, sem subir nada:
+Para ver a configuração já resolvida, **sem subir nada**:
 
 ```bash
 docker compose -f docker-compose.prod.yml config | grep -E "DOMINIO|image:"
 ```
 
-## 5. Conferir
+---
+
+## 5️⃣ Conferir
 
 ```bash
 docker compose -f docker-compose.prod.yml ps -a
 ```
 
-Esperado: `postgres` e `api` como *healthy*, `web` e `caddy` como *Up*, e
-`flyway` como **Exited (0)**. O `-a` é necessário justamente para enxergar o
-`flyway`: ele é um job pontual que aplica as migrations e sai — **sair é o
-comportamento correto**, não é falha.
+| Serviço | Estado esperado |
+|---|---|
+| `postgres` | 🟢 Up (healthy) |
+| `api` | 🟢 Up (healthy) |
+| `web` | 🟢 Up |
+| `caddy` | 🟢 Up |
+| `flyway` | ⚪ **Exited (0)** |
+
+> [!NOTE]
+> **`flyway` como *Exited* não é falha.** Ele é um job pontual que aplica as
+> migrations e sai — **sair é o comportamento correto**. O `-a` no `ps` existe
+> justamente para você conseguir enxergá-lo.
+
+**O certificado saiu?**
 
 ```bash
 docker compose -f docker-compose.prod.yml logs caddy | grep -i certificate
 ```
 
-Você quer `certificate obtained successfully` com `"issuer"` citando
-**letsencrypt**. Se aparecer `"issuer":"local"`, a emissão pública falhou e o
-Caddy caiu na CA interna — quase sempre DNS errado ou porta 80 bloqueada (na
-Hostinger, confira também o firewall do painel, que é separado do `ufw`).
+| O que aparece | Significa |
+|---|---|
+| `certificate obtained successfully` + `issuer` com **letsencrypt** | ✅ certificado público, tudo certo |
+| `"issuer":"local"` | ❌ emissão falhou, caiu na CA interna |
+
+Se falhou: DNS errado ou porta 80 bloqueada. Na Hostinger, confira também o
+**firewall do painel**, que é separado do `ufw`.
+
+**A aplicação responde?**
 
 ```bash
 curl -s https://SEU_DOMINIO/api/health         # {"status":"ok"}
@@ -226,19 +342,22 @@ curl -sI https://SEU_DOMINIO/ | grep -i strict-transport
 curl -so /dev/null -w '%{http_code}\n' https://SEU_DOMINIO/api/swagger/index.html   # 404
 ```
 
-Dois detalhes que valem atenção:
+> [!WARNING]
+> **Use GET, não HEAD.** `curl -I` manda HEAD, e `/health` é registrada como
+> `GET` — a resposta é **405**, que parece defeito e não é.
 
-- **Use GET, não HEAD, no `/health`.** `curl -I` manda HEAD, e a rota é
-  registrada como `GET` — a resposta é `405`, que parece defeito e não é.
-- **Sem `-k`.** Durante o ensaio local o `-k` é necessário (certificado
-  interno). Aqui a ausência dele é o próprio teste: se responder, o certificado
-  é publicamente confiável e nenhum visitante verá aviso.
+> [!TIP]
+> **Repare na ausência do `-k`.** No ensaio local ele é necessário (certificado
+> interno). Aqui, a ausência dele **é o próprio teste**: se responder, o
+> certificado é publicamente confiável e nenhum visitante verá aviso.
 
 No navegador, confirme no DevTools que o cookie `agendago_session` veio com
 **Secure**, **HttpOnly** e **SameSite=Lax**, e que as chamadas XHR vão para
 `https://SEU_DOMINIO/api/...` — nunca para `localhost:8080`.
 
-## 6. Login social com Google
+---
+
+## 6️⃣ Login social com Google
 
 Cadastre a URL de callback em *Authorized redirect URIs*, no cliente OAuth do
 [Google Cloud Console](https://console.cloud.google.com/apis/credentials):
@@ -247,42 +366,51 @@ Cadastre a URL de callback em *Authorized redirect URIs*, no cliente OAuth do
 https://SEU_DOMINIO/api/auth/google/callback
 ```
 
-> **Armadilha:** o `/api` é obrigatório. O callback é rota da **API**, e atrás do
-> Caddy a API vive sob esse prefixo. Sem ele, o Google devolve o usuário no
-> frontend, que não tem essa rota: o consentimento funciona e o login morre num
-> 404 — depois de a conta já ter sido vinculada do lado do Google.
+> [!CAUTION]
+> **O `/api` é obrigatório.** O callback é rota da **API**, e atrás do Caddy a
+> API vive sob esse prefixo. Sem ele, o Google devolve o usuário no frontend, que
+> não tem essa rota: o consentimento funciona e **o login morre num 404** —
+> depois de a conta já ter sido vinculada do lado do Google.
 
-O Google compara a URL caractere a caractere; divergiu, ele recusa com
-`redirect_uri_mismatch`. O mesmo cliente OAuth aceita várias URIs, então dev,
-ensaio local e produção convivem:
+O Google compara a URL **caractere a caractere**; divergiu, recusa com
+`redirect_uri_mismatch`. O mesmo cliente aceita várias URIs, então os três
+ambientes convivem:
 
-```
-http://localhost:8080/auth/google/callback      (dev, API direta)
-https://localhost/api/auth/google/callback      (ensaio local)
-https://SEU_DOMINIO/api/auth/google/callback    (produção)
-```
+| Ambiente | URI |
+|---|---|
+| Dev (API direta) | `http://localhost:8080/auth/google/callback` |
+| Ensaio local | `https://localhost/api/auth/google/callback` |
+| Produção | `https://SEU_DOMINIO/api/auth/google/callback` |
 
-Para conferir o que a API manda ao Google, sem abrir o navegador:
+**Conferir sem abrir o navegador:**
 
 ```bash
 curl -sD - -o /dev/null https://SEU_DOMINIO/api/auth/client/google/start | grep -i location
 ```
 
-## 7. Email
+---
 
-O remetente **não pode** ser `@gmail`/`@outlook`/`@yahoo`: quem envia é a Brevo,
-o DMARC desses provedores não a autoriza, e a mensagem cai em spam ou é
-rejeitada. É preciso um endereço de **domínio próprio** autenticado na Brevo
-(SPF + DKIM).
+## 7️⃣ Email
 
-**Um subdomínio DuckDNS não resolve isso** — você não controla o DNS de
-`duckdns.org` e não consegue publicar os registros. Enquanto não houver domínio
-próprio, confirmação de cadastro, recuperação de senha e cancelamento por link
-não chegam de forma confiável. Se email é requisito, inclua um domínio no
-orçamento.
+> [!CAUTION]
+> **O remetente não pode ser `@gmail`/`@outlook`/`@yahoo`.** Quem envia é a
+> Brevo, o DMARC desses provedores não a autoriza, e a mensagem cai em spam ou é
+> rejeitada. É preciso um endereço de **domínio próprio** autenticado na Brevo
+> (SPF + DKIM).
+>
+> **Um subdomínio DuckDNS não resolve** — você não controla o DNS de
+> `duckdns.org` e não consegue publicar os registros. Sem domínio próprio,
+> confirmação de cadastro, recuperação de senha e cancelamento por link **não
+> chegam de forma confiável**.
 
-Credenciais SMTP ficam em Brevo → *SMTP & API* → *SMTP* (não é a senha da conta).
-Para validar sem disparar mensagem, basta o handshake de autenticação:
+Credenciais SMTP ficam em **Brevo → SMTP & API → SMTP** (não é a senha da conta).
+
+<details>
+<summary><b>🧪 Testar email sem depender da entrega</b></summary>
+
+<br>
+
+**Validar as credenciais** sem disparar mensagem (`235` = aceitas):
 
 ```bash
 U=$(printf '%s' "$SMTP_USER" | base64 -w0); P=$(printf '%s' "$SMTP_PASSWORD" | base64 -w0)
@@ -290,24 +418,56 @@ printf 'EHLO teste\r\nAUTH LOGIN\r\n%s\r\n%s\r\nQUIT\r\n' "$U" "$P" \
   | openssl s_client -quiet -starttls smtp -connect smtp-relay.brevo.com:587 2>/dev/null | grep '^235'
 ```
 
-`235` significa credenciais aceitas.
+**Ver os emails que o app gera**, com um Mailpit local:
+
+```bash
+docker run -d --name mailpit --network agendago_default -p 8025:8025 axllent/mailpit
+SMTP_HOST=mailpit SMTP_PORT=1025 SMTP_STARTTLS=false SMTP_USER= SMTP_PASSWORD= \
+  docker compose -f docker-compose.prod.yml up -d api
+# caixa de entrada em http://localhost:8025
+```
+
+⚠️ **Zere `SMTP_USER` e `SMTP_PASSWORD` junto.** O Mailpit não faz AUTH, e a API
+falha com `server does not support SMTP AUTH` se as credenciais continuarem lá.
+
+</details>
 
 ---
 
-# Deploy automático (CI → VPS)
+# 🤖 Deploy automático (CI → VPS)
 
-O job `implantar` do `.github/workflows/ci.yml` fecha o ciclo: depois que as
-imagens são publicadas, ele entra na VPS por SSH, sincroniza
-`docker-compose.prod.yml` e `Caddyfile`, manda puxar as imagens **fixadas no SHA
-do commit** e sobe a stack. Por fim chama `/api/health` e falha se a aplicação
-não responder.
+O job `implantar` do `.github/workflows/ci.yml` fecha o ciclo:
 
-Três coisas que ele **não** faz, de propósito: não envia código-fonte (as
-imagens vêm do GHCR), não toca no `.env` do servidor (é lá que vivem os
-segredos) e não roda nada se os segredos não existirem — o job passa com um
-aviso, para o repositório funcionar antes de a VPS existir.
+```mermaid
+flowchart LR
+    A["✅ testes<br/>passaram"] --> B["📦 imagens<br/>publicadas"]
+    B --> C["📄 sincroniza<br/>compose + Caddyfile"]
+    C --> D["⬇️ pull fixado<br/>no SHA"]
+    D --> E["🚀 up -d"]
+    E --> F{"/api/health<br/>respondeu?"}
+    F -->|sim| G["🟢 deploy ok"]
+    F -->|não| H["🔴 job falha"]
 
-**1. Uma chave SSH exclusiva do CI**, gerada na sua máquina:
+    style G fill:#43a047,color:#fff
+    style H fill:#e53935,color:#fff
+```
+
+**Três coisas que ele não faz, de propósito:**
+
+| Não faz | Por quê |
+|---|---|
+| Enviar código-fonte | as imagens vêm do GHCR |
+| Tocar no `.env` do servidor | é lá que vivem os segredos |
+| Rodar sem os segredos | passa com aviso, para o repo funcionar antes de a VPS existir |
+
+> [!TIP]
+> A tag puxada é o **SHA do commit**, não `latest`. O servidor sobe exatamente o
+> artefato que passou nos testes — sem a janela em que outro push republica a
+> tag entre a publicação e o `pull`.
+
+### Configuração
+
+**1. Chave SSH exclusiva do CI**, na sua máquina:
 
 ```bash
 ssh-keygen -t ed25519 -f ~/.ssh/agendago_deploy -N '' -C 'github-actions'
@@ -322,46 +482,49 @@ chown -R deploy:deploy /home/deploy/.ssh
 chmod 700 /home/deploy/.ssh && chmod 600 /home/deploy/.ssh/authorized_keys
 ```
 
-As permissões importam: o SSH **recusa a chave silenciosamente** se a pasta ou o
-arquivo estiverem legíveis por outros usuários.
+> [!WARNING]
+> **As permissões não são detalhe.** O SSH **recusa a chave silenciosamente** se
+> a pasta ou o arquivo estiverem legíveis por outros usuários. É a causa mais
+> comum de "a chave não funciona e não diz por quê".
 
-Teste antes de seguir:
+**Teste antes de seguir:**
 
 ```bash
 ssh -i ~/.ssh/agendago_deploy deploy@SEU_IP 'docker ps --format "{{.Names}}"'
 ```
 
-Listar os containers prova três coisas de uma vez: a chave funciona, o usuário
-entra sem senha e tem acesso ao Docker.
+✅ Listar os containers prova três coisas de uma vez: a chave funciona, o usuário
+entra sem senha, e tem acesso ao Docker.
 
 **3. Cadastrar no GitHub** (*Settings → Secrets and variables → Actions*):
 
 | Nome | Aba | Conteúdo |
 |---|---|---|
-| `VPS_HOST` | Secrets | IP ou hostname da VPS |
-| `VPS_USER` | Secrets | `deploy` |
-| `VPS_SSH_KEY` | Secrets | conteúdo de `~/.ssh/agendago_deploy` (chave **privada**, com as linhas `BEGIN`/`END`) |
-| `VPS_PORT` | Secrets | opcional, padrão `22` |
-| `VPS_KNOWN_HOSTS` | Secrets | saída de `ssh-keyscan SEU_IP` |
-| `DOMINIO` | **Variables** | seu domínio, usado na verificação pós-deploy |
+| `VPS_HOST` | 🔒 Secrets | IP ou hostname da VPS |
+| `VPS_USER` | 🔒 Secrets | `deploy` |
+| `VPS_SSH_KEY` | 🔒 Secrets | a chave **privada**, com as linhas `BEGIN`/`END` |
+| `VPS_PORT` | 🔒 Secrets | opcional, padrão `22` |
+| `VPS_KNOWN_HOSTS` | 🔒 Secrets | saída de `ssh-keyscan SEU_IP` |
+| `DOMINIO` | 📢 Variables | seu domínio, para a verificação pós-deploy |
 
-`VPS_KNOWN_HOSTS` é opcional mas recomendado: sem ele o CI aceita a identidade
-que o servidor apresentar na hora, o que abre janela para man-in-the-middle no
-primeiro contato.
+> [!TIP]
+> `VPS_KNOWN_HOSTS` é opcional mas recomendado: sem ele o CI aceita a identidade
+> que o servidor apresentar na hora, o que abre janela para **man-in-the-middle**
+> no primeiro contato.
 
-**4. Testar sem commit:** *Actions → CI → Run workflow*, habilitado pelo
+**4. Testar sem commit:** *Actions → CI → **Run workflow***, habilitado pelo
 `workflow_dispatch`.
 
 ---
 
-# Ensaiar na sua máquina antes
+# 🧪 Ensaiar na sua máquina antes
 
-A stack inteira roda local com `DOMINIO=localhost`, o que permite testar o
-artefato de produção de verdade — foi assim que quatro defeitos que só se
-manifestariam em produção apareceram antes do deploy.
+> [!TIP]
+> A stack inteira roda local com `DOMINIO=localhost`. Foi assim que **quatro
+> defeitos que só se manifestariam em produção** apareceram antes do deploy.
 
-Reproduza o host: uma pasta **fora do repositório** com os mesmos três arquivos.
-Assim o comando é idêntico ao do servidor e o `.env` de desenvolvimento fica
+Reproduza o host: uma pasta **fora do repositório**, com os mesmos três arquivos.
+O comando fica idêntico ao do servidor e o `.env` de desenvolvimento fica
 intocado.
 
 ```bash
@@ -372,8 +535,13 @@ cp ~/agendaGo/.env.prod.example .env
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Enquanto o CI não tiver publicado as imagens, builde-as antes com as tags que o
-compose procura — é o único passo que **não** existe na VPS de verdade:
+<details>
+<summary><b>🔨 Buildar as imagens localmente</b> (enquanto o CI não publicou)</summary>
+
+<br>
+
+É o único passo que **não** existe na VPS de verdade — lá o `up` puxa do GHCR
+sozinho.
 
 ```bash
 cd ~/agendaGo
@@ -382,12 +550,23 @@ docker build -t ghcr.io/caetasousa/agendago-web:latest        -f frontend/Docker
 docker build -t ghcr.io/caetasousa/agendago-migrations:latest -f backend/Dockerfile.migrations backend/
 ```
 
-Com `DOMINIO=localhost` o Caddy emite um certificado da **CA interna** dele, sem
-Let's Encrypt e sem DNS. Por isso os comandos de verificação locais usam `curl -k`.
+</details>
 
-No navegador o certificado interno gera aviso, e o cabeçalho HSTS faz o Chrome
-**remover o botão de prosseguir**. Duas saídas: digitar `thisisunsafe` na tela
-de erro, ou instalar a CA do Caddy no sistema:
+<details>
+<summary><b>🔓 Fazer o navegador aceitar o certificado local</b></summary>
+
+<br>
+
+Com `DOMINIO=localhost` o Caddy emite um certificado da **CA interna** dele — daí
+o `curl -k` nos testes locais.
+
+No navegador o certificado gera aviso, e o cabeçalho **HSTS faz o Chrome remover
+o botão de prosseguir**. Duas saídas:
+
+**Rápida:** digitar `thisisunsafe` na tela de erro (não existe campo — é só
+digitar).
+
+**Definitiva:** instalar a CA do Caddy:
 
 ```bash
 docker cp agendago-vps-caddy-1:/data/caddy/pki/authorities/local/root.crt .
@@ -395,17 +574,22 @@ docker cp agendago-vps-caddy-1:/data/caddy/pki/authorities/local/root.crt .
 certutil.exe -user -addstore Root root.crt
 ```
 
-A confiança quebra se você apagar o volume (`down -v` recria a CA). Nada disso
-existe em produção, onde o certificado é público.
+⚠️ A confiança **quebra se você apagar o volume** — `down -v` recria a CA. Nada
+disso existe em produção, onde o certificado é público.
+
+</details>
 
 ---
 
-# Operação
+# 🛠️ Operação
 
-## Atualizar
+<details>
+<summary><b>🔄 Atualizar</b></summary>
 
-Com o deploy automático configurado, um push na `main` que passe nos testes já
-sobe a versão nova. Manualmente:
+<br>
+
+Com o deploy automático, um push na `main` que passe nos testes já sobe a versão
+nova. Manualmente:
 
 ```bash
 docker compose -f docker-compose.prod.yml pull
@@ -414,9 +598,14 @@ docker compose -f docker-compose.prod.yml up -d
 
 O Flyway aplica só as migrations novas; a API sobe depois. O desligamento é
 gracioso (até 10s para as requisições em andamento terminarem), então o redeploy
-não derruba requests no meio.
+**não derruba requests no meio**.
 
-## Rollback
+</details>
+
+<details>
+<summary><b>⏪ Rollback</b></summary>
+
+<br>
 
 O CI tagueia cada imagem com o SHA do commit:
 
@@ -425,118 +614,153 @@ echo 'IMAGE_TAG=<sha-do-commit-bom>' >> .env
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Migrations não voltam sozinhas: se o commit ruim adicionou uma, o rollback do
-schema é manual.
+⚠️ **Migrations não voltam sozinhas.** Se o commit ruim adicionou uma, o rollback
+do schema é manual.
 
-## Logs
+</details>
+
+<details>
+<summary><b>📋 Logs</b></summary>
+
+<br>
 
 Em produção a API emite **JSON estruturado** em stdout, com rotação já
-configurada no compose (3 arquivos de 10 MB por serviço).
+configurada (3 arquivos de 10 MB por serviço).
 
 ```bash
-docker compose -f docker-compose.prod.yml logs -f api
-docker compose -f docker-compose.prod.yml logs api | jq 'select(.level=="ERROR")'
-docker compose -f docker-compose.prod.yml logs api | jq 'select(.level=="WARN")'
+docker compose -f docker-compose.prod.yml logs -f api                          # acompanhar
+docker compose -f docker-compose.prod.yml logs api | jq 'select(.level=="ERROR")'   # só erros
+docker compose -f docker-compose.prod.yml logs api | jq 'select(.level=="WARN")'    # segurança
 ```
 
-Cada requisição gera uma linha com `request_id`, `rota` (o padrão, não o caminho
-— tokens não vão para o log), `status`, `duracao` e `ip` do cliente real
+Cada requisição gera uma linha com `request_id`, `rota` (o **padrão**, não o
+caminho — tokens não vão para o log), `status`, `duracao` e `ip` do cliente real
 (resolvido do `X-Real-IP` que o Caddy define). O mesmo `request_id` liga a linha
 de acesso ao erro correspondente.
 
-## Backup
+</details>
+
+<details>
+<summary><b>💾 Backup</b></summary>
+
+<br>
 
 ```bash
 docker compose -f docker-compose.prod.yml exec postgres \
   pg_dump -U agendago agendago > backup-$(date +%F).sql
 ```
 
-Agende por cron. Backup de VM do provedor restaura a máquina inteira — serve
-para desastre, não para "recuperar o banco de ontem" nem para levar os dados
-para outro lugar.
+Agende por cron.
 
-## Certificado
+⚠️ **Backup de VM do provedor não substitui isto.** Ele restaura a máquina
+inteira — serve para desastre, não para "recuperar o banco de ontem" nem para
+levar os dados para outro lugar.
+
+</details>
+
+<details>
+<summary><b>🔐 Certificado</b></summary>
+
+<br>
 
 O Caddy renova sozinho; os certificados persistem no volume `caddy_data`.
 
+</details>
+
 ---
 
-# Dimensionamento
+# 📊 Dimensionamento
 
-Medições reais da stack de produção, com os containers limitados a 2 vCPUs e o
-banco vazio:
+> Medições reais da stack de produção, com os containers **limitados a 2 vCPUs**
+> e o banco vazio.
 
 | Rota | Req/s | p50 | p99 |
-|---|---|---|---|
-| `/api/health` | 12.235 | 3,5 ms | 15,6 ms |
-| `/api/providers` (Postgres) | 4.665 | 8,7 ms | 1,55 s |
-| `/` (página do frontend) | 2.749 | 15,5 ms | 233 ms |
-| `/auth/provider/login` (Argon2id) | 85 | 226 ms | 544 ms |
+|---|---:|---:|---:|
+| `/api/health` | **12.235** | 3,5 ms | 15,6 ms |
+| `/api/providers` (Postgres) | **4.665** | 8,7 ms | 1,55 s |
+| `/` (página do frontend) | **2.749** | 15,5 ms | 233 ms |
+| `/auth/provider/login` (Argon2id) | **85** | 226 ms | 544 ms |
 
-Em repouso, os quatro containers somam **99 MiB**: Postgres 41, web 26, API 18,
-Caddy 13. Com o SO e o daemon do Docker, ~400 MB.
+**Memória em repouso — 99 MiB nos quatro containers:**
 
-O gargalo é o **login**: cada verificação Argon2id custa ~24 ms de CPU e 19 MB
-de RAM, de propósito — é o que torna quebra de senha por força bruta cara. Sob
-20 logins simultâneos, a API sozinha chegou a **365 MiB**. Num host de 1 GB isso
-pede swap; com 4 GB não é preocupação. O rate limit por IP existe exatamente
-para conter esse pico.
+| Container | RAM |
+|---|---:|
+| 🐘 Postgres | 41 MiB |
+| 🎨 Web | 26 MiB |
+| ⚙️ API | 18 MiB |
+| 🔐 Caddy | 13 MiB |
 
-Uma VPS de 1 vCPU e 4 GB atende com folga: o recurso escasso passa a ser CPU, e
-mesmo assim sobram ordens de grandeza para o perfil de uso de um app de
-agendamento. Como o host não compila nada, o requisito de RAM caiu — era o build
-que exigia 2 GB.
+> [!IMPORTANT]
+> **O gargalo é o login.** Cada verificação Argon2id custa ~24 ms de CPU e
+> **19 MB de RAM**, de propósito — é o que torna quebra de senha por força bruta
+> cara. Sob 20 logins simultâneos, a API sozinha chegou a **365 MiB**. Num host
+> de 1 GB isso pede swap; com 4 GB não é preocupação. O rate limit por IP existe
+> exatamente para conter esse pico.
+
+Uma VPS de **1 vCPU e 4 GB atende com folga**: o recurso escasso passa a ser CPU,
+e ainda sobram ordens de grandeza para o perfil de uso de um app de agendamento.
+Como o host não compila nada, o requisito de RAM caiu — era o build que exigia
+2 GB.
 
 ---
 
-# Referência: variáveis de ambiente
-
-| Variável | Obrigatória | Padrão | Para quê |
-|---|---|---|---|
-| `DOMINIO` | sim | — | hostname público; usado pelo Caddy (TLS) e como `FRONTEND_ORIGIN` |
-| `IMAGE_REPO` | não | `ghcr.io/caetasousa` | de onde vêm as imagens |
-| `IMAGE_TAG` | não | `latest` | versão das imagens (use o SHA para fixar/rollback) |
-| `POSTGRES_DB/USER/PASSWORD` | sim | — | banco (a API recebe como `DB_*`) |
-| `APP_ENV` | sim | `production` (fixo no compose) | liga o `Secure` do cookie, o log em JSON e **remove a rota do Swagger** |
-| `FRONTEND_ORIGIN` | sim | `https://${DOMINIO}` (fixo) | origem no CORS e base dos links dos emails |
-| `ADMIN_EMAIL/SENHA` | recomendado | — | semeiam o admin no boot (vazias = sem admin) |
-| `RATE_LIMIT_LOGIN_POR_MINUTO` | não | `10` | teto de logins por IP/min (0 desliga — **não use 0**) |
-| `RATE_LIMIT_CONVIDADO_POR_MINUTO` | não | `10` | teto de agendamentos de convidado por IP/min |
-| `SMTP_HOST` | não | — | servidor SMTP. **Vazio desliga o envio** (emails só logados) |
-| `SMTP_PORT` | não | `587` | porta SMTP |
-| `SMTP_USER/PASSWORD` | não | — | credenciais SMTP |
-| `SMTP_STARTTLS` | não | `true` | exige STARTTLS |
-| `EMAIL_REMETENTE/_NOME` | não | — | remetente (precisa ser de domínio autenticado) |
-| `EMAIL_REPLY_TO` | não | — | endereço de resposta |
-| `GOOGLE_CLIENT_ID/SECRET` | não | — | login social; **vazio desliga** o recurso |
-| `GOOGLE_REDIRECT_URL` | se usar Google | — | callback **com o prefixo `/api`** |
-
-# Checklist de go-live
+# ✅ Checklist de go-live
 
 - [ ] **`APP_ENV=production`** — já fixado no compose; liga `Secure` no cookie
-- [ ] **Certificado da Let's Encrypt** — `curl` sem `-k` responde
+- [ ] **Certificado da Let's Encrypt** — `curl` **sem** `-k` responde
 - [ ] **Rate limit > 0** — `RATE_LIMIT_*` não podem ser `0`
 - [ ] **`ADMIN_SENHA` e `POSTGRES_PASSWORD` fortes** — `openssl rand -base64 24`
 - [ ] **`.env` com `chmod 600`**
-- [ ] **SMTP com remetente de domínio autenticado** — se já usou a chave em outro lugar, rotacione
+- [ ] **SMTP com remetente de domínio autenticado** — se já usou a chave em outro lugar, **rotacione**
 - [ ] **Postgres sem porta pública** — o compose não expõe; confirme o firewall
-- [ ] **Swagger fora do ar** — duas camadas: a API não monta a rota em produção e o Caddy responde 404
+- [ ] **Swagger fora do ar** — duas camadas: a API não monta a rota em produção **e** o Caddy responde 404
 - [ ] **Backup do banco agendado**
 
-# Armadilhas conhecidas
+---
 
-Compilado do que quebrou de verdade, para consulta rápida:
+# 🚨 Armadilhas conhecidas
+
+> Compilado do que quebrou **de verdade**, para consulta rápida.
 
 | Sintoma | Causa |
 |---|---|
 | `405` no `/api/health` | `curl -I` manda HEAD; a rota é `GET` |
-| `flyway` como *Exited* | é o esperado: job pontual que aplica migrations e sai |
+| `flyway` como *Exited* | ✅ é o esperado: job pontual que roda e sai |
 | Variáveis vazias no compose | rodou de fora da pasta que contém o `.env` |
 | `denied` ao puxar imagens | pacotes do GHCR ainda privados |
 | `"issuer":"local"` no log do Caddy | DNS errado ou porta 80 fechada |
 | Login social em 404 após consentimento | `GOOGLE_REDIRECT_URL` sem o prefixo `/api` |
-| `redirect_uri_mismatch` | URL não cadastrada, ou diferente, no Google Cloud Console |
+| `redirect_uri_mismatch` | URL não cadastrada, ou diferente, no Google Console |
 | Chave SSH ignorada sem erro claro | permissões frouxas em `~/.ssh` ou `authorized_keys` |
-| `sudo` falha para o `deploy` | intencional: usuário sem senha e fora do grupo `sudo` |
-| API não sobe, erro de parse de URL | senha do banco com caractere reservado (corrigido: a DSN agora é montada com `net/url`) |
-| Frontend chamando `localhost:8080` | `PUBLIC_API_URL` não exposta no build (corrigido: `envPrefix` no `vite.config.ts`) |
+| `sudo` falha para o `deploy` | 🔒 intencional: sem senha e fora do grupo `sudo` |
+| API não sobe, erro de parse de URL | senha do banco com caractere reservado — *corrigido: DSN montada com `net/url`* |
+| Frontend chamando `localhost:8080` | `PUBLIC_API_URL` não exposta no build — *corrigido: `envPrefix` no `vite.config.ts`* |
+
+---
+
+<details>
+<summary><b>📖 Referência: variáveis de ambiente</b></summary>
+
+<br>
+
+| Variável | Obrigatória | Padrão | Para quê |
+|---|---|---|---|
+| `DOMINIO` | ✅ | — | hostname público; usado pelo Caddy (TLS) e como `FRONTEND_ORIGIN` |
+| `IMAGE_REPO` | — | `ghcr.io/caetasousa` | de onde vêm as imagens |
+| `IMAGE_TAG` | — | `latest` | versão das imagens (use o SHA para fixar/rollback) |
+| `POSTGRES_DB/USER/PASSWORD` | ✅ | — | banco (a API recebe como `DB_*`) |
+| `APP_ENV` | ✅ | `production` (fixo) | liga `Secure` no cookie, log em JSON e **remove a rota do Swagger** |
+| `FRONTEND_ORIGIN` | ✅ | `https://${DOMINIO}` (fixo) | origem no CORS e base dos links dos emails |
+| `ADMIN_EMAIL/SENHA` | recomendado | — | semeiam o admin no boot (vazias = sem admin) |
+| `RATE_LIMIT_LOGIN_POR_MINUTO` | — | `10` | teto de logins por IP/min (⚠️ **não use 0**) |
+| `RATE_LIMIT_CONVIDADO_POR_MINUTO` | — | `10` | teto de agendamentos de convidado por IP/min |
+| `SMTP_HOST` | — | — | servidor SMTP. **Vazio desliga o envio** |
+| `SMTP_PORT` | — | `587` | porta SMTP |
+| `SMTP_USER/PASSWORD` | — | — | credenciais SMTP |
+| `SMTP_STARTTLS` | — | `true` | exige STARTTLS |
+| `EMAIL_REMETENTE/_NOME` | — | — | remetente (precisa ser de domínio autenticado) |
+| `EMAIL_REPLY_TO` | — | — | endereço de resposta |
+| `GOOGLE_CLIENT_ID/SECRET` | — | — | login social; **vazio desliga** o recurso |
+| `GOOGLE_REDIRECT_URL` | se usar Google | — | callback **com o prefixo `/api`** |
+
+</details>

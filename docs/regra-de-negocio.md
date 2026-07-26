@@ -1,25 +1,42 @@
-# Regras de Negócio — agendaGo
+# 📐 Regras de Negócio — agendaGo
 
-Documento de referência das regras de negócio da agenda. Define como o prestador
-configura sua disponibilidade, como os horários são ofertados ao cliente e como o
-agendamento evolui até a conclusão.
+> Referência de **como a agenda funciona**: como o prestador configura sua
+> disponibilidade, como os horários chegam ao cliente e como o agendamento evolui
+> até a conclusão.
 
-## Visão geral do fluxo
+## 🧭 Visão geral do fluxo
 
-A agenda se apoia em três camadas, refletidas no domínio
-(`internal/domain/{user,availability,slot,appointment}`):
+```mermaid
+flowchart LR
+    D["🗓️ <b>Disponibilidade</b><br/><i>regra</i><br/>quando o prestador trabalha"]
+    S["🕐 <b>Slots</b><br/><i>oferta</i><br/>calculados sob demanda"]
+    A["📌 <b>Agendamento</b><br/><i>reserva</i><br/>cliente pede, prestador confirma"]
 
-1. **Disponibilidade (regra)** — o prestador define quando trabalha.
-2. **Slots (oferta)** — horários livres, **calculados** a partir da disponibilidade menos
-   os agendamentos existentes.
-3. **Agendamento (reserva)** — o cliente solicita um slot; o prestador confirma.
+    D -->|"menos os agendamentos<br/>existentes"| S
+    S -->|"cliente escolhe<br/>um horário"| A
+    A -.->|"ocupa o intervalo,<br/>some da oferta"| S
 
-> A separação disponibilidade → slots → agendamento é o eixo do sistema. O cliente só
-> consegue marcar em dias e horários efetivamente disponíveis.
+    style D fill:#1565c0,color:#fff
+    style S fill:#2e7d32,color:#fff
+    style A fill:#ef6c00,color:#fff
+```
+
+Três camadas, refletidas no domínio (`internal/domain/{user,availability,slot,appointment}`):
+
+| Camada | O que é | Quem controla |
+|---|---|---|
+| 🗓️ **Disponibilidade** | a regra: quando o prestador trabalha | prestador |
+| 🕐 **Slots** | a oferta: horários livres, **calculados**, nunca pré-gravados | o sistema |
+| 📌 **Agendamento** | a reserva: um slot vira compromisso | cliente pede, prestador confirma |
+
+> [!IMPORTANT]
+> **A separação disponibilidade → slots → agendamento é o eixo do sistema.** O
+> cliente só consegue marcar em dias e horários efetivamente disponíveis — não há
+> como agendar "por fora" da regra.
 
 ---
 
-## 1. Disponibilidade do prestador
+## 1️⃣ 🗓️ Disponibilidade do prestador
 
 ### Expediente padrão
 Não há grade recorrente por dia da semana: o prestador configura, em Preferências, um
@@ -52,35 +69,50 @@ Ao salvar os horários de uma data, o sistema valida:
 - Blocos **adjacentes** são mesclados (ex.: 08:00–12:00 + 12:00–14:00 → 08:00–14:00).
 
 ### Resolução da disponibilidade de um dia
-A disponibilidade efetiva de uma data resolve-se nesta ordem:
 
+```mermaid
+flowchart TD
+    Q{"Existe definição<br/>para esta data?"}
+    Q -->|"BLOQUEIO"| N["🚫 indisponível"]
+    Q -->|"EXTRA"| E["✅ horários personalizados<br/><i>substituem o padrão</i>"]
+    Q -->|"não"| A{"Agenda ativa<br/>E dia útil?"}
+    A -->|sim| P["✅ expediente padrão"]
+    A -->|não| N
+
+    style N fill:#c62828,color:#fff
+    style E fill:#2e7d32,color:#fff
+    style P fill:#2e7d32,color:#fff
 ```
-definição da data  →  (se agenda ativa e dia útil) expediente padrão  →  indisponível
-```
+
+A definição da data **sempre vence** o expediente padrão.
 
 ### Antecedência para alterar o dia de hoje
-Qualquer alteração no dia **de hoje** — bloquear, definir/editar horários personalizados —
-exige **24h de antecedência**: não se cancela nem se cria oferta "em cima da hora". A
-única exceção é **restaurar o padrão a partir de um bloqueio**: isso só reduz a oferta
-(nunca a amplia), então nunca surpreende um cliente. Hoje a regra é aplicada na interface;
+
+> [!WARNING]
+> Qualquer alteração no dia **de hoje** — bloquear, definir ou editar horários
+> personalizados — exige **24h de antecedência**. Não se cancela nem se cria
+> oferta "em cima da hora".
+
+A única exceção é **restaurar o padrão a partir de um bloqueio**: isso só reduz a
+oferta (nunca a amplia), então nunca surpreende um cliente. Hoje a regra é aplicada na interface;
 quando existirem agendamentos, a validação passa a valer também no backend (um dia com
 agendamento não poderá ser bloqueado).
 
 ---
 
-## 2. Slots (horários ofertados)
+## 2️⃣ 🕐 Slots (horários ofertados)
 
-Os slots são **calculados sob demanda**, não pré-gravados. O cliente, ao consultar,
-recebe os horários livres calculados como:
+Os slots são **calculados sob demanda**, nunca pré-gravados:
 
 ```
-slots livres = blocos do dia − agendamentos (SOLICITADO/CONFIRMADO)
+slots livres  =  blocos do dia  −  agendamentos (SOLICITADO / CONFIRMADO)
 ```
 
+> [!TIP]
 > **Link público de agendamento** — cada prestador tem um link (`/agendar/{id}`,
 > exibido no painel para compartilhar no Instagram/WhatsApp). Qualquer pessoa vê o
-> calendário de horários livres sem cadastro; criar conta/entrar só é exigido na hora
-> de solicitar.
+> calendário de horários livres **sem cadastro**; criar conta ou entrar só é
+> exigido na hora de solicitar.
 
 ### Fatiamento por duração + buffer
 Cada bloco é fatiado em slots conforme a **duração do atendimento** somada ao **buffer**
@@ -99,7 +131,7 @@ de 60 min):
 
 ---
 
-## 3. Agendamento (reserva)
+## 3️⃣ 📌 Agendamento (reserva)
 
 ### Reserva ao solicitar + expiração (anti-overbooking)
 Quando o cliente solicita um horário, o agendamento já **ocupa o intervalo** (reserva
@@ -114,7 +146,10 @@ conseguem solicitar o mesmo intervalo.
   acontecem sob esse lock. (Optamos pelo lock transacional em vez de uma constraint de
   exclusão para o schema não carregar regra de negócio — decisão registrada no CLAUDE.md.)
 
-> Isso elimina a janela de overbooking entre "solicitar" e "confirmar".
+> [!IMPORTANT]
+> **Isso elimina a janela de overbooking** entre "solicitar" e "confirmar". Sem a
+> reserva pessimista, dois clientes poderiam pedir o mesmo horário enquanto o
+> prestador não respondesse ao primeiro.
 
 ### Agendamento sem cadastro (convidado)
 Um visitante **sem conta** pode agendar pelo link público informando **nome, e-mail e
@@ -195,24 +230,49 @@ pendente (`SOLICITADO`) e ocupando o intervalo.
 
 ### Ciclo de vida (máquina de estados)
 
-```
-SOLICITADO ──► CONFIRMADO ──► REALIZADO
-    │              │
-    │              ├──► NÃO_COMPARECEU
-    │              └──► CANCELADO
-    ├──► RECUSADO        (cancelamento por cliente ou prestador)
-    └──► EXPIRADO
+```mermaid
+stateDiagram-v2
+    [*] --> SOLICITADO: cliente pede
+
+    SOLICITADO --> CONFIRMADO: prestador aceita
+    SOLICITADO --> RECUSADO: prestador nega
+    SOLICITADO --> EXPIRADO: TTL vence (24h)
+    SOLICITADO --> CANCELADO: cliente desiste
+
+    CONFIRMADO --> REALIZADO: atendimento aconteceu
+    CONFIRMADO --> NAO_COMPARECEU: cliente não apareceu
+    CONFIRMADO --> CANCELADO: cliente ou prestador cancela
+
+    REALIZADO --> [*]
+    NAO_COMPARECEU --> [*]
+    RECUSADO --> [*]
+    EXPIRADO --> [*]
+    CANCELADO --> [*]
+
+    note right of SOLICITADO
+        🔒 ocupa o intervalo
+    end note
+
+    note right of CANCELADO
+        🔓 libera o intervalo
+        (assim como RECUSADO
+         e EXPIRADO)
+    end note
 ```
 
-- **SOLICITADO** — cliente pediu; ocupa o intervalo; aguardando o prestador.
-- **CONFIRMADO** — prestador aceitou.
-- **REALIZADO** — atendimento aconteceu.
-- **RECUSADO** — prestador negou enquanto SOLICITADO.
-- **EXPIRADO** — pendência venceu o TTL sem confirmação.
-- **CANCELADO** — cancelado por cliente ou prestador (ver regra de antecedência).
-- **NÃO_COMPARECEU** — confirmado, mas o cliente não apareceu.
+| Estado | Significa | Ocupa o horário? |
+|---|---|:---:|
+| 🟡 **SOLICITADO** | cliente pediu, aguardando o prestador | 🔒 sim |
+| 🟢 **CONFIRMADO** | prestador aceitou | 🔒 sim |
+| ✅ **REALIZADO** | atendimento aconteceu | — |
+| 🔴 **RECUSADO** | prestador negou enquanto SOLICITADO | 🔓 não |
+| ⏰ **EXPIRADO** | pendência venceu o TTL sem confirmação | 🔓 não |
+| ⚪ **CANCELADO** | cancelado por cliente ou prestador | 🔓 não |
+| 👻 **NÃO_COMPARECEU** | confirmado, mas o cliente não apareceu | — |
 
-Toda transição que encerra a reserva (RECUSADO, EXPIRADO, CANCELADO) **libera o intervalo**.
+> [!NOTE]
+> Toda transição que encerra a reserva (**RECUSADO**, **EXPIRADO**, **CANCELADO**)
+> **libera o intervalo** — o horário volta imediatamente para a oferta.
 
 ### Cancelamento
 **Cliente e prestador** podem cancelar um agendamento `CONFIRMADO`, respeitando a
@@ -242,7 +302,7 @@ cancelamento, **sem login**.
 
 ---
 
-## 4. Moderação (admin)
+## 4️⃣ 🛡️ Moderação (admin)
 
 Um **administrador** modera prestadores e clientes. Ele é semeado no boot a partir de
 `ADMIN_EMAIL`/`ADMIN_SENHA` (sem cadastro nem auto-registro), entra pela mesma tela de
@@ -275,19 +335,21 @@ listagem de agendamentos das pontas (com expiração lazy e nomes/contato já re
 
 ---
 
-## 5. Fuso horário
+## 5️⃣ 🌎 Fuso horário
 
-Todo o sistema assume um **fuso único fixo**: `America/Sao_Paulo`. Os horários são
+> [!NOTE]
+> Todo o sistema assume um **fuso único fixo**: `America/Sao_Paulo`. Os horários são
 interpretados e exibidos nesse fuso. O fuso deve ser centralizado em uma
 constante/configuração única (não espalhar `time.Local` pelo código), para facilitar uma
 eventual evolução para múltiplos fusos no futuro.
 
 ---
 
-## 6. Notificações por email
+## 6️⃣ 📧 Notificações por email
 
-O sistema envia email em cinco situações, sempre em português e melhor-esforço (uma falha
-de envio nunca impede a operação que a disparou — só é registrada em log):
+O sistema envia email em cinco situações, sempre em português e em
+**melhor-esforço**: uma falha de envio nunca impede a operação que a disparou —
+só é registrada em log.
 
 | Evento | Destinatário | Conteúdo |
 |---|---|---|
@@ -336,7 +398,7 @@ distância e ainda não foram lembrados, e dispara o email de lembrete.
 
 ---
 
-## Parâmetros fixados
+## ⚙️ Parâmetros fixados
 
 Valores centralizados em `config/agendamento.go` e no domínio:
 
@@ -353,7 +415,12 @@ Valores centralizados em `config/agendamento.go` e no domínio:
 
 ---
 
-## Mapa para o código
+## 🗺️ Mapa para o código
+
+<details>
+<summary><b>Onde cada regra vive no repositório</b></summary>
+
+<br>
 
 | Conceito | Local | Conteúdo |
 |---|---|---|
@@ -371,3 +438,5 @@ Valores centralizados em `config/agendamento.go` e no domínio:
 | Notificações | `internal/adapter/email/`, `internal/adapter/worker/` | templates, transporte SMTP, worker de lembrete |
 | Configuração | `config/agendamento.go`, `config/server.go`, `config/email.go`, `config/oauth.go` | fuso fixo, TTL, antecedência mínima, credenciais do admin, SMTP, credenciais Google OAuth |
 | Persistência | `migrations/` | `providers`, `horarios_padrao`, `clients`, `admins`, `date_exceptions`, `appointments` (anti-overbooking por lock transacional no repositório), `sessions`, `password_reset_tokens`, `cancelamento_tokens`, `cadastros_pendentes`, `providers.telefone`, `social_identities`, `oauth_states` |
+
+</details>

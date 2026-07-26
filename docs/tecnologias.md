@@ -1,10 +1,27 @@
-# Tecnologias do agendaGo — guia de estudo
+# 🧰 Tecnologias do agendaGo — guia de estudo
 
-Este documento existe para quem quer entender **por que** cada peça do stack foi escolhida e **onde estudá-la a fundo**. Não é uma lista de dependências — é um roteiro de aprendizado organizado por camada, com ponteiros para o código real do projeto e fontes primárias (documentação oficial, RFCs, artigos de referência) em vez de tutoriais de terceiros.
+> Este documento existe para quem quer entender **por que** cada peça do stack foi
+> escolhida e **onde estudá-la a fundo**.
+
+Não é uma lista de dependências — é um **roteiro de aprendizado** organizado por
+camada, com ponteiros para o código real do projeto e **fontes primárias**
+(documentação oficial, RFCs, artigos de referência) em vez de tutoriais de
+terceiros.
+
+| Seção | O que cobre |
+|---|---|
+| [1. Linguagem e arquitetura](#1-linguagem-e-arquitetura-do-backend) | Go, hexagonal |
+| [2. Backend HTTP](#2-backend-http) | chi, validator, Swaggo |
+| [3. Segurança](#3-segurança-e-autenticação) | Argon2id, sessões, OIDC, rate limiting |
+| [4. Banco e infra](#4-banco-de-dados-e-infraestrutura) | Postgres, pgx, Flyway, Docker, Caddy, GHCR, slog |
+| [5. Frontend](#5-frontend) | Svelte 5, TypeScript, Vite, Tailwind, adapter-node |
+| [6. Testes](#6-testes) | Go testing, Testcontainers, Vitest, Playwright |
+| [7. Email](#7-notificações-por-email) | go-mail, Mailpit, Brevo, worker |
 
 ---
 
-## Visão geral
+<details>
+<summary><h2>📋 Visão geral do stack</h2></summary>
 
 | Camada | Tecnologia | Papel no projeto | Versão |
 |---|---|---|---|
@@ -33,6 +50,8 @@ Este documento existe para quem quer entender **por que** cada peça do stack fo
 | Orquestração local | [Docker Compose](https://docs.docker.com/compose/) | Sobe banco + migrations + API + web juntos | — |
 | Proxy reverso (produção) | [Caddy](https://caddyserver.com/) | HTTPS automático e origem única para frontend e API | 2 (alpine) |
 
+</details>
+
 ---
 
 ## 1. Linguagem e arquitetura do backend
@@ -52,14 +71,55 @@ Go é a linguagem escolhida pela simplicidade da sintaxe, tooling embutido (`go 
 
 O backend é organizado em três camadas que só se enxergam por interfaces:
 
-```
-internal/domain/{provider,client,session}/   → regras de negócio puras, sem I/O
-internal/usecase/{provider,client,auth}/     → orquestração; define as interfaces (ports)
-                                                que os adapters implementam
-internal/adapter/{http,repository,security}/ → HTTP, Postgres, Argon2id — os detalhes
+```mermaid
+flowchart TD
+    subgraph EXT["🌍 Mundo externo"]
+        HTTP["🌐 HTTP"]
+        PG[("🐘 Postgres")]
+        SMTP["📧 SMTP"]
+    end
+
+    subgraph AD["🔌 adapter/ — os detalhes"]
+        H["http/"]
+        R["repository/"]
+        S["security/ · email/"]
+    end
+
+    subgraph UC["🔀 usecase/ — orquestração"]
+        U["define as <b>interfaces</b> (ports)<br/>que os adapters implementam"]
+    end
+
+    subgraph DM["🧠 domain/ — regras puras"]
+        D["sem I/O, sem framework,<br/>sem saber que HTTP existe"]
+    end
+
+    HTTP --> H
+    H --> U
+    U --> D
+    U -.->|"port"| R
+    U -.->|"port"| S
+    R --> PG
+    S --> SMTP
+
+    style DM fill:#2e7d32,color:#fff
+    style UC fill:#1565c0,color:#fff
+    style AD fill:#ef6c00,color:#fff
+    style EXT fill:#455a64,color:#fff
 ```
 
-O ganho prático: o domínio (`internal/domain/provider/provider.go`) não sabe que existe HTTP ou Postgres. Trocar o banco por outro, ou adicionar uma segunda forma de expor a API, não exige tocar em uma linha de regra de negócio. Repare como `internal/usecase/provider/repositorio.go` declara a interface `repositorioCadastrar` do lado de quem consome — não do lado do Postgres — o que é a marca registrada de Ports & Adapters (a interface pertence a quem precisa dela, não a quem a implementa).
+| Camada | Pasta | Regra |
+|---|---|---|
+| 🧠 **Domínio** | `internal/domain/` | regras de negócio puras, **sem I/O** |
+| 🔀 **Usecase** | `internal/usecase/` | orquestração; **declara** as interfaces que precisa |
+| 🔌 **Adapter** | `internal/adapter/` | HTTP, Postgres, Argon2id, SMTP — os detalhes |
+
+> [!IMPORTANT]
+> **A interface pertence a quem precisa dela, não a quem a implementa.** Repare
+> que `internal/usecase/provider/repositorio.go` declara `repositorioCadastrar`
+> do lado de quem **consome** — não do lado do Postgres. Essa inversão é a marca
+> registrada de Ports & Adapters.
+
+O ganho prático: o domínio (`internal/domain/provider/provider.go`) não sabe que existe HTTP ou Postgres. Trocar o banco por outro, ou adicionar uma segunda forma de expor a API, não exige tocar em uma linha de regra de negócio.
 
 **Para estudar:**
 - [Hexagonal Architecture — Alistair Cockburn](https://alistair.cockburn.us/hexagonal-architecture/) (artigo original, quem cunhou o termo)
@@ -368,7 +428,7 @@ O envio de email em si (`internal/adapter/email/notificador.go`) também é ass�
 
 ---
 
-## Como usar este documento
+## 🎓 Como usar este documento
 
 Não precisa ler tudo de uma vez. Sugestão de ordem se você está começando do zero:
 
