@@ -4,10 +4,15 @@
 # é uma origem só, o cookie de sessão (SameSite=Lax) funciona sem mudança de
 # código, e não há CORS entre front e API.
 #
-# Diferente do docker-compose.yml (dev): imagens de produção (Dockerfile.prod),
-# sem hot reload, sem Mailpit (usa SMTP real), Postgres sem porta pública.
+# Diferente do docker-compose.yml (dev): imagens de produção prontas, sem hot
+# reload, sem Mailpit (usa SMTP real), Postgres sem porta pública.
 #
-# Sobe com:  docker compose -f docker-compose.prod.yml up -d --build
+# As imagens são buildadas pelo CI e publicadas no GHCR — este arquivo NÃO
+# builda nada. Por isso o host de produção só precisa de três arquivos
+# (docker-compose.prod.yml, Caddyfile e .env), nunca do código-fonte.
+#
+# Sobe com:  docker compose -f docker-compose.prod.yml pull && \
+#            docker compose -f docker-compose.prod.yml up -d
 # Consome as variáveis de um arquivo .env (veja .env.prod.example).
 
 # Rotação de log (driver json-file): sem isto, o log do Docker cresce sem
@@ -39,9 +44,10 @@ services:
       retries: 5
 
   # Job pontual: aplica as migrations e sai. A API só sobe depois que ele
-  # termina com sucesso (depends_on: service_completed_successfully).
+  # termina com sucesso (depends_on: service_completed_successfully). Os .sql
+  # vêm dentro da imagem (backend/Dockerfile.migrations), não de um bind mount.
   flyway:
-    image: flyway/flyway:10-alpine
+    image: ${IMAGE_REPO:-ghcr.io/caetasousa}/agendago-migrations:${IMAGE_TAG:-latest}
     command: migrate
     environment:
       FLYWAY_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
@@ -49,16 +55,12 @@ services:
       FLYWAY_PASSWORD: ${POSTGRES_PASSWORD}
       FLYWAY_LOCATIONS: filesystem:/flyway/sql
       FLYWAY_BASELINE_ON_MIGRATE: 'true'
-    volumes:
-      - ./backend/migrations:/flyway/sql:ro
     depends_on:
       postgres:
         condition: service_healthy
 
   api:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.prod
+    image: ${IMAGE_REPO:-ghcr.io/caetasousa}/agendago-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
     logging: *logging
     environment:
@@ -96,14 +98,10 @@ services:
       flyway:
         condition: service_completed_successfully
 
+  # A imagem já vem com PUBLIC_API_URL=/api assado no build (relativo, portanto
+  # independente do domínio — o Caddy serve front e API na mesma origem).
   web:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.prod
-      args:
-        # Resolvida em tempo de BUILD (import.meta.env do Vite). Aponta para a
-        # API na mesma origem, sob o prefixo /api que o Caddy remove.
-        PUBLIC_API_URL: https://${DOMINIO}/api
+    image: ${IMAGE_REPO:-ghcr.io/caetasousa}/agendago-web:${IMAGE_TAG:-latest}
     restart: unless-stopped
     logging: *logging
     environment:

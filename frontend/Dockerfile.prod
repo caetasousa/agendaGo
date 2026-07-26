@@ -9,9 +9,13 @@ RUN npm ci
 
 COPY . .
 
-# PUBLIC_API_URL é resolvida em tempo de BUILD (import.meta.env do Vite):
-# aponte para a URL pública da API antes de buildar a imagem.
-ARG PUBLIC_API_URL=http://localhost:8080
+# PUBLIC_API_URL é resolvida em tempo de BUILD (import.meta.env do Vite), então
+# o padrão precisa servir para qualquer domínio — senão a imagem publicada
+# ficaria amarrada a um host só. `/api` é relativo: como o Caddy serve frontend
+# e API na mesma origem, o navegador resolve para o domínio corrente. Funciona
+# porque toda página que chama a API declara `ssr = false`, ou seja, o fetch
+# nunca roda no servidor Node (onde um caminho relativo não teria base).
+ARG PUBLIC_API_URL=/api
 ENV PUBLIC_API_URL=${PUBLIC_API_URL}
 
 RUN npm run build

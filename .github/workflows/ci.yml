@@ -135,3 +135,55 @@ jobs:
       - name: derruba a stack
         if: always()
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
+
+  # Publica as imagens de produção no GHCR. É o que permite que a VPS rode a
+  # stack com apenas docker-compose.prod.yml + Caddyfile + .env: ela dá `pull`,
+  # nunca `build` (uma VPS de 1 vCPU levaria minutos compilando Go e npm).
+  # Só roda em push na main e depois que todos os testes passaram.
+  publicar-imagens:
+    name: Publica imagens no GHCR
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [backend, frontend, e2e]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - imagem: agendago-api
+            contexto: ./backend
+            dockerfile: ./backend/Dockerfile.prod
+          - imagem: agendago-web
+            contexto: ./frontend
+            dockerfile: ./frontend/Dockerfile.prod
+          - imagem: agendago-migrations
+            contexto: ./backend
+            dockerfile: ./backend/Dockerfile.migrations
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: login no GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Duas tags: `latest` (o que o compose de produção puxa por padrão) e o
+      # SHA do commit, que permite fixar/rollback via IMAGE_TAG no .env.
+      - name: build e push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.contexto }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          # Hostinger KVM é x86; buildar só amd64 mantém o CI rápido.
+          platforms: linux/amd64
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.imagem }}:latest
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.imagem }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.imagem }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.imagem }}
