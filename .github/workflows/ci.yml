@@ -302,8 +302,16 @@ jobs:
               echo '$AGENDA \$HOME/agendago/scripts/backup.sh >> \$HOME/backups/backup.log 2>&1'
             ) | crontab -
           "
-          echo 'crontab do servidor após a sincronização:'
-          ssh -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" 'crontab -l | grep backup.sh'
+          # O cron do Debian/Ubuntu não suporta CRON_TZ: a expressão é sempre
+          # interpretada no fuso do HOST. Imprimir os dois juntos evita o erro
+          # silencioso de agendar "1h" achando que é horário de Brasília num
+          # servidor em UTC.
+          # Lê o fuso do timedatectl, não de /etc/timezone: esse arquivo legado
+          # não é atualizado por `timedatectl set-timezone` em toda imagem de
+          # Ubuntu, e reportaria o fuso antigo num servidor já corrigido.
+          echo 'agendamento efetivo no servidor:'
+          ssh -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" \
+            'printf "  fuso do servidor: %s (agora: %s)\n" "$(timedatectl show --property=Timezone --value 2>/dev/null || readlink -f /etc/localtime)" "$(date "+%F %T %Z")"; printf "  crontab: %s\n" "$(crontab -l | grep backup.sh)"'
 
       # Deploy sem verificação é deploy no escuro: se a API não responder, o
       # job falha e o erro aparece no commit.

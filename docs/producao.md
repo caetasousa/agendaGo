@@ -665,6 +665,30 @@ Para mudar o horário, crie a variável de repositório **`BACKUP_CRON`**
 (*Settings → Secrets and variables → Actions → Variables*) com uma expressão
 cron, por exemplo `30 4 * * *`. O padrão é `0 3 * * *`.
 
+> [!CAUTION]
+> **A expressão é interpretada no fuso do servidor**, e uma VPS costuma vir em
+> `Etc/UTC`. O cron do Debian/Ubuntu (`3.0pl1`) **não suporta `CRON_TZ`** —
+> verificado no binário —, então não há como declarar o fuso dentro do crontab.
+> Num host em UTC, `0 1 * * *` dispara às **22h de Brasília**.
+>
+> Acerte o fuso do host uma vez, como root:
+>
+> ```bash
+> timedatectl set-timezone America/Sao_Paulo
+> ```
+>
+> Além do cron, isso alinha todos os horários que você lê no servidor com o seu
+> relógio — e com o fuso fixo que a aplicação já assume nas regras de negócio.
+> O Postgres e os containers continuam em UTC internamente, como deve ser.
+>
+> O deploy imprime o fuso do servidor ao lado da linha instalada, justamente
+> para esse desencontro nunca passar despercebido:
+>
+> ```
+> fuso do servidor: America/Sao_Paulo (agora: 2026-07-26 00:33:38 -03)
+> crontab: 0 1 * * * $HOME/agendago/scripts/backup.sh >> ...
+> ```
+
 > [!WARNING]
 > Como o crontab passa a ser gerenciado pelo CI, **editar a linha do agendaGo à
 > mão na VPS não adianta** — o próximo deploy a reescreve. Mude pela variável.
