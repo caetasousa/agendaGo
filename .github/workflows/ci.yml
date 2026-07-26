@@ -5,8 +5,13 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Permite republicar as imagens e reimplantar sem precisar de um commit
+  # novo (útil para reaplicar um deploy que falhou por causa do servidor).
+  workflow_dispatch:
 
-# Cancela execuções antigas do mesmo ref quando um novo push chega.
+# Cancela execuções antigas do mesmo ref quando um novo push chega. O deploy
+# roda por último e é rápido; se dois pushes chegarem juntos, vence o mais
+# recente — que é o comportamento desejado.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -142,7 +147,7 @@ jobs:
   # Só roda em push na main e depois que todos os testes passaram.
   publicar-imagens:
     name: Publica imagens no GHCR
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: [backend, frontend, e2e]
     runs-on: ubuntu-latest
     permissions:
@@ -187,3 +192,99 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/${{ matrix.imagem }}:${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.imagem }}
           cache-to: type=gha,mode=max,scope=${{ matrix.imagem }}
+
+  # Deploy contínuo na VPS. Não sobe binário nem código-fonte: as imagens já
+  # estão no GHCR, então o servidor só recebe os dois arquivos de configuração
+  # da stack (o .env fica no host, com os segredos) e a ordem de puxar a
+  # versão nova. É a mesma sequência do deploy manual documentado.
+  #
+  # Segredos necessários no repositório (Settings → Secrets and variables):
+  #   VPS_HOST         IP ou hostname do servidor
+  #   VPS_USER         usuário SSH (não-root, no grupo docker)
+  #   VPS_SSH_KEY      chave PRIVADA de deploy (a pública vai no authorized_keys)
+  #   VPS_PORT         opcional, padrão 22
+  #   VPS_KNOWN_HOSTS  opcional, saída de `ssh-keyscan HOST` (fixa a identidade
+  #                    do servidor; sem isso a primeira conexão confia no que
+  #                    for apresentado)
+  # E a variável DOMINIO (aba Variables) para a verificação pós-deploy.
+  implantar:
+    name: Deploy na VPS
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: publicar-imagens
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # Sem os segredos o job passa sem fazer nada, em vez de falhar em
+      # vermelho — o repositório funciona antes de a VPS existir.
+      - name: verifica se o deploy está configurado
+        id: cfg
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          if [ -n "$VPS_HOST" ]; then
+            echo "configurado=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configurado=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::VPS_HOST não configurado — deploy ignorado."
+          fi
+
+      - name: prepara a chave SSH
+        if: steps.cfg.outputs.configurado == 'true'
+        env:
+          CHAVE: ${{ secrets.VPS_SSH_KEY }}
+          HOST: ${{ secrets.VPS_HOST }}
+          PORTA: ${{ secrets.VPS_PORT || '22' }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$CHAVE" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          if [ -n "$KNOWN_HOSTS" ]; then
+            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "$PORTA" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+      # Mantém compose e Caddyfile do servidor iguais aos do repositório: sem
+      # isto, mudar o roteamento ou adicionar um serviço exigiria copiar os
+      # arquivos na mão. O .env NUNCA é enviado — ele mora só no host.
+      - name: sincroniza a configuração da stack
+        if: steps.cfg.outputs.configurado == 'true'
+        env:
+          HOST: ${{ secrets.VPS_HOST }}
+          USUARIO: ${{ secrets.VPS_USER }}
+          PORTA: ${{ secrets.VPS_PORT || '22' }}
+        run: |
+          ssh -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" 'mkdir -p ~/agendago'
+          scp -i ~/.ssh/id_deploy -P "$PORTA" \
+            docker-compose.prod.yml Caddyfile "$USUARIO@$HOST:~/agendago/"
+
+      # Fixa a tag no SHA deste commit: o servidor sobe exatamente o artefato
+      # que passou nos testes, não um `latest` que pode ter mudado no meio.
+      - name: puxa as imagens e sobe a stack
+        if: steps.cfg.outputs.configurado == 'true'
+        env:
+          HOST: ${{ secrets.VPS_HOST }}
+          USUARIO: ${{ secrets.VPS_USER }}
+          PORTA: ${{ secrets.VPS_PORT || '22' }}
+        run: |
+          ssh -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" \
+            "cd ~/agendago \
+             && IMAGE_TAG=${{ github.sha }} docker compose -f docker-compose.prod.yml pull \
+             && IMAGE_TAG=${{ github.sha }} docker compose -f docker-compose.prod.yml up -d \
+             && docker image prune -f"
+
+      # Deploy sem verificação é deploy no escuro: se a API não responder, o
+      # job falha e o erro aparece no commit.
+      - name: verifica se a aplicação respondeu
+        if: steps.cfg.outputs.configurado == 'true' && vars.DOMINIO != ''
+        run: |
+          for i in $(seq 1 12); do
+            if curl -fsS "https://${{ vars.DOMINIO }}/api/health" >/dev/null; then
+              echo "aplicação no ar"; exit 0
+            fi
+            sleep 5
+          done
+          echo "a aplicação não respondeu em /api/health após o deploy"; exit 1
