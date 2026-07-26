@@ -3,6 +3,7 @@ package client
 import (
 	"time"
 
+	"agendago/internal/domain/session"
 	"agendago/internal/pkg/token"
 )
 
@@ -35,7 +36,7 @@ func (uc *ConfirmarCadastroUseCase) Executar(tokenPuro string) (*ConfirmarCadast
 	if err != nil {
 		return nil, err
 	}
-	if pendente == nil || pendente.Expirado(time.Now()) {
+	if pendente == nil || pendente.Expirado(time.Now()) || pendente.Tipo != session.TipoClient {
 		return nil, ErrCadastroInvalido
 	}
 

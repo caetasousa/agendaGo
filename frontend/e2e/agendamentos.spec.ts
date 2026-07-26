@@ -5,13 +5,28 @@ import { emailUnico, tokenDeConfirmacaoCadastro } from './helpers';
 // (/agendar/{id}): convidados veem os horários livres sem cadastro e o login
 // só é exigido na hora de solicitar.
 
-async function cadastrarPrestadorAtivo(page: Page, nome: string, email: string): Promise<string> {
+async function cadastrarPrestadorAtivo(
+	page: Page,
+	request: APIRequestContext,
+	nome: string,
+	email: string
+): Promise<string> {
 	await page.goto('/cadastro?tipo=prestador');
 	await page.fill('#nome', nome);
 	await page.fill('#email', email);
 	await page.fill('#telefone', '(11) 99999-8888');
 	await page.fill('#senha', '12345678');
 	await page.fill('#confirmar-senha', '12345678');
+	await page.click('button[type="submit"]');
+	await expect(page.getByText(`Enviamos um email para ${email}`)).toBeVisible();
+
+	const token = await tokenDeConfirmacaoCadastro(request, email);
+	await page.goto(`/confirmar-cadastro?token=${token}&tipo=prestador`);
+	await expect(page.getByText('Cadastro confirmado!')).toBeVisible();
+
+	await page.goto('/login');
+	await page.fill('#email', email);
+	await page.fill('#senha', '12345678');
 	await page.click('button[type="submit"]');
 	await page.waitForURL('/painel');
 
@@ -76,6 +91,7 @@ async function escolherSlotDoProximoMes(page: Page) {
 test('convidado vê os horários pelo link público e pode entrar para agendar', async ({ page, request }) => {
 	const linkPublico = await cadastrarPrestadorAtivo(
 		page,
+		request,
 		`Prestador Link ${Date.now()}`,
 		emailUnico('link-prestador')
 	);
@@ -103,11 +119,13 @@ test('convidado vê os horários pelo link público e pode entrar para agendar',
 });
 
 test('convidado agenda sem cadastro informando nome/email/telefone e o prestador vê o contato', async ({
-	page
+	page,
+	request
 }) => {
 	const emailPrestador = emailUnico('convidado-prestador');
 	const linkPublico = await cadastrarPrestadorAtivo(
 		page,
+		request,
 		`Prestador Convidado ${Date.now()}`,
 		emailPrestador
 	);
@@ -134,6 +152,7 @@ test('convidado agenda sem cadastro informando nome/email/telefone e o prestador
 test('convidado com e-mail de conta registrada é orientado a entrar', async ({ page, request }) => {
 	const linkPublico = await cadastrarPrestadorAtivo(
 		page,
+		request,
 		`Prestador Conta ${Date.now()}`,
 		emailUnico('conta-prestador')
 	);
@@ -152,9 +171,10 @@ test('convidado com e-mail de conta registrada é orientado a entrar', async ({ 
 	await expect(page.getByText('este e-mail já tem conta; entre para agendar')).toBeVisible();
 });
 
-test('link público rejeita telefone curto do convidado (validação leve)', async ({ page }) => {
+test('link público rejeita telefone curto do convidado (validação leve)', async ({ page, request }) => {
 	const linkPublico = await cadastrarPrestadorAtivo(
 		page,
+		request,
 		`Prestador Tel ${Date.now()}`,
 		emailUnico('tel-prestador')
 	);
@@ -173,7 +193,7 @@ test('fluxo completo: cliente agenda pelo calendário, prestador confirma, clien
 	request
 }) => {
 	const emailPrestador = emailUnico('fluxo-prestador');
-	const linkPublico = await cadastrarPrestadorAtivo(page, `Prestador Fluxo ${Date.now()}`, emailPrestador);
+	const linkPublico = await cadastrarPrestadorAtivo(page, request, `Prestador Fluxo ${Date.now()}`, emailPrestador);
 	const emailCliente = emailUnico('fluxo-cliente');
 	await cadastrarCliente(page, request, 'Cliente Fluxo', emailCliente);
 	await entrar(page, emailCliente);
@@ -210,7 +230,7 @@ test('fluxo completo: cliente agenda pelo calendário, prestador confirma, clien
 
 test('prestador recusa uma solicitação e o cliente vê o status', async ({ page, request }) => {
 	const emailPrestador = emailUnico('recusa-prestador');
-	const linkPublico = await cadastrarPrestadorAtivo(page, `Prestador Recusa ${Date.now()}`, emailPrestador);
+	const linkPublico = await cadastrarPrestadorAtivo(page, request, `Prestador Recusa ${Date.now()}`, emailPrestador);
 	const emailCliente = emailUnico('recusa-cliente');
 	await cadastrarCliente(page, request, 'Cliente Recusa', emailCliente);
 	await entrar(page, emailCliente);
@@ -238,7 +258,7 @@ test('prestador recusa uma solicitação e o cliente vê o status', async ({ pag
 
 test('diretório do painel lista todos os prestadores com link para o calendário', async ({ page, request }) => {
 	const nomePrestador = `Prestador Diretorio ${Date.now()}`;
-	await cadastrarPrestadorAtivo(page, nomePrestador, emailUnico('diretorio-prestador'));
+	await cadastrarPrestadorAtivo(page, request, nomePrestador, emailUnico('diretorio-prestador'));
 	const emailCliente = emailUnico('diretorio-cliente');
 	await cadastrarCliente(page, request, 'Cliente Diretorio', emailCliente);
 	await entrar(page, emailCliente);

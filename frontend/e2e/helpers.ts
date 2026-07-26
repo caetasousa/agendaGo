@@ -1,3 +1,5 @@
+import { expect } from '@playwright/test';
+
 // Gera um email único por execução para isolar dados entre specs e runs,
 // sem depender de reset de banco entre testes.
 export function emailUnico(prefixo: string): string {
@@ -59,4 +61,56 @@ export async function tokenDeConfirmacaoCadastro(
 	destinatario: string
 ): Promise<string> {
 	return buscaTokenNoMailpit(request, destinatario, 'Confirme seu cadastro');
+}
+
+// SENHA_PADRAO é a senha usada por todas as contas criadas nos testes.
+export const SENHA_PADRAO = '12345678';
+
+// cadastrarPrestador cria a conta de prestador ponta a ponta: preenche o
+// formulário, pega o link no Mailpit e confirma. A conta só existe depois da
+// confirmação — o cadastro não loga mais direto, para o email ser verificado
+// antes de o prestador aparecer na vitrine.
+export async function cadastrarPrestador(
+	page: import('@playwright/test').Page,
+	request: import('@playwright/test').APIRequestContext,
+	nome: string,
+	email: string
+): Promise<void> {
+	await page.goto('/cadastro?tipo=prestador');
+	await page.fill('#nome', nome);
+	await page.fill('#email', email);
+	await page.fill('#telefone', '(11) 99999-8888');
+	await page.fill('#senha', SENHA_PADRAO);
+	await page.fill('#confirmar-senha', SENHA_PADRAO);
+	await page.click('button[type="submit"]');
+	await expect(page.getByText(`Enviamos um email para ${email}`)).toBeVisible();
+
+	const token = await tokenDeConfirmacaoCadastro(request, email);
+	await page.goto(`/confirmar-cadastro?token=${token}&tipo=prestador`);
+	await expect(page.getByText('Cadastro confirmado!')).toBeVisible();
+}
+
+// entrar faz o login pelo formulário e espera cair no painel.
+export async function entrar(
+	page: import('@playwright/test').Page,
+	email: string,
+	senha = SENHA_PADRAO
+): Promise<void> {
+	await page.goto('/login');
+	await page.fill('#email', email);
+	await page.fill('#senha', senha);
+	await page.click('button[type="submit"]');
+	await page.waitForURL('/painel');
+}
+
+// cadastrarPrestadorELogar encadeia o cadastro confirmado e o login — o ponto
+// de partida da maioria dos testes de painel.
+export async function cadastrarPrestadorELogar(
+	page: import('@playwright/test').Page,
+	request: import('@playwright/test').APIRequestContext,
+	nome: string,
+	email: string
+): Promise<void> {
+	await cadastrarPrestador(page, request, nome, email);
+	await entrar(page, email);
 }

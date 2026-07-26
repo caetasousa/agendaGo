@@ -15,6 +15,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -90,12 +92,27 @@ func main() {
 	// aviso alto-visibilidade: rate limit desligado (RATE_LIMIT_*=0) some com
 	// o teto de login, cadastro e brute-force de token — fácil de esquecer
 	// ligado numa env de deploy copiada de dev
-	if config.RateLimitLoginPorMinuto() == 0 || config.RateLimitConvidadoPorMinuto() == 0 {
-		slog.Warn("rate limiting desligado (RATE_LIMIT_LOGIN_POR_MINUTO=0 ou RATE_LIMIT_CONVIDADO_POR_MINUTO=0): login, cadastro e tokens ficam sem teto por IP")
+	desligados := make([]string, 0, 4)
+	for nome, limite := range map[string]int{
+		"RATE_LIMIT_LOGIN_POR_MINUTO":       config.RateLimitLoginPorMinuto(),
+		"RATE_LIMIT_CONVIDADO_POR_MINUTO":   config.RateLimitConvidadoPorMinuto(),
+		"RATE_LIMIT_LOGIN_POR_CONTA":        config.RateLimitLoginPorConta(),
+		"RATE_LIMIT_AUTENTICADO_POR_MINUTO": config.RateLimitAutenticadoPorMinuto(),
+		"RATE_LIMIT_PUBLICO_POR_MINUTO":     config.RateLimitPublicoPorMinuto(),
+	} {
+		if limite == 0 {
+			desligados = append(desligados, nome)
+		}
+	}
+	if len(desligados) > 0 {
+		sort.Strings(desligados)
+		slog.Warn("rate limiting parcialmente desligado: as rotas cobertas ficam sem teto",
+			slog.String("variaveis_em_zero", strings.Join(desligados, ", ")))
 	}
 
 	// usecases
-	cadastrarProvider := ucprovider.NovoCadastrarUseCase(providerRepo, clientRepo, hasher)
+	solicitarCadastroProvider := ucprovider.NovoSolicitarCadastroUseCase(providerRepo, clientRepo, signupRepo, notificador, hasher)
+	confirmarCadastroProvider := ucprovider.NovoConfirmarCadastroUseCase(providerRepo, clientRepo, signupRepo)
 	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(providerRepo)
 	solicitarCadastroClient := ucclient.NovoSolicitarCadastroUseCase(clientRepo, providerRepo, signupRepo, notificador, hasher)
 	confirmarCadastroClient := ucclient.NovoConfirmarCadastroUseCase(clientRepo, providerRepo, signupRepo)
@@ -131,31 +148,57 @@ func main() {
 	identidadeDoContexto := func(r *http.Request) (ucauth.Identidade, bool) {
 		return middleware.IdentidadeDoContexto(r.Context())
 	}
-	providerHandler := handler.NovoProviderHandler(cadastrarProvider, atualizarPreferencias, listarPrestadores, buscarPrestador, identidadeDoContexto)
+	providerHandler := handler.NovoProviderHandler(solicitarCadastroProvider, confirmarCadastroProvider, atualizarPreferencias, listarPrestadores, buscarPrestador, identidadeDoContexto)
 	clientHandler := handler.NovoClientHandler(solicitarCadastroClient, confirmarCadastroClient, consultarPreCadastro, concluirPreCadastro)
-	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, loginAdmin, logout, perfil, config.CookieSeguro(), identidadeDoContexto)
+	// teto de tentativas por conta, compartilhado entre login e recuperação de
+	// senha: o mesmo contador, com chaves de prefixo diferente
+	limitadorPorConta := handler.NovoLimitadorPorConta(config.RateLimitLoginPorConta(), config.JanelaLimitePorConta)
+	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, loginAdmin, logout, perfil, config.CookieSeguro(), limitadorPorConta, identidadeDoContexto)
 	oauthHandler := handler.NovoOAuthHandler(loginSocial, config.CookieSeguro(), config.OrigemFrontend())
-	passwordResetHandler := handler.NovoPasswordResetHandler(solicitarRecuperacao, redefinirSenha)
+	passwordResetHandler := handler.NovoPasswordResetHandler(solicitarRecuperacao, redefinirSenha, limitadorPorConta)
 	availabilityHandler := handler.NovoAvailabilityHandler(consultarAgenda, definirDia, removerDia, identidadeDoContexto)
 	appointmentHandler := handler.NovoAppointmentHandler(consultarSlots, solicitarAgendamento, solicitarConvidado, marcarPeloPrestador, transicionarAgendamento, cancelarPorToken, listarAgendamentos, identidadeDoContexto)
 	adminHandler := handler.NovoAdminHandler(moderar, detalharUsuario)
 
 	// middlewares
-	authMw := middleware.NovoAuth(validarSessao)
+	authMw := middleware.NovoAuth(validarSessao, config.CookieSeguro())
+
+	// Os tetos de requisição do projeto, todos com 0 = desligado. Por IP para
+	// quem ainda não se identificou; por sessão depois do login, quando o IP
+	// deixa de dizer alguma coisa (e o teto por conta, o terceiro, vive dentro
+	// dos handlers de login e recuperação de senha).
+	limitarPorIP := func(r chi.Router, limite int) {
+		if limite > 0 {
+			r.Use(httprate.LimitBy(limite, time.Minute, middleware.ChavePorIP,
+				httprate.WithLimitHandler(middleware.RespostaLimiteExcedido)))
+		}
+	}
+	limitarPorSessao := func(r chi.Router, limite int) {
+		if limite > 0 {
+			r.Use(httprate.LimitBy(limite, time.Minute, middleware.ChavePorSessao,
+				httprate.WithLimitHandler(middleware.RespostaLimiteExcedido)))
+		}
+	}
 
 	// roteador
 	r := config.NovoRouter()
 	r.Get("/health", health)
-	r.Get("/providers", providerHandler.Listar)
-	r.Get("/providers/{id}", providerHandler.BuscarResumo)
-	r.Get("/providers/{id}/slots", appointmentHandler.ConsultarSlots)
+	// leituras públicas: respondem a qualquer um, sem identificação nenhuma.
+	// O teto evita que raspar a vitrine inteira em laço custe ao banco.
+	r.Group(func(r chi.Router) {
+		limitarPorIP(r, config.RateLimitPublicoPorMinuto())
+		r.Get("/providers", providerHandler.Listar)
+		r.Get("/providers/{id}", providerHandler.BuscarResumo)
+		r.Get("/providers/{id}/slots", appointmentHandler.ConsultarSlots)
+	})
 	// rotas públicas de convidado (agendar e cancelar por token) têm teto por
 	// IP: sem ele, uma rajada enche a agenda de um prestador com reservas
 	// falsas ou tenta adivinhar tokens de cancelamento por força bruta
 	r.Group(func(r chi.Router) {
-		if limite := config.RateLimitConvidadoPorMinuto(); limite > 0 {
-			r.Use(httprate.LimitByIP(limite, time.Minute))
-		}
+		limitarPorIP(r, config.RateLimitConvidadoPorMinuto())
+		// o detalhe do agendamento vem por token no path: nada disso pode
+		// ficar no cache do navegador de um computador compartilhado
+		r.Use(middleware.SemCache)
 		r.Post("/agendamentos/convidado", appointmentHandler.SolicitarConvidado)
 		r.Get("/agendamentos/cancelar/{token}", appointmentHandler.DetalharCancelamento)
 		r.Post("/agendamentos/cancelar/{token}", appointmentHandler.CancelarPorToken)
@@ -164,20 +207,22 @@ func main() {
 	// request) e o de cliente ainda dispara email: teto por IP mitiga DoS de
 	// hashing, spam de emails e força bruta de token de confirmação
 	r.Group(func(r chi.Router) {
-		if limite := config.RateLimitLoginPorMinuto(); limite > 0 {
-			r.Use(httprate.LimitByIP(limite, time.Minute))
-		}
+		limitarPorIP(r, config.RateLimitLoginPorMinuto())
+		// o pré-cadastro devolve nome/email/telefone a partir de um token no
+		// path — resposta pessoal, fora do cache do navegador
+		r.Use(middleware.SemCache)
 		r.Post("/providers", providerHandler.Cadastrar)
+		r.Post("/providers/confirmar-cadastro", providerHandler.ConfirmarCadastro)
 		r.Post("/clients", clientHandler.Cadastrar)
 		r.Post("/clients/confirmar-cadastro", clientHandler.ConfirmarCadastro)
 		r.Get("/clients/pre-cadastro/{token}", clientHandler.ConsultarPreCadastro)
 		r.Post("/clients/pre-cadastro/{token}", clientHandler.ConcluirPreCadastro)
 	})
-	// logins têm teto por IP: mitiga brute-force e rajadas de Argon2id (CPU)
+	// logins têm teto por IP: mitiga brute-force e rajadas de Argon2id (CPU).
+	// O teto por CONTA, que pega quem troca de IP a cada tentativa, está dentro
+	// do handler — só lá o email já foi lido do corpo.
 	r.Group(func(r chi.Router) {
-		if limite := config.RateLimitLoginPorMinuto(); limite > 0 {
-			r.Use(httprate.LimitByIP(limite, time.Minute))
-		}
+		limitarPorIP(r, config.RateLimitLoginPorMinuto())
 		r.Post("/auth/provider/login", authHandler.LoginProvider)
 		r.Post("/auth/client/login", authHandler.LoginClient)
 		r.Post("/auth/admin/login", authHandler.LoginAdmin)
@@ -193,18 +238,19 @@ func main() {
 	// recuperação de senha tem teto por IP, como os logins: mitiga farming de
 	// tokens e envio abusivo de emails
 	r.Group(func(r chi.Router) {
-		if limite := config.RateLimitLoginPorMinuto(); limite > 0 {
-			r.Use(httprate.LimitByIP(limite, time.Minute))
-		}
+		limitarPorIP(r, config.RateLimitLoginPorMinuto())
 		r.Post("/auth/recuperar-senha", passwordResetHandler.Solicitar)
 		r.Post("/auth/redefinir-senha", passwordResetHandler.Redefinir)
 	})
 	r.Group(func(r chi.Router) {
+		r.Use(middleware.SemCache)
 		r.Use(authMw.Autenticar)
 		r.Get("/auth/me", authHandler.Me)
 	})
 	r.Group(func(r chi.Router) {
+		r.Use(middleware.SemCache)
 		r.Use(authMw.Autenticar)
+		limitarPorSessao(r, config.RateLimitAutenticadoPorMinuto())
 		r.Use(middleware.ExigirProvider)
 		r.Put("/providers/me/preferencias", providerHandler.AtualizarPreferencias)
 		r.Get("/providers/me/agenda", availabilityHandler.ConsultarAgenda)
@@ -217,13 +263,17 @@ func main() {
 		r.Post("/providers/me/agendamentos", appointmentHandler.MarcarPeloPrestador)
 	})
 	r.Group(func(r chi.Router) {
+		r.Use(middleware.SemCache)
 		r.Use(authMw.Autenticar)
+		limitarPorSessao(r, config.RateLimitAutenticadoPorMinuto())
 		r.Use(middleware.ExigirClient)
 		r.Post("/agendamentos", appointmentHandler.Solicitar)
 		r.Get("/clients/me/agendamentos", appointmentHandler.ListarDoCliente)
 	})
 	r.Group(func(r chi.Router) {
+		r.Use(middleware.SemCache)
 		r.Use(authMw.Autenticar)
+		limitarPorSessao(r, config.RateLimitAutenticadoPorMinuto())
 		r.Post("/agendamentos/{id}/confirmar", appointmentHandler.Confirmar)
 		r.Post("/agendamentos/{id}/recusar", appointmentHandler.Recusar)
 		r.Post("/agendamentos/{id}/cancelar", appointmentHandler.Cancelar)
@@ -231,7 +281,9 @@ func main() {
 		r.Post("/agendamentos/{id}/nao-compareceu", appointmentHandler.MarcarNaoCompareceu)
 	})
 	r.Group(func(r chi.Router) {
+		r.Use(middleware.SemCache)
 		r.Use(authMw.Autenticar)
+		limitarPorSessao(r, config.RateLimitAutenticadoPorMinuto())
 		r.Use(middleware.ExigirAdmin)
 		r.Get("/admin/prestadores", adminHandler.ListarPrestadores)
 		r.Get("/admin/prestadores/{id}", adminHandler.DetalharPrestador)

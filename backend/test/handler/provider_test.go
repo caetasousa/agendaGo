@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"agendago/internal/adapter/email"
 	"agendago/internal/adapter/http/handler"
 	"agendago/internal/adapter/http/middleware"
 	"agendago/internal/adapter/security"
@@ -27,11 +29,15 @@ func identidadeAusente(r *http.Request) (ucauth.Identidade, bool) {
 
 func novoHandler() *handler.ProviderHandler {
 	repo := memoria.NovoProviderMemoria()
-	cadastrar := ucprovider.NovoCadastrarUseCase(repo, memoria.NovoClientMemoria(), security.NovoHasherArgon2id())
+	clients := memoria.NovoClientMemoria()
+	pendentes := memoria.NovoSignupMemoria()
+	notificador := email.NovoNotificador(email.NovaMailerMemoria(), "http://localhost:5173", time.UTC, email.ExecutorSincrono)
+	solicitar := ucprovider.NovoSolicitarCadastroUseCase(repo, clients, pendentes, notificador, security.NovoHasherArgon2id())
+	confirmar := ucprovider.NovoConfirmarCadastroUseCase(repo, clients, pendentes)
 	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
 	listar := ucprovider.NovoListarUseCase(repo)
 	buscarResumo := ucprovider.NovoBuscarResumoUseCase(repo)
-	return handler.NovoProviderHandler(cadastrar, atualizarPreferencias, listar, buscarResumo, identidadeAusente)
+	return handler.NovoProviderHandler(solicitar, confirmar, atualizarPreferencias, listar, buscarResumo, identidadeAusente)
 }
 
 func fazerRequisicao(t *testing.T, h *handler.ProviderHandler, body any) *httptest.ResponseRecorder {
@@ -72,9 +78,9 @@ func novoRouterPreferencias(t *testing.T) (r *chi.Mux, providerID string) {
 	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(providerRepo)
 	listar := ucprovider.NovoListarUseCase(providerRepo)
 	buscarResumo := ucprovider.NovoBuscarResumoUseCase(providerRepo)
-	providerHandler := handler.NovoProviderHandler(nil, atualizarPreferencias, listar, buscarResumo, identidadeDoContexto)
-	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, nil, nil, nil, false, identidadeDoContexto)
-	authMw := middleware.NovoAuth(validarSessao)
+	providerHandler := handler.NovoProviderHandler(nil, nil, atualizarPreferencias, listar, buscarResumo, identidadeDoContexto)
+	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, nil, nil, nil, false, nil, identidadeDoContexto)
+	authMw := middleware.NovoAuth(validarSessao, false)
 
 	router := chi.NewRouter()
 	router.Post("/auth/provider/login", authHandler.LoginProvider)
@@ -102,20 +108,18 @@ func loginEObterCookie(t *testing.T, r *chi.Mux, rota, email, senha string) *htt
 }
 
 func TestHandlerCadastrarProvider(t *testing.T) {
-	t.Run("retorna 201 e ID do provider criado quando dados são válidos", func(t *testing.T) {
+	t.Run("retorna 204 sem corpo: a conta só nasce na confirmação por email", func(t *testing.T) {
 		rr := fazerRequisicao(t, novoHandler(), map[string]string{
 			"nome":     "João Silva",
 			"email":    "joao@email.com",
 			"telefone": "11999998888",
 			"senha":    "12345678",
 		})
-		if rr.Code != http.StatusCreated {
-			t.Errorf("esperava 201, got: %d", rr.Code)
+		if rr.Code != http.StatusNoContent {
+			t.Errorf("esperava 204, got: %d", rr.Code)
 		}
-		var resp map[string]string
-		json.NewDecoder(rr.Body).Decode(&resp)
-		if resp["id"] == "" {
-			t.Error("ID não deve ser vazio na resposta")
+		if rr.Body.Len() != 0 {
+			t.Errorf("esperava corpo vazio, got: %s", rr.Body.String())
 		}
 	})
 
@@ -143,7 +147,9 @@ func TestHandlerCadastrarProvider(t *testing.T) {
 		}
 	})
 
-	t.Run("retorna 409 quando email já está cadastrado", func(t *testing.T) {
+	// A resposta não pode distinguir email livre de email em uso: era assim
+	// que dava para descobrir, de fora, quem tem conta no sistema.
+	t.Run("email já em uso responde igual ao email novo", func(t *testing.T) {
 		h := novoHandler()
 		body := map[string]string{
 			"nome":     "João Silva",
@@ -151,10 +157,13 @@ func TestHandlerCadastrarProvider(t *testing.T) {
 			"telefone": "11999998888",
 			"senha":    "12345678",
 		}
-		fazerRequisicao(t, h, body)
-		rr := fazerRequisicao(t, h, body)
-		if rr.Code != http.StatusConflict {
-			t.Errorf("esperava 409, got: %d", rr.Code)
+		primeira := fazerRequisicao(t, h, body)
+		segunda := fazerRequisicao(t, h, body)
+		if primeira.Code != segunda.Code {
+			t.Errorf("esperava respostas idênticas, got: %d e %d", primeira.Code, segunda.Code)
+		}
+		if primeira.Body.String() != segunda.Body.String() {
+			t.Errorf("esperava corpos idênticos, got: %q e %q", primeira.Body.String(), segunda.Body.String())
 		}
 	})
 

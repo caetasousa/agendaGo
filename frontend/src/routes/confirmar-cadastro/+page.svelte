@@ -1,10 +1,14 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { ApiError } from '$lib/api/client';
 	import { confirmarCadastro } from '$lib/api/customer';
+	import { confirmarCadastroPrestador } from '$lib/api/provider';
 	import AuthLayout from '$lib/components/AuthLayout.svelte';
 
 	const token = page.url.searchParams.get('token') ?? '';
+	// O tipo no link diz qual rota da API chamar — quem decide de verdade que
+	// conta nasce é o registro no banco, então isso só faz o link falhar, nunca
+	// cria a conta errada.
+	const ehPrestador = page.url.searchParams.get('tipo') === 'prestador';
 
 	// Estados: 'confirmando' enquanto chama a API, 'ok' no sucesso, 'erro' quando
 	// o token é inválido/expirado ou não veio na URL.
@@ -12,7 +16,8 @@
 
 	$effect(() => {
 		if (!token) return;
-		confirmarCadastro(token)
+		const confirmar = ehPrestador ? confirmarCadastroPrestador : confirmarCadastro;
+		confirmar(token)
 			.then(() => (estado = 'ok'))
 			.catch((e) => {
 				estado = 'erro';

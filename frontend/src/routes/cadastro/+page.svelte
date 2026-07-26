@@ -56,7 +56,8 @@
 
 	let enviando = $state(false);
 	let erro = $state<string | null>(null);
-	// Cliente: após o cadastro, a conta só nasce quando ele confirma pelo email.
+	// Cliente e prestador: após o cadastro, a conta só nasce quando confirma
+	// pelo email — nenhum dos dois loga direto no submit.
 	let aguardandoConfirmacao = $state(false);
 
 	const senhasDivergentes = $derived(confirmarSenha.length > 0 && senha !== confirmarSenha);
@@ -91,14 +92,12 @@
 				sessao.definir(await me());
 				goto(destinoAposCadastro());
 			} else if (tipo === 'provider') {
-				// prestador entra logado direto (sem verificação por email)
+				// o backend envia um email de confirmação e responde sempre igual
+				// (exista ou não o email). Só entra logado ao confirmar pelo link.
 				await cadastrarProvider({ nome, email, telefone, senha });
-				await login({ email, senha });
-				sessao.definir(await me());
-				goto(destinoAposCadastro());
+				aguardandoConfirmacao = true;
 			} else {
-				// cliente: o backend envia um email de confirmação e responde sempre
-				// igual (exista ou não o email). Só entra logado ao confirmar pelo link.
+				// cliente: mesmo fluxo — email de confirmação, resposta sempre igual.
 				await cadastrarClient({ nome, email, telefone, senha });
 				aguardandoConfirmacao = true;
 			}
@@ -336,7 +335,7 @@
 				{enviando ? 'Enviando…' : 'Criar conta'}
 			</button>
 
-			{#if tipo === 'client' && !preCadastro}
+			{#if !preCadastro}
 				<p class="text-xs text-mute">
 					Enviaremos um email para confirmar seu cadastro antes de ativar a conta.
 				</p>

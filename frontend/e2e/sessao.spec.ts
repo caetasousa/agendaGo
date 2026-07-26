@@ -1,20 +1,13 @@
 import { test, expect } from '@playwright/test';
-import { emailUnico } from './helpers';
+import { cadastrarPrestadorELogar, emailUnico } from './helpers';
 
 test('acesso anônimo ao painel redireciona para login', async ({ page }) => {
 	await page.goto('/painel');
 	await page.waitForURL('/login');
 });
 
-test('logout pelo header volta para a home e mostra Entrar', async ({ page }) => {
-	await page.goto('/cadastro?tipo=prestador');
-	await page.fill('#nome', 'Sessao Teste');
-	await page.fill('#email', emailUnico('sessao'));
-	await page.fill('#telefone', '(11) 99999-8888');
-	await page.fill('#senha', '12345678');
-	await page.fill('#confirmar-senha', '12345678');
-	await page.click('button[type="submit"]');
-	await page.waitForURL('/painel');
+test('logout pelo header volta para a home e mostra Entrar', async ({ page, request }) => {
+	await cadastrarPrestadorELogar(page, request, 'Sessao Teste', emailUnico('sessao'));
 
 	// dentro do painel quem identifica a sessão é a sidebar; o header guarda a saída
 	await expect(page.getByRole('complementary').getByText('Sessao Teste')).toBeVisible();

@@ -1,17 +1,32 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 import { emailUnico, tokenDeConfirmacaoCadastro } from './helpers';
 
 // O prestador marca na própria agenda um cliente que o contatou por fora
 // (ex.: telefone), pela tela /painel/marcar — nasce CONFIRMADO direto (sem
 // pedido para aceitar) e ele cancela a qualquer momento, sem antecedência.
 
-async function cadastrarPrestadorComAgenda(page: Page, ativarAgenda: boolean): Promise<void> {
+async function cadastrarPrestadorComAgenda(
+	page: Page,
+	request: APIRequestContext,
+	ativarAgenda: boolean
+): Promise<void> {
+	const email = emailUnico('marcar');
 	await page.goto('/cadastro?tipo=prestador');
 	await page.fill('#nome', 'Prestador Marcar');
-	await page.fill('#email', emailUnico('marcar'));
+	await page.fill('#email', email);
 	await page.fill('#telefone', '(11) 99999-8888');
 	await page.fill('#senha', '12345678');
 	await page.fill('#confirmar-senha', '12345678');
+	await page.click('button[type="submit"]');
+	await expect(page.getByText(`Enviamos um email para ${email}`)).toBeVisible();
+
+	const token = await tokenDeConfirmacaoCadastro(request, email);
+	await page.goto(`/confirmar-cadastro?token=${token}&tipo=prestador`);
+	await expect(page.getByText('Cadastro confirmado!')).toBeVisible();
+
+	await page.goto('/login');
+	await page.fill('#email', email);
+	await page.fill('#senha', '12345678');
 	await page.click('button[type="submit"]');
 	await page.waitForURL('/painel');
 
@@ -32,9 +47,10 @@ async function marcarPrimeiroSlot(page: Page) {
 }
 
 test('prestador marca para um cliente só com nome e observação, já CONFIRMADO, e cancela quando quiser', async ({
-	page
+	page,
+	request
 }) => {
-	await cadastrarPrestadorComAgenda(page, true);
+	await cadastrarPrestadorComAgenda(page, request, true);
 
 	await marcarPrimeiroSlot(page);
 	await page.fill('input[autocomplete="name"]', 'Cliente Do Telefone');
@@ -63,10 +79,10 @@ test('prestador marca para um cliente só com nome e observação, já CONFIRMAD
 	await expect(cartao).toHaveAttribute('data-status', 'CANCELADO');
 });
 
-test('prestador marca mesmo com a agenda fechada ao público', async ({ page }) => {
+test('prestador marca mesmo com a agenda fechada ao público', async ({ page, request }) => {
 	// agenda nasce desativada e permanece assim — o público não vê horários,
 	// mas o dono marca normalmente
-	await cadastrarPrestadorComAgenda(page, false);
+	await cadastrarPrestadorComAgenda(page, request, false);
 
 	await marcarPrimeiroSlot(page);
 	await page.fill('input[autocomplete="name"]', 'Cliente Fechado');

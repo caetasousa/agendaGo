@@ -51,7 +51,8 @@ func tokenDoEmailCadastro(t *testing.T, mailer *email.MailerMemoria) string {
 			continue
 		}
 		resto := msg.HTML[i+len(marcador):]
-		fim := strings.IndexAny(resto, "\"' ")
+		// o link do prestador ainda traz &tipo=prestador depois do token
+		fim := strings.IndexAny(resto, "\"' &")
 		if fim < 0 {
 			fim = len(resto)
 		}

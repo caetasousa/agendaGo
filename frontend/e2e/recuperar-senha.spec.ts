@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { emailUnico, tokenDeRecuperacao } from './helpers';
+import { emailUnico, tokenDeConfirmacaoCadastro, tokenDeRecuperacao } from './helpers';
 
 // Fluxo completo: cadastra um prestador, pede recuperação, pega o token no
 // Mailpit, redefine a senha e loga com a nova. Depende de o SMTP da API estar
@@ -14,9 +14,11 @@ test('recupera a senha e loga com a nova', async ({ page, request }) => {
 	await page.fill('#senha', 'senha-antiga1');
 	await page.fill('#confirmar-senha', 'senha-antiga1');
 	await page.click('button[type="submit"]');
-	await page.waitForURL('/painel');
-	await page.click('button:has-text("Sair")');
-	await page.waitForURL('/');
+	await expect(page.getByText(`Enviamos um email para ${email}`)).toBeVisible();
+
+	const tokenCadastro = await tokenDeConfirmacaoCadastro(request, email);
+	await page.goto(`/confirmar-cadastro?token=${tokenCadastro}&tipo=prestador`);
+	await expect(page.getByText('Cadastro confirmado!')).toBeVisible();
 
 	// solicita a recuperação a partir do link na tela de login
 	await page.goto('/login');

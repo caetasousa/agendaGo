@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"agendago/internal/adapter/repository"
+	"agendago/internal/domain/session"
 	"agendago/internal/domain/signup"
 )
 
@@ -14,7 +15,7 @@ func TestSignupPostgres(t *testing.T) {
 	repo := repository.NovoSignupPostgres(novoPool(t))
 
 	t.Run("salva e consome um cadastro pendente, apagando-o", func(t *testing.T) {
-		p := signup.Novo("hash-aaa", "Maria", "maria@email.com", "11999998888", "senha-hash", time.Hour)
+		p := signup.Novo("hash-aaa", "Maria", "maria@email.com", "11999998888", "senha-hash", session.TipoClient, time.Hour)
 		if err := repo.Salvar(p); err != nil {
 			t.Fatalf("esperava sucesso ao salvar, got: %v", err)
 		}
@@ -25,6 +26,10 @@ func TestSignupPostgres(t *testing.T) {
 		}
 		if consumido == nil || consumido.Email != "maria@email.com" || consumido.Telefone != "11999998888" {
 			t.Fatalf("cadastro pendente inesperado: %+v", consumido)
+		}
+		// o tipo faz a volta pelo banco: é ele que decide qual conta nasce
+		if consumido.Tipo != session.TipoClient {
+			t.Errorf("esperava tipo client, got: %q", consumido.Tipo)
 		}
 
 		// uso único: segundo consumo devolve nil
@@ -44,8 +49,8 @@ func TestSignupPostgres(t *testing.T) {
 	})
 
 	t.Run("remove pendentes anteriores do mesmo email", func(t *testing.T) {
-		repo.Salvar(signup.Novo("hash-1", "Ana", "ana@email.com", "11999998888", "h", time.Hour))
-		repo.Salvar(signup.Novo("hash-2", "Ana", "ana@email.com", "11999998888", "h", time.Hour))
+		repo.Salvar(signup.Novo("hash-1", "Ana", "ana@email.com", "11999998888", "h", session.TipoClient, time.Hour))
+		repo.Salvar(signup.Novo("hash-2", "Ana", "ana@email.com", "11999998888", "h", session.TipoProvider, time.Hour))
 
 		if err := repo.RemoverPorEmail("ana@email.com"); err != nil {
 			t.Fatalf("esperava sucesso, got: %v", err)
@@ -59,8 +64,8 @@ func TestSignupPostgres(t *testing.T) {
 	})
 
 	t.Run("remove pendentes expirados", func(t *testing.T) {
-		repo.Salvar(signup.Novo("hash-exp", "Exp", "exp@email.com", "11999998888", "h", -time.Hour))
-		repo.Salvar(signup.Novo("hash-val", "Val", "val@email.com", "11999998888", "h", time.Hour))
+		repo.Salvar(signup.Novo("hash-exp", "Exp", "exp@email.com", "11999998888", "h", session.TipoClient, -time.Hour))
+		repo.Salvar(signup.Novo("hash-val", "Val", "val@email.com", "11999998888", "h", session.TipoClient, time.Hour))
 
 		if err := repo.RemoverExpirados(); err != nil {
 			t.Fatalf("esperava sucesso, got: %v", err)

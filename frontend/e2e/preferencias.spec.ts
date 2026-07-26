@@ -1,15 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { emailUnico, tokenDeConfirmacaoCadastro } from './helpers';
+import { cadastrarPrestadorELogar, emailUnico, tokenDeConfirmacaoCadastro } from './helpers';
 
-test('prestador acessa preferências, salva e vê o banner de sucesso', async ({ page }) => {
-	await page.goto('/cadastro?tipo=prestador');
-	await page.fill('#nome', 'Preferencias Teste');
-	await page.fill('#email', emailUnico('preferencias'));
-	await page.fill('#telefone', '(11) 99999-8888');
-	await page.fill('#senha', '12345678');
-	await page.fill('#confirmar-senha', '12345678');
-	await page.click('button[type="submit"]');
-	await page.waitForURL('/painel');
+test('prestador acessa preferências, salva e vê o banner de sucesso', async ({ page, request }) => {
+	await cadastrarPrestadorELogar(page, request, 'Preferencias Teste', emailUnico('preferencias'));
 
 	await page.click('a:has-text("Preferências")');
 	await page.waitForURL('/painel/preferencias');
@@ -23,15 +16,11 @@ test('prestador acessa preferências, salva e vê o banner de sucesso', async ({
 	await expect(page.locator('#descanso-minutos')).toHaveValue('15');
 });
 
-test('prestador começa com o expediente comercial sugerido e pode editá-lo', async ({ page }) => {
-	await page.goto('/cadastro?tipo=prestador');
-	await page.fill('#nome', 'Expediente Teste');
-	await page.fill('#email', emailUnico('expediente'));
-	await page.fill('#telefone', '(11) 99999-8888');
-	await page.fill('#senha', '12345678');
-	await page.fill('#confirmar-senha', '12345678');
-	await page.click('button[type="submit"]');
-	await page.waitForURL('/painel');
+test('prestador começa com o expediente comercial sugerido e pode editá-lo', async ({
+	page,
+	request
+}) => {
+	await cadastrarPrestadorELogar(page, request, 'Expediente Teste', emailUnico('expediente'));
 
 	await page.goto('/painel/preferencias');
 	const seletoresHorario = page.locator('select');
@@ -49,15 +38,8 @@ test('prestador começa com o expediente comercial sugerido e pode editá-lo', a
 	await expect(page.locator('select')).toHaveCount(2);
 });
 
-test('prestador define três períodos curtos no expediente padrão', async ({ page }) => {
-	await page.goto('/cadastro?tipo=prestador');
-	await page.fill('#nome', 'Tres Periodos Teste');
-	await page.fill('#email', emailUnico('tres-periodos'));
-	await page.fill('#telefone', '(11) 99999-8888');
-	await page.fill('#senha', '12345678');
-	await page.fill('#confirmar-senha', '12345678');
-	await page.click('button[type="submit"]');
-	await page.waitForURL('/painel');
+test('prestador define três períodos curtos no expediente padrão', async ({ page, request }) => {
+	await cadastrarPrestadorELogar(page, request, 'Tres Periodos Teste', emailUnico('tres-periodos'));
 
 	await page.goto('/painel/preferencias');
 
@@ -90,15 +72,16 @@ test('prestador define três períodos curtos no expediente padrão', async ({ p
 	await expect(seletoresAposReload.nth(4)).toHaveValue('15:00');
 });
 
-test('expediente padrão configurado aparece no calendário de disponibilidade', async ({ page }) => {
-	await page.goto('/cadastro?tipo=prestador');
-	await page.fill('#nome', 'Padrao Reflete Calendario');
-	await page.fill('#email', emailUnico('padrao-calendario'));
-	await page.fill('#telefone', '(11) 99999-8888');
-	await page.fill('#senha', '12345678');
-	await page.fill('#confirmar-senha', '12345678');
-	await page.click('button[type="submit"]');
-	await page.waitForURL('/painel');
+test('expediente padrão configurado aparece no calendário de disponibilidade', async ({
+	page,
+	request
+}) => {
+	await cadastrarPrestadorELogar(
+		page,
+		request,
+		'Padrao Reflete Calendario',
+		emailUnico('padrao-calendario')
+	);
 
 	await page.goto('/painel/preferencias');
 	await page.click('label[for="aceita-agendamentos"]');

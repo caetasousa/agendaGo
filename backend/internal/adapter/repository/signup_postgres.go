@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"agendago/internal/domain/session"
 	"agendago/internal/domain/signup"
 
 	"github.com/jackc/pgx/v5"
@@ -22,9 +23,9 @@ func NovoSignupPostgres(pool *pgxpool.Pool) *SignupPostgres {
 // Salvar persiste um novo cadastro pendente.
 func (r *SignupPostgres) Salvar(p *signup.Pendente) error {
 	_, err := r.pool.Exec(context.Background(),
-		`INSERT INTO cadastros_pendentes (token_hash, nome, email, telefone, senha_hash, criado_em, expira_em)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		p.TokenHash, p.Nome, p.Email, p.Telefone, p.SenhaHash, p.CriadoEm, p.ExpiraEm,
+		`INSERT INTO cadastros_pendentes (token_hash, nome, email, telefone, senha_hash, tipo, criado_em, expira_em)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		p.TokenHash, p.Nome, p.Email, p.Telefone, p.SenhaHash, string(p.Tipo), p.CriadoEm, p.ExpiraEm,
 	)
 	return err
 }
@@ -34,16 +35,18 @@ func (r *SignupPostgres) Salvar(p *signup.Pendente) error {
 // mesmo sob concorrência). Retorna (nil, nil) quando não existe.
 func (r *SignupPostgres) Consumir(tokenHash string) (*signup.Pendente, error) {
 	var p signup.Pendente
+	var tipo string
 	err := r.pool.QueryRow(context.Background(),
 		`DELETE FROM cadastros_pendentes WHERE token_hash = $1
-		 RETURNING token_hash, nome, email, telefone, senha_hash, criado_em, expira_em`, tokenHash,
-	).Scan(&p.TokenHash, &p.Nome, &p.Email, &p.Telefone, &p.SenhaHash, &p.CriadoEm, &p.ExpiraEm)
+		 RETURNING token_hash, nome, email, telefone, senha_hash, tipo, criado_em, expira_em`, tokenHash,
+	).Scan(&p.TokenHash, &p.Nome, &p.Email, &p.Telefone, &p.SenhaHash, &tipo, &p.CriadoEm, &p.ExpiraEm)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	p.Tipo = session.TipoUsuario(tipo)
 	return &p, nil
 }
 

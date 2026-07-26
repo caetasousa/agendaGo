@@ -123,10 +123,26 @@ func (n *Notificador) EnviarRecuperacaoSenha(email, nome, token string, expiraEm
 	n.enviar(email, nome, "Redefinição de senha — agendaGo", "recuperacao_senha.html", dados)
 }
 
-// EnviarConfirmacaoCadastro envia o link de confirmação de cadastro. Implementa
-// parte da interface enviadorCadastro de usecase/client.
+// EnviarConfirmacaoCadastro envia o link de confirmação de cadastro de
+// cliente. Implementa parte da interface enviadorCadastro de usecase/client.
 func (n *Notificador) EnviarConfirmacaoCadastro(email, nome, token string, expiraEm time.Time) {
+	n.enviarConfirmacaoCadastro(email, nome, token, "", expiraEm)
+}
+
+// EnviarConfirmacaoCadastroPrestador envia o link de confirmação de cadastro de
+// prestador. Implementa parte da interface enviadorCadastro de
+// usecase/provider. O `tipo` no link diz à tela de confirmação qual rota da API
+// chamar; quem decide de verdade que conta nasce é o registro no banco, então
+// mexer nesse parâmetro não cria a conta errada — só faz o link falhar.
+func (n *Notificador) EnviarConfirmacaoCadastroPrestador(email, nome, token string, expiraEm time.Time) {
+	n.enviarConfirmacaoCadastro(email, nome, token, "prestador", expiraEm)
+}
+
+func (n *Notificador) enviarConfirmacaoCadastro(email, nome, token, tipo string, expiraEm time.Time) {
 	link := fmt.Sprintf("%s/confirmar-cadastro?token=%s", n.urlFrontend, token)
+	if tipo != "" {
+		link += "&tipo=" + tipo
+	}
 	dados := struct {
 		Nome          string
 		Link          string

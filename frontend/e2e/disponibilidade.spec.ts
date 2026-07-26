@@ -1,5 +1,9 @@
-import { test, expect, type Page } from '@playwright/test';
-import { emailUnico, tokenDeConfirmacaoCadastro } from './helpers';
+import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
+import {
+	cadastrarPrestadorELogar,
+	emailUnico,
+	tokenDeConfirmacaoCadastro
+} from './helpers';
 
 // Formata a data como YYYY-MM-DD no fuso local, igual ao data-data das células.
 function chaveLocal(data: Date): string {
@@ -9,15 +13,8 @@ function chaveLocal(data: Date): string {
 	return `${ano}-${mes}-${dia}`;
 }
 
-async function cadastrarPrestador(page: Page, prefixo: string) {
-	await page.goto('/cadastro?tipo=prestador');
-	await page.fill('#nome', 'Disponibilidade Teste');
-	await page.fill('#email', emailUnico(prefixo));
-	await page.fill('#telefone', '(11) 99999-8888');
-	await page.fill('#senha', '12345678');
-	await page.fill('#confirmar-senha', '12345678');
-	await page.click('button[type="submit"]');
-	await page.waitForURL('/painel');
+async function cadastrarPrestador(page: Page, request: APIRequestContext, prefixo: string) {
+	await cadastrarPrestadorELogar(page, request, 'Disponibilidade Teste', emailUnico(prefixo));
 }
 
 // A agenda nasce desativada; o expediente padrão dos dias úteis só vale após
@@ -34,8 +31,8 @@ async function irParaDisponibilidade(page: Page) {
 	await page.waitForSelector('button[data-data]');
 }
 
-test('agenda desativada mostra aviso e todos os dias indisponíveis', async ({ page }) => {
-	await cadastrarPrestador(page, 'agenda-desativada');
+test('agenda desativada mostra aviso e todos os dias indisponíveis', async ({ page, request }) => {
+	await cadastrarPrestador(page, request, 'agenda-desativada');
 	await irParaDisponibilidade(page);
 
 	await expect(page.getByText('Sua agenda está desativada')).toBeVisible();
@@ -45,8 +42,8 @@ test('agenda desativada mostra aviso e todos os dias indisponíveis', async ({ p
 	await expect(celulaHoje).toHaveAttribute('data-estado', 'indisponivel');
 });
 
-test('prestador bloqueia um dia útil e depois restaura o padrão', async ({ page }) => {
-	await cadastrarPrestador(page, 'bloqueio');
+test('prestador bloqueia um dia útil e depois restaura o padrão', async ({ page, request }) => {
+	await cadastrarPrestador(page, request, 'bloqueio');
 	await ativarAgenda(page);
 	await irParaDisponibilidade(page);
 
@@ -81,8 +78,8 @@ test('prestador bloqueia um dia útil e depois restaura o padrão', async ({ pag
 	await expect(celula).toHaveAttribute('data-estado', 'disponivel');
 });
 
-test('prestador define horários próprios num sábado', async ({ page }) => {
-	await cadastrarPrestador(page, 'personalizado');
+test('prestador define horários próprios num sábado', async ({ page, request }) => {
+	await cadastrarPrestador(page, request, 'personalizado');
 	await ativarAgenda(page);
 	await irParaDisponibilidade(page);
 
@@ -105,8 +102,8 @@ test('prestador define horários próprios num sábado', async ({ page }) => {
 	await expect(celula.getByText('8h–12h')).toBeVisible();
 });
 
-test('qualquer alteração no dia de hoje em cima da hora é impedida', async ({ page }) => {
-	await cadastrarPrestador(page, 'antecedencia');
+test('qualquer alteração no dia de hoje em cima da hora é impedida', async ({ page, request }) => {
+	await cadastrarPrestador(page, request, 'antecedencia');
 	await ativarAgenda(page);
 	await irParaDisponibilidade(page);
 
@@ -127,8 +124,8 @@ test('qualquer alteração no dia de hoje em cima da hora é impedida', async ({
 	await expect(celulaHoje).toHaveAttribute('data-estado', estadoInicial!);
 });
 
-test('restaurar padrão a partir de um bloqueio de hoje continua permitido', async ({ page }) => {
-	await cadastrarPrestador(page, 'restaurar-hoje');
+test('restaurar padrão a partir de um bloqueio de hoje continua permitido', async ({ page, request }) => {
+	await cadastrarPrestador(page, request, 'restaurar-hoje');
 	await ativarAgenda(page);
 	await irParaDisponibilidade(page);
 

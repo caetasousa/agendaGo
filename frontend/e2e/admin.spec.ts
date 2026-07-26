@@ -1,17 +1,32 @@
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
-import { emailUnico, tokenDeConfirmacaoCadastro } from './helpers';
+import { cadastrarPrestadorELogar, emailUnico, tokenDeConfirmacaoCadastro } from './helpers';
 
 // Credenciais do admin semeado pelo docker-compose (ADMIN_EMAIL/ADMIN_SENHA).
 const ADMIN_EMAIL = 'admin@agendago.dev';
 const ADMIN_SENHA = 'admin12345';
 
-async function cadastrarPrestador(page: Page, nome: string, email: string) {
+async function cadastrarPrestador(
+	page: Page,
+	request: APIRequestContext,
+	nome: string,
+	email: string
+) {
 	await page.goto('/cadastro?tipo=prestador');
 	await page.fill('#nome', nome);
 	await page.fill('#email', email);
 	await page.fill('#telefone', '(11) 99999-8888');
 	await page.fill('#senha', '12345678');
 	await page.fill('#confirmar-senha', '12345678');
+	await page.click('button[type="submit"]');
+	await expect(page.getByText(`Enviamos um email para ${email}`)).toBeVisible();
+
+	const token = await tokenDeConfirmacaoCadastro(request, email);
+	await page.goto(`/confirmar-cadastro?token=${token}&tipo=prestador`);
+	await expect(page.getByText('Cadastro confirmado!')).toBeVisible();
+
+	await page.goto('/login');
+	await page.fill('#email', email);
+	await page.fill('#senha', '12345678');
 	await page.click('button[type="submit"]');
 	await page.waitForURL('/painel');
 	await page.click('button:has-text("Sair")');
@@ -60,10 +75,10 @@ test('admin entra pelo login unificado e cai no painel de moderação', async ({
 	await expect(page.locator('header').getByText('Moderação')).toBeVisible();
 });
 
-test('admin bane um prestador, que deixa de conseguir logar, e depois reativa', async ({ page }) => {
+test('admin bane um prestador, que deixa de conseguir logar, e depois reativa', async ({ page, request }) => {
 	const nome = `Prestador Moderado ${Date.now()}`;
 	const email = emailUnico('moderado');
-	await cadastrarPrestador(page, nome, email);
+	await cadastrarPrestador(page, request, nome, email);
 
 	await entrarComoAdmin(page);
 
@@ -97,10 +112,10 @@ test('admin bane um prestador, que deixa de conseguir logar, e depois reativa', 
 	await page.waitForURL('/painel');
 });
 
-test('admin abre o detalhe em leitura de um prestador pela lista', async ({ page }) => {
+test('admin abre o detalhe em leitura de um prestador pela lista', async ({ page, request }) => {
 	const nome = `Prestador Detalhe ${Date.now()}`;
 	const email = emailUnico('detalhe');
-	await cadastrarPrestador(page, nome, email);
+	await cadastrarPrestador(page, request, nome, email);
 
 	await entrarComoAdmin(page);
 	// clica no nome do prestador na lista → página de detalhe
@@ -121,7 +136,7 @@ test('admin abre o detalhe em leitura de um prestador pela lista', async ({ page
 test('prestador banido some da vitrine pública', async ({ page, request }) => {
 	const nome = `Prestador Vitrine ${Date.now()}`;
 	const email = emailUnico('vitrine-ban');
-	await cadastrarPrestador(page, nome, email);
+	await cadastrarPrestador(page, request, nome, email);
 
 	// aparece na vitrine antes do banimento (visto por um cliente)
 	await cadastrarClienteLogado(page, request, 'Cliente Vitrine', emailUnico('cliente-vitrine'));
@@ -143,16 +158,9 @@ test('prestador banido some da vitrine pública', async ({ page, request }) => {
 	await expect(page.locator(`a:has-text("${nome}")`)).toHaveCount(0);
 });
 
-test('prestador logado não acessa /admin (é mandado ao painel)', async ({ page }) => {
+test('prestador logado não acessa /admin (é mandado ao painel)', async ({ page, request }) => {
 	// cadastro já deixa o prestador logado no /painel
-	await page.goto('/cadastro?tipo=prestador');
-	await page.fill('#nome', 'Prestador Guard');
-	await page.fill('#email', emailUnico('guard'));
-	await page.fill('#telefone', '(11) 99999-8888');
-	await page.fill('#senha', '12345678');
-	await page.fill('#confirmar-senha', '12345678');
-	await page.click('button[type="submit"]');
-	await page.waitForURL('/painel');
+	await cadastrarPrestadorELogar(page, request, 'Prestador Guard', emailUnico('guard'));
 
 	await page.goto('/admin');
 	await page.waitForURL('/painel');

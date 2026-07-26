@@ -7,6 +7,7 @@ import (
 	"errors"
 	"time"
 
+	"agendago/internal/domain/session"
 	"agendago/internal/domain/signup"
 	"agendago/internal/pkg/token"
 )
@@ -94,7 +95,7 @@ func (uc *SolicitarCadastroUseCase) Executar(in SolicitarCadastroInput) error {
 	if err != nil {
 		return err
 	}
-	pendente := signup.Novo(token.Hash(t), in.Nome, in.Email, in.Telefone, senhaHash, TTLConfirmacaoCadastro)
+	pendente := signup.Novo(token.Hash(t), in.Nome, in.Email, in.Telefone, senhaHash, session.TipoClient, TTLConfirmacaoCadastro)
 	if err := uc.pendentes.Salvar(pendente); err != nil {
 		return err
 	}
