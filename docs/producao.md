@@ -291,8 +291,9 @@ printf 'EHLO teste\r\nAUTH LOGIN\r\n%s\r\n%s\r\nQUIT\r\n' "$U" "$P" \
 
 ## Atualizar (redeploy)
 
-Todo push na `main` que passa nos testes publica imagens `:latest` novas. Na
-VPS, o redeploy inteiro é:
+Todo push na `main` que passa nos testes publica imagens novas. Com o deploy
+automático configurado (abaixo), o servidor já sobe a versão nova sozinho. O
+redeploy manual continua valendo:
 
 ```bash
 docker compose -f docker-compose.prod.yml pull
@@ -313,6 +314,56 @@ docker compose -f docker-compose.prod.yml up -d
 
 (Migrations não voltam sozinhas: se o commit ruim adicionou uma migration, o
 rollback do schema é manual.)
+
+### Deploy automático (CI → VPS)
+
+O job `implantar` do `.github/workflows/ci.yml` fecha o ciclo: depois que as
+imagens são publicadas, ele entra na VPS por SSH, sincroniza
+`docker-compose.prod.yml` e `Caddyfile`, manda puxar as imagens **fixadas no
+SHA do commit** e sobe a stack. Por fim, chama `/api/health` e falha o job se a
+aplicação não responder.
+
+Três coisas que ele **não** faz, de propósito: não envia código-fonte (as
+imagens vêm do GHCR), não toca no `.env` do servidor (é lá que vivem os
+segredos) e não roda nada se os segredos não existirem — o job passa com um
+aviso, para o repositório funcionar antes de a VPS existir.
+
+**1. Um usuário de deploy na VPS** (evite `root`):
+
+```bash
+sudo adduser --disabled-password --gecos '' deploy
+sudo usermod -aG docker deploy
+```
+
+**2. Uma chave SSH exclusiva do CI**, gerada na sua máquina:
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/agendago_deploy -N '' -C 'github-actions'
+ssh-copy-id -i ~/.ssh/agendago_deploy.pub deploy@SEU_IP
+ssh-keyscan SEU_IP            # guarde a saída para o VPS_KNOWN_HOSTS
+```
+
+**3. Os segredos no GitHub** (*Settings → Secrets and variables → Actions*):
+
+| Nome | Onde | Conteúdo |
+|---|---|---|
+| `VPS_HOST` | Secrets | IP ou hostname da VPS |
+| `VPS_USER` | Secrets | `deploy` |
+| `VPS_SSH_KEY` | Secrets | conteúdo de `~/.ssh/agendago_deploy` (a chave **privada**) |
+| `VPS_PORT` | Secrets | opcional, padrão `22` |
+| `VPS_KNOWN_HOSTS` | Secrets | opcional, saída do `ssh-keyscan` |
+| `DOMINIO` | **Variables** | seu domínio, para a verificação pós-deploy |
+
+`VPS_KNOWN_HOSTS` é opcional mas recomendado: sem ele, o CI aceita a identidade
+que o servidor apresentar na hora, o que abre janela para um ataque de
+man-in-the-middle no primeiro contato.
+
+Se as imagens do GHCR forem privadas, o `docker login ghcr.io` precisa ter sido
+feito **uma vez** com o usuário `deploy` — é ele quem puxa as imagens.
+
+Para reimplantar sem commit novo (por exemplo, depois de arrumar algo no
+servidor), use *Actions → CI → Run workflow*, que o `workflow_dispatch`
+habilita.
 
 > Trocar o `DOMINIO` **não** exige rebuild do front: `PUBLIC_API_URL` é assada
 > como `/api` (relativa), então a imagem serve qualquer domínio. Basta ajustar o
