@@ -4,6 +4,11 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+	// Sem isto o Vite só expõe variáveis com prefixo VITE_ (o SvelteKit não
+	// configura o prefixo por conta própria), e `import.meta.env.PUBLIC_API_URL`
+	// ficaria undefined no build de produção — a imagem cairia calada no
+	// fallback localhost:8080 e o frontend publicado não acharia a API.
+	envPrefix: 'PUBLIC_',
 	plugins: [
 		tailwindcss(),
 		sveltekit({
