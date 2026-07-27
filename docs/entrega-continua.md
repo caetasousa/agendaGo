@@ -472,6 +472,55 @@ O Dependabot avisa que **saiu versão nova**; a varredura avisa que **a versão
 que você tem virou um problema** — o que também acontece sem ninguém publicar
 nada, como no Caso 3 (stdlib do Go).
 
+### Auto-merge: o que fecha o PR sozinho
+
+CI verde **não mescla nem fecha PR nenhum** — ele só pinta os checks. Sem
+automação, cada PR do Dependabot fica aberto esperando alguém apertar o botão,
+e é assim que se acumulam seis PRs parados.
+
+O `.github/workflows/dependabot-auto-merge.yml` fecha esse laço, com um limite
+rígido: **major nunca é mesclado sozinho**.
+
+| Tipo | O que acontece |
+|---|---|
+| patch/minor, CI verde | mesclado com squash, branch apagado |
+| grupo (`npm-menores`, `go-menores`) | mesclado — os grupos só admitem minor/patch |
+| **major** | comentário no PR explicando, e fica para você |
+| CI vermelho | nada acontece |
+
+A regra do major não é excesso de zelo: o PR do **TypeScript 6 → 7** derrubou o
+`svelte-check` e o E2E de uma vez. Mesclado sozinho, teria quebrado a `main`.
+
+#### Por que o gatilho é o fim do CI, e não a abertura do PR
+
+O padrão mais divulgado é reagir ao `pull_request` e chamar
+`gh pr merge --auto`, deixando o GitHub mesclar quando os checks passarem.
+**Desde 25/03/2026 isso não funciona mais**: o GitHub passou a recusar a
+*ativação* do auto-merge enquanto os requisitos não estiverem cumpridos — e no
+instante em que o PR abre, o CI nem começou.
+
+Por isso o gatilho aqui é `workflow_run` no término do CI, quando o resultado
+já existe e a mesclagem é direta:
+
+```yaml
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+```
+
+Efeito colateral bem-vindo: **não exige branch protection** com checks
+obrigatórios. Como neste projeto se commita direto na `main`, exigir PR para
+tudo atrapalharia o fluxo normal em troca de nada.
+
+> [!NOTE]
+> A decisão de mesclar sai do **título** do PR, que o Dependabot escreve em
+> formato estável (`bump X from 1.2.3 to 7.0.2`, ou `bump the <grupo> group`).
+> O formato da versão varia mais do que parece — `6.0.3`, `5` e `22-alpine` são
+> todos títulos reais deste repositório —, então a comparação usa só o inteiro
+> inicial de cada lado. Título que não casa com nenhum dos dois formatos é
+> tratado como major: na dúvida, não mescla.
+
 ---
 
 ## 6️⃣ As proteções chatas do workflow

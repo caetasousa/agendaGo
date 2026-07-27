@@ -295,6 +295,8 @@ O Dependabot abre PR quando sai versão nova de uma dependência. Já esteve con
 
 A divisão de trabalho com a varredura é o ponto: o Dependabot avisa que **saiu versão nova**; a varredura avisa que **a versão que você tem virou um problema** — o que também acontece sem ninguém publicar nada, como quando sai uma CVE de stdlib do Go. Os alertas de *segurança* do Dependabot não seguem o ciclo mensal: chegam assim que a CVE é publicada.
 
+Abrir o PR é metade do trabalho: **CI verde não mescla nada sozinho**. O `.github/workflows/dependabot-auto-merge.yml` mescla os PRs de patch/minor que passarem no CI e deixa **major sempre para revisão manual** — o PR do TypeScript 6 → 7 quebrou o `svelte-check` e o E2E, e teria ido para a `main` se a regra não existisse.
+
 > [!TIP]
 > O histórico completo da remoção e da volta está em **[entrega-continua.md](entrega-continua.md)**, seção *Dependabot: removido, e depois readmitido com coleira*.
 
