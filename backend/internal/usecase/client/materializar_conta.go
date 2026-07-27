@@ -15,7 +15,18 @@ import (
 // — e também se o convidado está banido: banimento não é revertido por
 // cadastro, mesmo que o dono do email tenha provado posse (mesma regra de
 // SolicitarCadastroUseCase para o caminho por email).
-func materializarConta(clients repositorioClient, nome, email, telefone, senhaHash string) (*client.Client, error) {
+//
+// O email do admin é reservado (ver buscadorAdmin): mesmo com posse do email
+// provada, não materializa conta de cliente com ele — retorna ErrCadastroInvalido.
+func materializarConta(clients repositorioClient, admins buscadorAdmin, nome, email, telefone, senhaHash string) (*client.Client, error) {
+	admin, err := admins.BuscarPorEmail(email)
+	if err != nil {
+		return nil, err
+	}
+	if admin != nil {
+		return nil, ErrCadastroInvalido
+	}
+
 	existente, err := clients.BuscarPorEmail(email)
 	if err != nil {
 		return nil, err

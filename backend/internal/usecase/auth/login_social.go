@@ -31,6 +31,12 @@ var ErrEmailNaoVerificado = errors.New("email não verificado pelo provedor")
 // do cadastro por senha.
 var ErrEmailJaCadastradoOutroTipo = errors.New("email já cadastrado como outro tipo de conta")
 
+// ErrEmailReservadoAdmin é retornado quando o email do provedor social é o do
+// administrador. O email do admin é reservado: o login social não cria nem
+// vincula conta de cliente/prestador com ele. O admin entra pela rota própria
+// de login de administrador (email e senha).
+var ErrEmailReservadoAdmin = errors.New("email reservado para o administrador")
+
 // ErrContaNaoEncontrada é retornado quando alguém entra pelo login social sem
 // ter conta. Só acontece no fluxo de PublicoLogin: ali não há tipo declarado,
 // e criar a conta exigiria adivinhar se a pessoa é cliente ou prestador — uma
@@ -103,6 +109,7 @@ type LoginSocialUseCase struct {
 	google       provedorOIDC
 	clients      contaClient
 	providers    contaProvider
+	admins       buscadorAdmin
 	criaClient   criadorClient
 	criaProvider criadorProvider
 	identidades  repositorioIdentidadeSocial
@@ -117,6 +124,7 @@ func NovoLoginSocialUseCase(
 	google provedorOIDC,
 	clients contaClient,
 	providers contaProvider,
+	admins buscadorAdmin,
 	criaClient criadorClient,
 	criaProvider criadorProvider,
 	identidades repositorioIdentidadeSocial,
@@ -128,6 +136,7 @@ func NovoLoginSocialUseCase(
 		google:       google,
 		clients:      clients,
 		providers:    providers,
+		admins:       admins,
 		criaClient:   criaClient,
 		criaProvider: criaProvider,
 		identidades:  identidades,
@@ -231,6 +240,12 @@ func (uc *LoginSocialUseCase) resolverPorEmail(id *socialidentity.IdentidadeOIDC
 		return nil, ErrEmailNaoVerificado
 	}
 
+	if reservado, err := uc.emailReservadoPeloAdmin(id.Email); err != nil {
+		return nil, err
+	} else if reservado {
+		return nil, ErrEmailReservadoAdmin
+	}
+
 	prestador, err := uc.providers.BuscarPorEmail(id.Email)
 	if err != nil {
 		return nil, err
@@ -258,6 +273,14 @@ func (uc *LoginSocialUseCase) resolverPorEmail(id *socialidentity.IdentidadeOIDC
 func (uc *LoginSocialUseCase) resolverClient(id *socialidentity.IdentidadeOIDC) (*LoginOutput, error) {
 	if !id.EmailVerificado {
 		return nil, ErrEmailNaoVerificado
+	}
+
+	// o email do admin é reservado: não vira conta de cliente nem se vincula a
+	// uma identidade social (ver ErrEmailReservadoAdmin).
+	if reservado, err := uc.emailReservadoPeloAdmin(id.Email); err != nil {
+		return nil, err
+	} else if reservado {
+		return nil, ErrEmailReservadoAdmin
 	}
 
 	// o email não pode já pertencer a um prestador — mesma regra do
@@ -311,6 +334,14 @@ func (uc *LoginSocialUseCase) resolverClient(id *socialidentity.IdentidadeOIDC) 
 func (uc *LoginSocialUseCase) resolverProvider(id *socialidentity.IdentidadeOIDC) (*LoginOutput, error) {
 	if !id.EmailVerificado {
 		return nil, ErrEmailNaoVerificado
+	}
+
+	// o email do admin é reservado: não vira conta de prestador nem se vincula
+	// a uma identidade social (ver ErrEmailReservadoAdmin).
+	if reservado, err := uc.emailReservadoPeloAdmin(id.Email); err != nil {
+		return nil, err
+	} else if reservado {
+		return nil, ErrEmailReservadoAdmin
 	}
 
 	// o email não pode já pertencer a um cliente — mesma regra do cadastro
@@ -405,6 +436,16 @@ func (uc *LoginSocialUseCase) novaSessao(userID, nome string, userType session.T
 		UserID:   userID,
 		Nome:     nome,
 	}, nil
+}
+
+// emailReservadoPeloAdmin diz se o email pertence ao administrador — nesse
+// caso o login social não cria nem vincula conta de cliente/prestador.
+func (uc *LoginSocialUseCase) emailReservadoPeloAdmin(email string) (bool, error) {
+	a, err := uc.admins.BuscarPorEmail(email)
+	if err != nil {
+		return false, err
+	}
+	return a != nil, nil
 }
 
 // senhaSentinela gera um hash de senha aleatória de 256 bits, nunca

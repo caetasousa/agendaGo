@@ -111,17 +111,17 @@ func main() {
 	}
 
 	// usecases
-	solicitarCadastroProvider := ucprovider.NovoSolicitarCadastroUseCase(providerRepo, clientRepo, signupRepo, notificador, hasher)
-	confirmarCadastroProvider := ucprovider.NovoConfirmarCadastroUseCase(providerRepo, clientRepo, signupRepo)
+	solicitarCadastroProvider := ucprovider.NovoSolicitarCadastroUseCase(providerRepo, clientRepo, adminRepo, signupRepo, notificador, hasher)
+	confirmarCadastroProvider := ucprovider.NovoConfirmarCadastroUseCase(providerRepo, clientRepo, adminRepo, signupRepo)
 	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(providerRepo)
-	solicitarCadastroClient := ucclient.NovoSolicitarCadastroUseCase(clientRepo, providerRepo, signupRepo, notificador, hasher)
-	confirmarCadastroClient := ucclient.NovoConfirmarCadastroUseCase(clientRepo, providerRepo, signupRepo)
+	solicitarCadastroClient := ucclient.NovoSolicitarCadastroUseCase(clientRepo, providerRepo, adminRepo, signupRepo, notificador, hasher)
+	confirmarCadastroClient := ucclient.NovoConfirmarCadastroUseCase(clientRepo, providerRepo, adminRepo, signupRepo)
 	consultarPreCadastro := ucclient.NovoConsultarPreCadastroUseCase(preCadastroRepo)
-	concluirPreCadastro := ucclient.NovoConcluirPreCadastroUseCase(clientRepo, providerRepo, preCadastroRepo, hasher)
+	concluirPreCadastro := ucclient.NovoConcluirPreCadastroUseCase(clientRepo, providerRepo, adminRepo, preCadastroRepo, hasher)
 	loginProvider := ucauth.NovoLoginProviderUseCase(providerRepo, sessionRepo, hasher)
 	loginClient := ucauth.NovoLoginClientUseCase(clientRepo, sessionRepo, hasher)
 	loginAdmin := ucauth.NovoLoginAdminUseCase(adminRepo, sessionRepo, hasher)
-	loginSocial := novoLoginSocialUseCase(context.Background(), providerRepo, clientRepo, socialIdentityRepo, oauthStateRepo, sessionRepo, hasher)
+	loginSocial := novoLoginSocialUseCase(context.Background(), providerRepo, clientRepo, adminRepo, socialIdentityRepo, oauthStateRepo, sessionRepo, hasher)
 	logout := ucauth.NovoLogoutUseCase(sessionRepo)
 	validarSessao := ucauth.NovoValidarSessaoUseCase(sessionRepo)
 	perfil := ucauth.NovoPerfilUseCase(providerRepo, clientRepo, adminRepo)
@@ -367,6 +367,7 @@ func novoLoginSocialUseCase(
 	ctx context.Context,
 	providerRepo *repository.ProviderPostgres,
 	clientRepo *repository.ClientPostgres,
+	adminRepo *repository.AdminPostgres,
 	socialIdentityRepo *repository.SocialIdentityPostgres,
 	oauthStateRepo *repository.OAuthStatePostgres,
 	sessionRepo *repository.SessionPostgres,
@@ -382,7 +383,7 @@ func novoLoginSocialUseCase(
 		os.Exit(1)
 	}
 
-	return ucauth.NovoLoginSocialUseCase(google, clientRepo, providerRepo, clientRepo, providerRepo, socialIdentityRepo, oauthStateRepo, sessionRepo, hasher)
+	return ucauth.NovoLoginSocialUseCase(google, clientRepo, providerRepo, adminRepo, clientRepo, providerRepo, socialIdentityRepo, oauthStateRepo, sessionRepo, hasher)
 }
 
 // health godoc

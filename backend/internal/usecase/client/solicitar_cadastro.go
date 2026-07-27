@@ -34,14 +34,15 @@ type SolicitarCadastroInput struct {
 type SolicitarCadastroUseCase struct {
 	clients   repositorioClient
 	providers buscadorProvider
+	admins    buscadorAdmin
 	pendentes repositorioCadastroPendente
 	enviador  enviadorCadastro
 	hasher    hasherSenha
 }
 
 // NovoSolicitarCadastroUseCase cria uma instância de SolicitarCadastroUseCase com as dependências injetadas.
-func NovoSolicitarCadastroUseCase(clients repositorioClient, providers buscadorProvider, pendentes repositorioCadastroPendente, enviador enviadorCadastro, hasher hasherSenha) *SolicitarCadastroUseCase {
-	return &SolicitarCadastroUseCase{clients: clients, providers: providers, pendentes: pendentes, enviador: enviador, hasher: hasher}
+func NovoSolicitarCadastroUseCase(clients repositorioClient, providers buscadorProvider, admins buscadorAdmin, pendentes repositorioCadastroPendente, enviador enviadorCadastro, hasher hasherSenha) *SolicitarCadastroUseCase {
+	return &SolicitarCadastroUseCase{clients: clients, providers: providers, admins: admins, pendentes: pendentes, enviador: enviador, hasher: hasher}
 }
 
 // Executar processa a solicitação de cadastro. A resposta é sempre a mesma
@@ -58,6 +59,19 @@ func (uc *SolicitarCadastroUseCase) Executar(in SolicitarCadastroInput) error {
 	senhaHash, err := uc.hasher.Gerar(in.Senha)
 	if err != nil {
 		return err
+	}
+
+	// o email do admin é reservado: não vira conta de cliente. Retorna em
+	// silêncio (sem pendente e sem email) — a resposta HTTP e o timing são
+	// idênticos aos outros casos, então não vaza que o email é o do admin. O
+	// aviso "você já tem conta, entre/recupere a senha" não se aplica a ele: o
+	// admin entra por outra rota e não recupera senha por este fluxo.
+	admin, err := uc.admins.BuscarPorEmail(in.Email)
+	if err != nil {
+		return err
+	}
+	if admin != nil {
+		return nil
 	}
 
 	// o email não pode já pertencer a um prestador (o email é único no sistema):

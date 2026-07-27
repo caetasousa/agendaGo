@@ -29,13 +29,14 @@ type ConcluirPreCadastroOutput struct {
 type ConcluirPreCadastroUseCase struct {
 	clients     repositorioClient
 	providers   buscadorProvider
+	admins      buscadorAdmin
 	preCadastro repositorioPreCadastro
 	hasher      hasherSenha
 }
 
 // NovoConcluirPreCadastroUseCase cria uma instância de ConcluirPreCadastroUseCase com as dependências injetadas.
-func NovoConcluirPreCadastroUseCase(clients repositorioClient, providers buscadorProvider, preCadastro repositorioPreCadastro, hasher hasherSenha) *ConcluirPreCadastroUseCase {
-	return &ConcluirPreCadastroUseCase{clients: clients, providers: providers, preCadastro: preCadastro, hasher: hasher}
+func NovoConcluirPreCadastroUseCase(clients repositorioClient, providers buscadorProvider, admins buscadorAdmin, preCadastro repositorioPreCadastro, hasher hasherSenha) *ConcluirPreCadastroUseCase {
+	return &ConcluirPreCadastroUseCase{clients: clients, providers: providers, admins: admins, preCadastro: preCadastro, hasher: hasher}
 }
 
 // Executar consome o token de pré-cadastro (uso único) e cria a conta com a
@@ -65,7 +66,7 @@ func (uc *ConcluirPreCadastroUseCase) Executar(in ConcluirPreCadastroInput) (*Co
 		return nil, err
 	}
 
-	c, err := materializarConta(uc.clients, p.Nome, p.Email, p.Telefone, senhaHash)
+	c, err := materializarConta(uc.clients, uc.admins, p.Nome, p.Email, p.Telefone, senhaHash)
 	if err != nil {
 		return nil, err
 	}

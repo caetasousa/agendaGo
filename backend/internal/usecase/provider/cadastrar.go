@@ -42,6 +42,7 @@ type SolicitarCadastroInput struct {
 type SolicitarCadastroUseCase struct {
 	repo      repositorioCadastrar
 	clients   buscadorClient
+	admins    buscadorAdmin
 	pendentes repositorioCadastroPendente
 	enviador  enviadorCadastro
 	hasher    hasherSenha
@@ -51,11 +52,12 @@ type SolicitarCadastroUseCase struct {
 func NovoSolicitarCadastroUseCase(
 	repo repositorioCadastrar,
 	clients buscadorClient,
+	admins buscadorAdmin,
 	pendentes repositorioCadastroPendente,
 	enviador enviadorCadastro,
 	hasher hasherSenha,
 ) *SolicitarCadastroUseCase {
-	return &SolicitarCadastroUseCase{repo: repo, clients: clients, pendentes: pendentes, enviador: enviador, hasher: hasher}
+	return &SolicitarCadastroUseCase{repo: repo, clients: clients, admins: admins, pendentes: pendentes, enviador: enviador, hasher: hasher}
 }
 
 // Executar processa a solicitação. Devolve sempre nil (fora falha real de
@@ -71,6 +73,17 @@ func (uc *SolicitarCadastroUseCase) Executar(in SolicitarCadastroInput) error {
 	senhaHash, err := uc.hasher.Gerar(in.Senha)
 	if err != nil {
 		return err
+	}
+
+	// o email do admin é reservado: não vira conta de prestador. Retorna em
+	// silêncio (sem pendente e sem email), como no cadastro de cliente — a
+	// resposta e o timing são idênticos, sem vazar que o email é o do admin.
+	admin, err := uc.admins.BuscarPorEmail(in.Email)
+	if err != nil {
+		return err
+	}
+	if admin != nil {
+		return nil
 	}
 
 	prestador, err := uc.repo.BuscarPorEmail(in.Email)
@@ -123,12 +136,13 @@ type ConfirmarCadastroOutput struct {
 type ConfirmarCadastroUseCase struct {
 	repo      repositorioCadastrar
 	clients   buscadorClient
+	admins    buscadorAdmin
 	pendentes repositorioCadastroPendente
 }
 
 // NovoConfirmarCadastroUseCase cria uma instância de ConfirmarCadastroUseCase com as dependências injetadas.
-func NovoConfirmarCadastroUseCase(repo repositorioCadastrar, clients buscadorClient, pendentes repositorioCadastroPendente) *ConfirmarCadastroUseCase {
-	return &ConfirmarCadastroUseCase{repo: repo, clients: clients, pendentes: pendentes}
+func NovoConfirmarCadastroUseCase(repo repositorioCadastrar, clients buscadorClient, admins buscadorAdmin, pendentes repositorioCadastroPendente) *ConfirmarCadastroUseCase {
+	return &ConfirmarCadastroUseCase{repo: repo, clients: clients, admins: admins, pendentes: pendentes}
 }
 
 // Executar consome o token (uso único) e cria o prestador. Retorna
@@ -143,6 +157,16 @@ func (uc *ConfirmarCadastroUseCase) Executar(tokenPuro string) (*ConfirmarCadast
 		return nil, err
 	}
 	if pendente == nil || pendente.Expirado(time.Now()) || pendente.Tipo != session.TipoProvider {
+		return nil, ErrCadastroInvalido
+	}
+
+	// o email do admin é reservado (ver buscadorAdmin): mesmo com o token
+	// válido, não materializa conta de prestador com ele
+	admin, err := uc.admins.BuscarPorEmail(pendente.Email)
+	if err != nil {
+		return nil, err
+	}
+	if admin != nil {
 		return nil, ErrCadastroInvalido
 	}
 

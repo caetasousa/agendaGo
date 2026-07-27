@@ -3,6 +3,7 @@ package client
 import (
 	"time"
 
+	"agendago/internal/domain/admin"
 	"agendago/internal/domain/client"
 	"agendago/internal/domain/precadastro"
 	"agendago/internal/domain/provider"
@@ -22,6 +23,13 @@ type repositorioClient interface {
 // único entre clientes e prestadores.
 type buscadorProvider interface {
 	BuscarPorEmail(email string) (*provider.Provider, error)
+}
+
+// buscadorAdmin verifica se o email pertence ao administrador. O email do admin
+// é reservado: nenhum cadastro (nem por formulário, nem convidado) pode criar
+// uma conta de cliente com ele.
+type buscadorAdmin interface {
+	BuscarPorEmail(email string) (*admin.Admin, error)
 }
 
 // repositorioCadastroPendente persiste e consome os cadastros à espera de

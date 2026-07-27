@@ -126,6 +126,11 @@ func (h *OAuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		// na tabela do tipo pedido. Mesma mensagem de ErrEmailJaCadastradoOutroTipo.
 		case errors.Is(err, ucauth.ErrEmailJaCadastradoOutroTipo), errors.Is(err, ucauth.ErrCredenciaisInvalidas):
 			h.redirecionarErro(w, r, "social_outro_tipo")
+		// Email do admin: reservado. Não cria conta social — o admin entra pela
+		// rota de login de administrador. Mensagem própria para não empurrar o
+		// admin ao cadastro (como faria social_sem_conta).
+		case errors.Is(err, ucauth.ErrEmailReservadoAdmin):
+			h.redirecionarErro(w, r, "social_admin")
 		// Entrou pelo "Entrar com Google" sem ter conta: não é erro, é fluxo
 		// normal de quem ainda vai se cadastrar. O frontend leva ao cadastro.
 		case errors.Is(err, ucauth.ErrContaNaoEncontrada):

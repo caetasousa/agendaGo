@@ -20,12 +20,13 @@ type ConfirmarCadastroOutput struct {
 type ConfirmarCadastroUseCase struct {
 	clients   repositorioClient
 	providers buscadorProvider
+	admins    buscadorAdmin
 	pendentes repositorioCadastroPendente
 }
 
 // NovoConfirmarCadastroUseCase cria uma instância de ConfirmarCadastroUseCase com as dependências injetadas.
-func NovoConfirmarCadastroUseCase(clients repositorioClient, providers buscadorProvider, pendentes repositorioCadastroPendente) *ConfirmarCadastroUseCase {
-	return &ConfirmarCadastroUseCase{clients: clients, providers: providers, pendentes: pendentes}
+func NovoConfirmarCadastroUseCase(clients repositorioClient, providers buscadorProvider, admins buscadorAdmin, pendentes repositorioCadastroPendente) *ConfirmarCadastroUseCase {
+	return &ConfirmarCadastroUseCase{clients: clients, providers: providers, admins: admins, pendentes: pendentes}
 }
 
 // Executar consome o token (uso único) e cria a conta. Retorna
@@ -50,7 +51,7 @@ func (uc *ConfirmarCadastroUseCase) Executar(tokenPuro string) (*ConfirmarCadast
 		return nil, ErrCadastroInvalido
 	}
 
-	c, err := materializarConta(uc.clients, pendente.Nome, pendente.Email, pendente.Telefone, pendente.SenhaHash)
+	c, err := materializarConta(uc.clients, uc.admins, pendente.Nome, pendente.Email, pendente.Telefone, pendente.SenhaHash)
 	if err != nil {
 		return nil, err
 	}
