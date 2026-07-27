@@ -97,6 +97,15 @@ jobs:
           go-version: '1.26'
           cache-dependency-path: backend/go.sum
 
+      # Mesmo motivo do job `backend`: main.go importa agendago/docs, gerado
+      # por swag e fora do versionamento. Sem gerar antes, o govulncheck não
+      # consegue carregar os pacotes e falha antes de analisar qualquer coisa.
+      - name: gera docs do swagger
+        working-directory: backend
+        run: |
+          go install github.com/swaggo/swag/cmd/swag@v1.16.6
+          swag init -g cmd/api/main.go -o docs
+
       - name: govulncheck (backend)
         working-directory: backend
         run: |
