@@ -282,6 +282,21 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Mesmo problema do job `backend`: o buildx sobe um container do BuildKit
+      # vindo do Docker Hub, e o pull anônimo falha quando o limite por IP do
+      # runner estoura. Baixar antes, com retentativa, faz o "Booting builder"
+      # encontrar a imagem no cache local em vez de ir à rede.
+      - name: baixa a imagem do BuildKit (com retentativa)
+        run: |
+          for tentativa in 1 2 3; do
+            if docker pull moby/buildkit:buildx-stable-1; then exit 0; fi
+            espera=$((tentativa * 15))
+            echo "::warning::pull falhou (tentativa $tentativa/3); nova tentativa em ${espera}s"
+            sleep $espera
+          done
+          echo "::error::não foi possível baixar a imagem do BuildKit do Docker Hub"
+          exit 1
+
       - uses: docker/setup-buildx-action@v3
 
       - name: login no GHCR
