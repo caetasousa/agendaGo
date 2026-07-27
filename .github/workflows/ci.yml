@@ -323,6 +323,19 @@ jobs:
         if: failure()
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml logs
 
+      # Sem isto, um E2E que falha só no CI deixa apenas texto: o trace do
+      # Playwright (DOM, rede e screenshot a cada passo) é o que evita ter que
+      # reproduzir o ambiente inteiro na mão para entender a quebra.
+      - name: guarda o relatório e os traces do Playwright (em falha)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 14
+
       - name: derruba a stack
         if: always()
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
