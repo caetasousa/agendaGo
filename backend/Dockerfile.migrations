@@ -2,6 +2,11 @@
 # host de produção não precise do repositório — sem ela, o job de migration
 # dependeria de um bind mount de ./backend/migrations, obrigando a ter o
 # código-fonte na VPS só para aplicar o schema.
-FROM flyway/flyway:10-alpine
+#
+# A linha 10 ficou presa no Alpine 3.20, que saiu de suporte: as correções de
+# gnutls e openssl existem, mas não são publicadas para uma versão EOL, então
+# a imagem carregava 5 CVEs CRITICAL sem conserto possível no lugar. A linha 13
+# está no Alpine 3.23 e é reconstruída com frequência — zero CRITICAL.
+FROM flyway/flyway:13-alpine
 
 COPY migrations /flyway/sql
