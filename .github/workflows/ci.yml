@@ -28,6 +28,31 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Pull anônimo no Docker Hub tem cota por IP (100/6h) e os runners do
+      # GitHub compartilham IP: quando estoura, qualquer `docker pull` falha
+      # por timeout e derruba o job. Autenticado, a cota passa a ser da conta.
+      #
+      # Sem os secrets configurados o passo é pulado e nada muda — o mesmo
+      # padrão do deploy, para o repositório seguir funcionando sem eles.
+      - name: Docker Hub configurado?
+        id: dockerhub
+        env:
+          USUARIO: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          if [ -n "$USUARIO" ]; then
+            echo "configurado=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configurado=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::DOCKERHUB_USERNAME não configurado — pulls seguem anônimos, sujeitos à cota por IP."
+          fi
+
+      - name: login no Docker Hub
+        if: steps.dockerhub.outputs.configurado == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - uses: actions/setup-go@v6
         with:
           go-version: '1.26'
@@ -115,6 +140,26 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Eleva a cota de pull do Docker Hub (ver job `backend`).
+      - name: Docker Hub configurado?
+        id: dockerhub
+        env:
+          USUARIO: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          if [ -n "$USUARIO" ]; then
+            echo "configurado=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configurado=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::DOCKERHUB_USERNAME não configurado — pulls seguem anônimos, sujeitos à cota por IP."
+          fi
+
+      - name: login no Docker Hub
+        if: steps.dockerhub.outputs.configurado == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - uses: actions/setup-go@v6
         with:
           go-version: '1.26'
@@ -192,6 +237,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+
+      # Eleva a cota de pull do Docker Hub (ver job `backend`).
+      - name: Docker Hub configurado?
+        id: dockerhub
+        env:
+          USUARIO: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          if [ -n "$USUARIO" ]; then
+            echo "configurado=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configurado=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::DOCKERHUB_USERNAME não configurado — pulls seguem anônimos, sujeitos à cota por IP."
+          fi
+
+      - name: login no Docker Hub
+        if: steps.dockerhub.outputs.configurado == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - uses: actions/setup-node@v5
         with:
@@ -281,6 +346,26 @@ jobs:
             dockerfile: ./backend/Dockerfile.migrations
     steps:
       - uses: actions/checkout@v5
+
+      # Eleva a cota de pull do Docker Hub (ver job `backend`).
+      - name: Docker Hub configurado?
+        id: dockerhub
+        env:
+          USUARIO: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          if [ -n "$USUARIO" ]; then
+            echo "configurado=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configurado=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::DOCKERHUB_USERNAME não configurado — pulls seguem anônimos, sujeitos à cota por IP."
+          fi
+
+      - name: login no Docker Hub
+        if: steps.dockerhub.outputs.configurado == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       # Mesmo problema do job `backend`: o buildx sobe um container do BuildKit
       # vindo do Docker Hub, e o pull anônimo falha quando o limite por IP do
