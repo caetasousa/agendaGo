@@ -30,12 +30,15 @@ async function cadastrarPrestadorComAgenda(
 	await page.click('button[type="submit"]');
 	await page.waitForURL('/painel');
 
+	// a marcação pelo prestador nasce desativada; habilita para poder marcar.
+	// A agenda só é ativada quando pedido (um dos testes marca com ela fechada).
+	await page.goto('/painel/preferencias');
+	await page.click('label[for="permite-marcacao-pelo-prestador"]');
 	if (ativarAgenda) {
-		await page.goto('/painel/preferencias');
 		await page.click('label[for="aceita-agendamentos"]');
-		await page.click('button[type="submit"]');
-		await expect(page.getByText('Salvo', { exact: true })).toBeVisible();
 	}
+	await page.click('button[type="submit"]');
+	await expect(page.getByText('Salvo', { exact: true })).toBeVisible();
 }
 
 async function marcarPrimeiroSlot(page: Page) {
