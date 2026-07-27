@@ -280,7 +280,7 @@ deduplicação e a data em que apareceu pela primeira vez — dá para responder
 
 ## 3️⃣ Casos reais deste projeto
 
-A teoria acima só assenta com exemplo. Estes três aconteceram aqui, e cada um
+A teoria acima só assenta com exemplo. Estes quatro aconteceram aqui, e cada um
 ensina uma coisa diferente sobre **como agir** quando o job fica vermelho.
 
 ### Caso 1 — `postcss`: a correção é atualizar
@@ -341,6 +341,53 @@ E o corolário incômodo: **esse job vai ficar vermelho um dia sem você ter
 mexido em nada** — basta sair uma CVE nova de stdlib. Isso não é o CI quebrado;
 é o CI funcionando.
 
+### Caso 4 — Flyway em base EOL: a correção existe, mas não chega até você
+
+Este apareceu na **primeira execução** depois que a imagem de migrations entrou
+na varredura — até então ela ia para produção sem ser olhada. Cinco CVEs
+**CRITICAL** de uma vez, e o aviso que explicava tudo:
+
+```
+WARN  This OS version is no longer supported by the distribution  family="alpine" version="3.20.3"
+WARN  The vulnerability detection may be insufficient because security updates are not provided
+```
+
+| CVE | Pacote | Correção |
+|---|---|---|
+| CVE-2026-33845, CVE-2026-42010 | `gnutls` | 3.8.13-r0 |
+| CVE-2026-31789 | `openssl`, `libcrypto3`, `libssl3` | 3.3.7-r0 |
+
+Repare no detalhe cruel: **a coluna "correção" está preenchida**. Os patches
+existem há tempo. Só que `flyway/flyway:10-alpine` está preso no Alpine 3.20,
+que saiu de suporte — e distribuição EOL não recebe backport de segurança. Um
+`apk upgrade` ali não traz nada, porque não há nada publicado para buscar.
+
+Foi o primeiro reflexo, e estava errado: subir para `11-alpine` (Alpine 3.22)
+**não resolveu** — as mesmas 5 CVEs continuaram, porque essa imagem foi
+construída em janeiro e as correções são posteriores. A imagem base estar numa
+linha suportada não significa que ela esteja atualizada.
+
+A saída foi `flyway/flyway:13-alpine` (Alpine 3.23, reconstruída com
+frequência), verificada nos dois caminhos que importam:
+
+| Verificação | Resultado |
+|---|---|
+| CRITICAL na imagem | 5 → **0** |
+| HIGH na imagem | 98 → **20** |
+| 13 migrations em banco novo | aplicam, `v13` |
+| Flyway 13 sobre schema history criado pela 10 | valida e reporta *up to date*, sem reexecutar |
+
+**A lição:** *"tem correção disponível?"* e *"a correção chega na minha
+imagem?"* são perguntas diferentes. Numa base EOL a resposta da segunda é
+sempre não, e nenhum `apk upgrade` muda isso — o conserto é **sair da linha
+EOL**. E, ao sair, confira a data de build da imagem nova: linha suportada e
+imagem atualizada também são coisas diferentes.
+
+> [!TIP]
+> Isto é o argumento prático do Dependabot para `package-ecosystem: docker`
+> (seção 5): ele acompanha a tag da base e avisa quando a linha avança, em vez
+> de a descoberta vir de uma varredura vermelha meses depois.
+
 ---
 
 ## 4️⃣ Ficou vermelho. E agora?
@@ -357,13 +404,15 @@ flowchart TD
 
     B -->|trivy| G{"o pacote é<br/>usado em runtime?"}
     G -->|não| H["remova da imagem<br/>(ver Caso 2)"]
-    G -->|sim| I["suba a imagem base<br/>FROM alpine:3.21 → 3.24"]
+    G -->|sim| J{"a base ainda<br/>recebe updates?"}
+    J -->|sim| I["suba a imagem base<br/>FROM alpine:3.21 → 3.24"]
+    J -->|não, é EOL| K["troque de linha da base<br/>(ver Caso 4)"]
 ```
 
 **Regra geral:** leia *onde* está a vulnerabilidade antes de tentar corrigi-la.
-Os três casos acima têm três consertos completamente diferentes — atualizar
-dependência, remover software inútil, atualizar o compilador — e o que decide
-qual é o caminho no relatório, não a severidade.
+Os quatro casos acima têm quatro consertos completamente diferentes — atualizar
+dependência, remover software inútil, atualizar o compilador, trocar a linha da
+imagem base — e o que decide qual é o caminho no relatório, não a severidade.
 
 ---
 

@@ -273,7 +273,7 @@ Num projeto pequeno em produção, a via mais provável de comprometimento não 
 Os jobs rodam a cada push e também num `schedule` semanal — sem isso, uma CVE publicada numa semana sem commit passaria despercebida até o próximo push.
 
 > [!TIP]
-> Este é o resumo. O documento **[entrega-continua.md](entrega-continua.md)** destrincha cada ferramenta, explica o que fazer quando o job fica vermelho e traz três casos reais deste projeto (uma correção por atualização, uma por remoção e uma no compilador).
+> Este é o resumo. O documento **[entrega-continua.md](entrega-continua.md)** destrincha cada ferramenta, explica o que fazer quando o job fica vermelho e traz quatro casos reais deste projeto (uma correção por atualização, uma por remoção, uma no compilador e uma por troca de imagem base EOL).
 
 **Para estudar:**
 - [Go — Vulnerability Management](https://go.dev/doc/security/vuln/) (como o banco de vulnerabilidades e a análise de chamadas funcionam)
@@ -338,8 +338,11 @@ Dois detalhes que a paginação obriga a acertar:
 
 Cada mudança de schema é um arquivo SQL versionado (`backend/migrations/V1__...sql`, `V2__...sql`) aplicado em ordem, uma única vez, e nunca editado depois de mergeado. É o princípio de **migrations imutáveis**, que garante que qualquer ambiente (dev, CI, produção) chegue ao mesmo schema pela mesma sequência de passos.
 
+A imagem é a `flyway/flyway:13-alpine`. A escolha da linha não é indiferente: a 10 ficou presa no Alpine 3.20, que saiu de suporte, e passou a carregar CVEs CRITICAL sem correção possível — não porque os patches não existam, mas porque distribuição EOL não os recebe. O episódio está em [entrega-continua.md](entrega-continua.md), Caso 4.
+
 **Para estudar:**
 - [Flyway — Como funciona](https://documentation.red-gate.com/fd/migrations-184127470.html)
+- [Alpine — releases e datas de fim de suporte](https://alpinelinux.org/releases/) (o calendário que decide se uma correção vai chegar até você)
 
 ### Docker Compose
 
