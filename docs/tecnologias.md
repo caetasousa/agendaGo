@@ -262,14 +262,18 @@ No Caddy ficam os cabeçalhos que não dependem do build: HSTS, `X-Content-Type-
 - [SvelteKit — Content Security Policy](https://svelte.dev/docs/kit/configuration#csp) (o modo `hash` e o que ele cobre)
 - [OWASP Secure Headers Project](https://owasp.org/www-project-secure-headers/) (o conjunto completo, com o que cada cabeçalho resolve)
 
-### Varredura de dependências: govulncheck, npm audit, Trivy e Dependabot
+### Varredura de dependências: govulncheck, npm audit e Trivy
 
-Num projeto pequeno em produção, a via mais provável de comprometimento não é uma falha escrita aqui — é uma CVE numa biblioteca que ninguém percebeu que envelheceu. O CI (`.github/workflows/ci.yml`, job `seguranca`) cobre as três camadas onde isso mora:
+Num projeto pequeno em produção, a via mais provável de comprometimento não é uma falha escrita aqui — é uma CVE numa biblioteca que ninguém percebeu que envelheceu. O CI (`.github/workflows/ci.yml`, job `seguranca`) cobre as três camadas onde isso mora, porque nenhuma ferramenta enxerga a camada da outra:
 
-- **[govulncheck](https://go.dev/blog/govulncheck)** — o diferencial dele é a análise de alcançabilidade: só acusa vulnerabilidade em código **realmente chamado** a partir do binário, em vez de listar tudo que existe na árvore de dependências. Por isso o que ele aponta trava o deploy. Cobre também a stdlib da versão de Go usada no build.
-- **`npm audit`** — roda duas vezes: `--omit=dev` (só o que vai para a imagem) travando o CI, e completo em modo relatório, porque uma CVE no Vite ou no Playwright não roda em produção e não pode barrar um deploy de correção.
-- **[Trivy](https://trivy.dev/)** — varre a imagem pronta: sistema base (alpine, node) e bibliotecas de sistema, que os dois anteriores não enxergam. `CRITICAL` trava a publicação; `HIGH` sai como relatório.
-- **[Dependabot](https://docs.github.com/en/code-security/dependabot)** (`.github/dependabot.yml`) — apontar não corrige: sem alguém abrindo o PR, a dependência envelhece até virar incidente. Semanal para gomod, npm, GitHub Actions e as imagens base dos Dockerfiles.
+- **[govulncheck](https://go.dev/blog/govulncheck)** — suas libs Go e a stdlib. O diferencial é a análise de alcançabilidade: só acusa vulnerabilidade em código **realmente chamado** a partir do binário, em vez de listar tudo que existe na árvore de dependências. Por isso o que ele aponta trava o deploy.
+- **`npm audit`** — dependências JS. Roda duas vezes: `--omit=dev` (só o que vai para a imagem) travando o CI, e completo em modo relatório, porque uma CVE no Vite ou no Playwright não roda em produção e não pode barrar um deploy de correção.
+- **[Trivy](https://trivy.dev/)** — a imagem pronta: sistema base (alpine, node) e bibliotecas de sistema, que os dois anteriores não enxergam. `CRITICAL` trava a publicação; `HIGH` sai como relatório.
+
+O job roda a cada push e também num `schedule` semanal — sem isso, uma CVE publicada numa semana sem commit passaria despercebida até o próximo push.
+
+> [!TIP]
+> Este é o resumo. O documento **[entrega-continua.md](entrega-continua.md)** destrincha cada ferramenta, explica o que fazer quando o job fica vermelho e traz três casos reais deste projeto (uma correção por atualização, uma por remoção e uma no compilador).
 
 **Para estudar:**
 - [Go — Vulnerability Management](https://go.dev/doc/security/vuln/) (como o banco de vulnerabilidades e a análise de chamadas funcionam)

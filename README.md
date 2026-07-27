@@ -205,6 +205,7 @@ Guia completo (build tags, Testcontainers, Playwright): **[docs/testes.md](docs/
 | 🧪 **[testes.md](docs/testes.md)** | como rodar cada camada de teste |
 | 📐 **[regra-de-negocio.md](docs/regra-de-negocio.md)** | modelo de negócio: disponibilidade, slots, ciclo de vida do agendamento |
 | 🚀 **[producao.md](docs/producao.md)** | deploy do zero ao ar: VPS, HTTPS, imagens no GHCR, CI → servidor |
+| 🔄 **[entrega-continua.md](docs/entrega-continua.md)** | o pipeline do commit até o ar e a varredura de vulnerabilidades, com casos reais |
 
 ---
 
@@ -216,5 +217,5 @@ Monorepo com **arquitetura hexagonal** no backend (`domain` → `usecase` → `a
 agendaGo/
 ├── 🔷 backend/    API em Go — cmd/, config/, internal/{domain,usecase,adapter}/, migrations/, test/
 ├── 🟠 frontend/   SvelteKit — src/{lib,routes}/, e2e/
-└── 📚 docs/       tecnologias · testes · regra-de-negocio · producao
+└── 📚 docs/       tecnologias · testes · regra-de-negocio · producao · entrega-continua
 ```
