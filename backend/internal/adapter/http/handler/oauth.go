@@ -64,6 +64,17 @@ func (h *OAuthHandler) GoogleStartProvider(w http.ResponseWriter, r *http.Reques
 	h.iniciar(w, r, ucauth.PublicoProvider)
 }
 
+// GoogleStartLogin godoc
+//
+//	@Summary		Entrar com Google (sem declarar o tipo de conta)
+//	@Description	Redireciona para a tela de consentimento do Google. Usado na tela de login: o tipo da conta é descoberto pelo vínculo social ou pelo email, não informado na URL. Não cria conta — quem não tem é mandado ao cadastro.
+//	@Tags			auth
+//	@Success		302
+//	@Router			/auth/google/start [get]
+func (h *OAuthHandler) GoogleStartLogin(w http.ResponseWriter, r *http.Request) {
+	h.iniciar(w, r, ucauth.PublicoLogin)
+}
+
 func (h *OAuthHandler) iniciar(w http.ResponseWriter, r *http.Request, publico ucauth.PublicoLoginSocial) {
 	urlAutorizacao, stateTexto, nonce, err := h.loginSocial.Iniciar(publico)
 	if err != nil {
@@ -115,6 +126,10 @@ func (h *OAuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		// na tabela do tipo pedido. Mesma mensagem de ErrEmailJaCadastradoOutroTipo.
 		case errors.Is(err, ucauth.ErrEmailJaCadastradoOutroTipo), errors.Is(err, ucauth.ErrCredenciaisInvalidas):
 			h.redirecionarErro(w, r, "social_outro_tipo")
+		// Entrou pelo "Entrar com Google" sem ter conta: não é erro, é fluxo
+		// normal de quem ainda vai se cadastrar. O frontend leva ao cadastro.
+		case errors.Is(err, ucauth.ErrContaNaoEncontrada):
+			h.redirecionarErro(w, r, "social_sem_conta")
 		case errors.Is(err, ucauth.ErrStateInvalido), errors.Is(err, ucauth.ErrEmailNaoVerificado), errors.Is(err, ucauth.ErrUsuarioInativo):
 			h.redirecionarErro(w, r, "social")
 		default:

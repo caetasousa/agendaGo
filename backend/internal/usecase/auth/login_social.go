@@ -31,6 +31,13 @@ var ErrEmailNaoVerificado = errors.New("email não verificado pelo provedor")
 // do cadastro por senha.
 var ErrEmailJaCadastradoOutroTipo = errors.New("email já cadastrado como outro tipo de conta")
 
+// ErrContaNaoEncontrada é retornado quando alguém entra pelo login social sem
+// ter conta. Só acontece no fluxo de PublicoLogin: ali não há tipo declarado,
+// e criar a conta exigiria adivinhar se a pessoa é cliente ou prestador — uma
+// escolha que muda o que ela pode fazer no sistema e que não cabe ao backend
+// chutar. O frontend manda para o cadastro, onde o tipo é escolhido.
+var ErrContaNaoEncontrada = errors.New("não há conta para este email")
+
 // TTLOAuthState é a validade do state emitido antes do redirect ao provedor.
 const TTLOAuthState = 10 * time.Minute
 
@@ -74,8 +81,7 @@ type criadorProvider interface {
 	Salvar(p *provider.Provider) error
 }
 
-// PublicoLoginSocial identifica se a identidade social loga como prestador
-// ou cliente — o backend separa as duas contas por rota e sessão.
+// PublicoLoginSocial identifica com que intenção o fluxo social começou.
 type PublicoLoginSocial string
 
 const (
@@ -83,6 +89,11 @@ const (
 	PublicoClient PublicoLoginSocial = "client"
 	// PublicoProvider indica que o login social se aplica a um prestador.
 	PublicoProvider PublicoLoginSocial = "provider"
+	// PublicoLogin é a entrada de quem já tem conta e não declara o tipo: o
+	// sistema descobre sozinho, pelo vínculo social ou pelo email. Usado na
+	// tela de login, onde perguntar "cliente ou prestador?" é redundante —
+	// a conta já existe e só pode ser de um dos dois.
+	PublicoLogin PublicoLoginSocial = "login"
 )
 
 // LoginSocialUseCase autentica um cliente ou prestador via provedor OIDC
@@ -176,7 +187,7 @@ func (uc *LoginSocialUseCase) Concluir(ctx context.Context, code, stateRecebido,
 	}
 
 	publico := PublicoLoginSocial(guardado.Publico)
-	if publico != PublicoClient && publico != PublicoProvider {
+	if publico != PublicoClient && publico != PublicoProvider && publico != PublicoLogin {
 		return nil, ErrStateInvalido
 	}
 
@@ -185,23 +196,58 @@ func (uc *LoginSocialUseCase) Concluir(ctx context.Context, code, stateRecebido,
 		return nil, err
 	}
 
-	userType := session.TipoClient
-	if publico == PublicoProvider {
-		userType = session.TipoProvider
-	}
-
+	// Identidade já vinculada: o tipo vem do vínculo, não do que a URL pediu.
+	// É o registro no banco que sabe se aquela conta Google é de cliente ou de
+	// prestador — confiar no parâmetro faria "Sou prestador" tentar abrir uma
+	// sessão de prestador para um usuário que é cliente.
 	vinculo, err := uc.identidades.BuscarPorProvedorSub(socialidentity.Google, identidadeOIDC.Sub)
 	if err != nil {
 		return nil, err
 	}
 	if vinculo != nil {
-		return uc.criarSessaoParaUsuarioExistente(vinculo.UserID, userType)
+		return uc.criarSessaoParaUsuarioExistente(vinculo.UserID, session.TipoUsuario(vinculo.UserType))
+	}
+
+	// Sem vínculo e sem tipo declarado: procura a conta pelo email. Só entra
+	// quem já existe — criar exigiria adivinhar o tipo (ver ErrContaNaoEncontrada).
+	if publico == PublicoLogin {
+		return uc.resolverPorEmail(identidadeOIDC)
 	}
 
 	if publico == PublicoProvider {
 		return uc.resolverProvider(identidadeOIDC)
 	}
 	return uc.resolverClient(identidadeOIDC)
+}
+
+// resolverPorEmail descobre o tipo da conta a partir do email verificado pelo
+// provedor. Reusa resolverProvider/resolverClient, que já vinculam a
+// identidade social e tratam o convidado (cliente sem senha) virando conta.
+func (uc *LoginSocialUseCase) resolverPorEmail(id *socialidentity.IdentidadeOIDC) (*LoginOutput, error) {
+	// Antes de consultar qualquer tabela: um email não verificado poderia
+	// apontar para o endereço de outra pessoa, e aqui ele é a única prova de
+	// identidade que temos.
+	if !id.EmailVerificado {
+		return nil, ErrEmailNaoVerificado
+	}
+
+	prestador, err := uc.providers.BuscarPorEmail(id.Email)
+	if err != nil {
+		return nil, err
+	}
+	if prestador != nil {
+		return uc.resolverProvider(id)
+	}
+
+	cliente, err := uc.clients.BuscarPorEmail(id.Email)
+	if err != nil {
+		return nil, err
+	}
+	if cliente != nil {
+		return uc.resolverClient(id)
+	}
+
+	return nil, ErrContaNaoEncontrada
 }
 
 // resolverClient resolve o usuário cliente para o email do provedor social.

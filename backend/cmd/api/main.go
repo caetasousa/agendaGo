@@ -229,6 +229,10 @@ func main() {
 		// login social (Google): rotas só registradas com credenciais
 		// configuradas, para não expor um fluxo que vai falhar sempre
 		if config.OAuthGoogleAtivo() {
+			// entrada da tela de login: sem tipo, porque a conta já existe e
+			// o sistema descobre sozinho se é cliente ou prestador
+			r.Get("/auth/google/start", oauthHandler.GoogleStartLogin)
+			// entradas do cadastro, onde o tipo é escolhido antes
 			r.Get("/auth/client/google/start", oauthHandler.GoogleStartClient)
 			r.Get("/auth/provider/google/start", oauthHandler.GoogleStartProvider)
 			r.Get("/auth/google/callback", oauthHandler.GoogleCallback)

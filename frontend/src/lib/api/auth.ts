@@ -81,6 +81,16 @@ export function urlLoginGoogle(tipo: TipoContaSocial, voltar?: string): string {
 	return `${BASE_URL}/auth/${tipo}/google/start${query}`;
 }
 
+// urlEntrarComGoogle é a entrada da tela de login: não declara o tipo da
+// conta. Quem já tem conta só pode ser cliente ou prestador, e o backend
+// descobre qual pelo vínculo social ou pelo email — perguntar seria pedir ao
+// usuário uma informação que o sistema já tem. Quem ainda não tem conta volta
+// com ?erro=social_sem_conta, porque criar exigiria escolher o tipo.
+export function urlEntrarComGoogle(voltar?: string): string {
+	const query = voltar ? `?voltar=${encodeURIComponent(voltar)}` : '';
+	return `${BASE_URL}/auth/google/start${query}`;
+}
+
 export function me(): Promise<MeResponse> {
 	return apiGet<MeResponse>('/auth/me');
 }

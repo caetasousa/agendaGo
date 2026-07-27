@@ -348,3 +348,107 @@ func TestLoginSocialProvider(t *testing.T) {
 		}
 	})
 }
+
+// TestLoginSocialUnificado cobre a entrada da tela de login, que não declara o
+// tipo da conta: o sistema descobre sozinho, pelo vínculo social ou pelo email.
+func TestLoginSocialUnificado(t *testing.T) {
+	t.Run("cliente existente entra sem declarar o tipo", func(t *testing.T) {
+		fake := &oidcFake{identidade: &socialidentity.IdentidadeOIDC{
+			Sub: "sub-uni-1", Email: "cliente@email.com", EmailVerificado: true, Nome: "Cliente Uni",
+		}}
+		amb := novoAmbienteLoginSocial(fake)
+		hasher := security.NovoHasherArgon2id()
+		senhaHash, _ := hasher.Gerar("12345678")
+		c, _ := client.NovoComConta("c-uni", "Cliente Uni", "cliente@email.com", senhaHash)
+		amb.clients.Salvar(c)
+
+		state, nonce := iniciarEObterState(t, amb.uc, ucauth.PublicoLogin)
+		out, err := amb.uc.Concluir(context.Background(), "code", state, state, nonce)
+		if err != nil {
+			t.Fatalf("esperava sucesso, got: %v", err)
+		}
+		if out.UserID != "c-uni" {
+			t.Errorf("esperava logar no cliente existente (c-uni), got: %s", out.UserID)
+		}
+	})
+
+	t.Run("prestador existente entra sem declarar o tipo", func(t *testing.T) {
+		fake := &oidcFake{identidade: &socialidentity.IdentidadeOIDC{
+			Sub: "sub-uni-2", Email: "prestador@email.com", EmailVerificado: true, Nome: "Prestador Uni",
+		}}
+		amb := novoAmbienteLoginSocial(fake)
+		p, _ := provider.Novo("p-uni", "Prestador Uni", "prestador@email.com", "11999998888", "hash")
+		amb.providers.Salvar(p)
+
+		state, nonce := iniciarEObterState(t, amb.uc, ucauth.PublicoLogin)
+		out, err := amb.uc.Concluir(context.Background(), "code", state, state, nonce)
+		if err != nil {
+			t.Fatalf("esperava sucesso, got: %v", err)
+		}
+		if out.UserID != "p-uni" {
+			t.Errorf("esperava logar no prestador existente (p-uni), got: %s", out.UserID)
+		}
+	})
+
+	// O ponto central da mudança: sem conta, o sistema NÃO inventa uma. Criar
+	// exigiria adivinhar se a pessoa é cliente ou prestador — escolha que muda
+	// o que ela pode fazer e que só o cadastro deve fazer.
+	t.Run("email sem conta não cria nada e devolve ErrContaNaoEncontrada", func(t *testing.T) {
+		fake := &oidcFake{identidade: &socialidentity.IdentidadeOIDC{
+			Sub: "sub-uni-3", Email: "ninguem@email.com", EmailVerificado: true, Nome: "Ninguém",
+		}}
+		amb := novoAmbienteLoginSocial(fake)
+
+		state, nonce := iniciarEObterState(t, amb.uc, ucauth.PublicoLogin)
+		if _, err := amb.uc.Concluir(context.Background(), "code", state, state, nonce); err != ucauth.ErrContaNaoEncontrada {
+			t.Fatalf("esperava ErrContaNaoEncontrada, got: %v", err)
+		}
+		if c, _ := amb.clients.BuscarPorEmail("ninguem@email.com"); c != nil {
+			t.Error("não deveria ter criado cliente")
+		}
+		if p, _ := amb.providers.BuscarPorEmail("ninguem@email.com"); p != nil {
+			t.Error("não deveria ter criado prestador")
+		}
+	})
+
+	t.Run("email não verificado é recusado antes de qualquer consulta", func(t *testing.T) {
+		fake := &oidcFake{identidade: &socialidentity.IdentidadeOIDC{
+			Sub: "sub-uni-4", Email: "naoverificado@email.com", EmailVerificado: false, Nome: "Sem Verificar",
+		}}
+		amb := novoAmbienteLoginSocial(fake)
+
+		state, nonce := iniciarEObterState(t, amb.uc, ucauth.PublicoLogin)
+		if _, err := amb.uc.Concluir(context.Background(), "code", state, state, nonce); err != ucauth.ErrEmailNaoVerificado {
+			t.Errorf("esperava ErrEmailNaoVerificado, got: %v", err)
+		}
+	})
+
+	// Regressão: o tipo da sessão tem de vir do vínculo gravado, não do que a
+	// URL pediu. Vinculado como cliente, entrar pela rota de prestador não
+	// pode abrir uma sessão de prestador.
+	t.Run("tipo vem do vínculo, não da rota usada", func(t *testing.T) {
+		fake := &oidcFake{identidade: &socialidentity.IdentidadeOIDC{
+			Sub: "sub-uni-5", Email: "vinculo@email.com", EmailVerificado: true, Nome: "Vinculo",
+		}}
+		amb := novoAmbienteLoginSocial(fake)
+
+		state1, nonce1 := iniciarEObterState(t, amb.uc, ucauth.PublicoClient)
+		primeiro, err := amb.uc.Concluir(context.Background(), "code-1", state1, state1, nonce1)
+		if err != nil {
+			t.Fatalf("primeiro login: %v", err)
+		}
+
+		// agora entra pela rota de prestador com a MESMA conta Google
+		state2, nonce2 := iniciarEObterState(t, amb.uc, ucauth.PublicoProvider)
+		segundo, err := amb.uc.Concluir(context.Background(), "code-2", state2, state2, nonce2)
+		if err != nil {
+			t.Fatalf("esperava entrar como o mesmo cliente, got: %v", err)
+		}
+		if segundo.UserID != primeiro.UserID {
+			t.Errorf("esperava o mesmo usuário do vínculo, got: %s e %s", primeiro.UserID, segundo.UserID)
+		}
+		if p, _ := amb.providers.BuscarPorEmail("vinculo@email.com"); p != nil {
+			t.Error("não deveria existir prestador: o vínculo é de cliente")
+		}
+	})
+}

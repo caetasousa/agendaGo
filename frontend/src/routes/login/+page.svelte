@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { ApiError } from '$lib/api/client';
-	import { login, me, urlLoginGoogle } from '$lib/api/auth';
+	import { login, me, urlEntrarComGoogle } from '$lib/api/auth';
 	import { sessao } from '$lib/stores/session.svelte';
 	import GoogleIcon from '$lib/components/GoogleIcon.svelte';
 	import AuthLayout from '$lib/components/AuthLayout.svelte';
@@ -23,14 +23,18 @@
 	let enviando = $state(false);
 	// ?erro=social vem do backend quando o callback do Google falha (state
 	// inválido, email não verificado, conta banida) — mensagem genérica de
-	// propósito, para não vazar qual dessas condições ocorreu. ?erro=social_outro_tipo
-	// é o único caso com mensagem específica: o email já é conta do outro tipo
-	// (prestador tentando entrar como cliente, ou vice-versa), então orientar
-	// a pessoa a usar o botão certo é uma informação legítima de UX (o mesmo
-	// que o cadastro por senha já expõe).
+	// propósito, para não vazar qual dessas condições ocorreu.
+	//
+	// ?erro=social_sem_conta não é falha: é quem clicou em "Entrar com Google"
+	// sem ter conta. O backend não cria porque teria de adivinhar se a pessoa
+	// é cliente ou prestador, então a tela manda para o cadastro, onde essa
+	// escolha existe.
 	function mensagemErroSocial(codigo: string | null): string | null {
+		if (codigo === 'social_sem_conta') {
+			return 'Não encontramos conta com esse email do Google. Crie sua conta para começar.';
+		}
 		if (codigo === 'social_outro_tipo') {
-			return 'Esse email já tem conta como outro tipo de usuário (cliente/prestador). Entre pela opção correta.';
+			return 'Esse email já tem conta como outro tipo de usuário (cliente/prestador).';
 		}
 		if (codigo === 'social') {
 			return 'Não foi possível entrar com o Google.';
@@ -121,22 +125,15 @@
 		<div class="h-px flex-1 bg-hairline-strong"></div>
 	</div>
 
-	<!-- O Google exige saber o tipo de conta antes de iniciar o fluxo: o backend
-	     usa caminhos distintos para cliente e prestador. -->
-	<div class="mt-4 grid gap-3 sm:grid-cols-2">
+	<!-- Um botão só: quem entra já tem conta, e o backend descobre pelo vínculo
+	     social ou pelo email se ela é de cliente ou de prestador. -->
+	<div class="mt-4">
 		<a
-			href={urlLoginGoogle('client', voltar)}
+			href={urlEntrarComGoogle(voltar)}
 			class="flex h-11 items-center justify-center gap-2 rounded-lg border border-hairline-strong px-4 text-sm font-medium text-ink transition hover:border-ink"
 		>
 			<GoogleIcon />
-			Sou cliente
-		</a>
-		<a
-			href={urlLoginGoogle('provider', voltar)}
-			class="flex h-11 items-center justify-center gap-2 rounded-lg border border-hairline-strong px-4 text-sm font-medium text-ink transition hover:border-ink"
-		>
-			<GoogleIcon />
-			Sou prestador
+			Entrar com Google
 		</a>
 	</div>
 
