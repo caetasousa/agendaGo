@@ -30,10 +30,11 @@ func identidadeAusente(r *http.Request) (ucauth.Identidade, bool) {
 func novoHandler() *handler.ProviderHandler {
 	repo := memoria.NovoProviderMemoria()
 	clients := memoria.NovoClientMemoria()
+	admins := memoria.NovoAdminMemoria()
 	pendentes := memoria.NovoSignupMemoria()
 	notificador := email.NovoNotificador(email.NovaMailerMemoria(), "http://localhost:5173", time.UTC, email.ExecutorSincrono)
-	solicitar := ucprovider.NovoSolicitarCadastroUseCase(repo, clients, pendentes, notificador, security.NovoHasherArgon2id())
-	confirmar := ucprovider.NovoConfirmarCadastroUseCase(repo, clients, pendentes)
+	solicitar := ucprovider.NovoSolicitarCadastroUseCase(repo, clients, admins, pendentes, notificador, security.NovoHasherArgon2id())
+	confirmar := ucprovider.NovoConfirmarCadastroUseCase(repo, clients, admins, pendentes)
 	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
 	listar := ucprovider.NovoListarUseCase(repo)
 	buscarResumo := ucprovider.NovoBuscarResumoUseCase(repo)

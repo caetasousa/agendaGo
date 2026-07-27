@@ -20,23 +20,46 @@ type ambienteCadastroProvider struct {
 	confirmar *ucprovider.ConfirmarCadastroUseCase
 	providers *memoria.ProviderMemoria
 	clients   *memoria.ClientMemoria
+	admins    *memoria.AdminMemoria
 	mailer    *email.MailerMemoria
 }
 
 func novoAmbienteCadastroProvider() *ambienteCadastroProvider {
 	providers := memoria.NovoProviderMemoria()
 	clients := memoria.NovoClientMemoria()
+	admins := memoria.NovoAdminMemoria()
 	pendentes := memoria.NovoSignupMemoria()
 	mailer := email.NovaMailerMemoria()
 	notificador := email.NovoNotificador(mailer, "http://localhost:5173", time.UTC, email.ExecutorSincrono)
 	hasher := security.NovoHasherArgon2id()
 
 	return &ambienteCadastroProvider{
-		solicitar: ucprovider.NovoSolicitarCadastroUseCase(providers, clients, pendentes, notificador, hasher),
-		confirmar: ucprovider.NovoConfirmarCadastroUseCase(providers, clients, pendentes),
+		solicitar: ucprovider.NovoSolicitarCadastroUseCase(providers, clients, admins, pendentes, notificador, hasher),
+		confirmar: ucprovider.NovoConfirmarCadastroUseCase(providers, clients, admins, pendentes),
 		providers: providers,
 		clients:   clients,
+		admins:    admins,
 		mailer:    mailer,
+	}
+}
+
+func TestSolicitarCadastroProviderComEmailDoAdminNaoCriaConta(t *testing.T) {
+	amb := novoAmbienteCadastroProvider()
+	const emailAdmin = "admin@agendago.com"
+	seedAdmin(t, amb.admins, emailAdmin)
+
+	err := amb.solicitar.Executar(ucprovider.SolicitarCadastroInput{
+		Nome: "Intruso", Email: emailAdmin, Telefone: "11999998888", Senha: "12345678",
+	})
+	if err != nil {
+		t.Fatalf("esperava nil (resposta uniforme), got: %v", err)
+	}
+
+	if enviados := len(amb.mailer.Enviadas()); enviados != 0 {
+		t.Errorf("não deveria enviar email para o email do admin, enviados: %d", enviados)
+	}
+	if p, _ := amb.providers.BuscarPorEmail(emailAdmin); p != nil {
+		t.Error("não deveria existir prestador com o email do admin")
 	}
 }
 
@@ -182,12 +205,13 @@ func TestConfirmarCadastroProvider(t *testing.T) {
 		pendentes := memoria.NovoSignupMemoria()
 		providers := memoria.NovoProviderMemoria()
 		clients := memoria.NovoClientMemoria()
+		admins := memoria.NovoAdminMemoria()
 		mailer := email.NovaMailerMemoria()
 		notificador := email.NovoNotificador(mailer, "http://localhost:5173", time.UTC, email.ExecutorSincrono)
 		hasher := security.NovoHasherArgon2id()
 
-		solicitarCliente := ucclient.NovoSolicitarCadastroUseCase(clients, providers, pendentes, notificador, hasher)
-		confirmarProvider := ucprovider.NovoConfirmarCadastroUseCase(providers, clients, pendentes)
+		solicitarCliente := ucclient.NovoSolicitarCadastroUseCase(clients, providers, admins, pendentes, notificador, hasher)
+		confirmarProvider := ucprovider.NovoConfirmarCadastroUseCase(providers, clients, admins, pendentes)
 
 		solicitarCliente.Executar(ucclient.SolicitarCadastroInput{
 			Nome: "Maria", Email: "maria@email.com", Telefone: "11999998888", Senha: "12345678",

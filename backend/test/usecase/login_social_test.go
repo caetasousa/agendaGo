@@ -36,6 +36,7 @@ type ambienteLoginSocial struct {
 	uc          *ucauth.LoginSocialUseCase
 	clients     *memoria.ClientMemoria
 	providers   *memoria.ProviderMemoria
+	admins      *memoria.AdminMemoria
 	identidades *memoria.SocialIdentityMemoria
 }
 
@@ -43,11 +44,12 @@ func novoAmbienteLoginSocial(fake *oidcFake) *ambienteLoginSocial {
 	hasher := security.NovoHasherArgon2id()
 	clients := memoria.NovoClientMemoria()
 	providers := memoria.NovoProviderMemoria()
+	admins := memoria.NovoAdminMemoria()
 	identidades := memoria.NovoSocialIdentityMemoria()
 	states := memoria.NovoOAuthStateMemoria()
 	sessoes := memoria.NovoSessionMemoria()
-	uc := ucauth.NovoLoginSocialUseCase(fake, clients, providers, clients, providers, identidades, states, sessoes, hasher)
-	return &ambienteLoginSocial{uc: uc, clients: clients, providers: providers, identidades: identidades}
+	uc := ucauth.NovoLoginSocialUseCase(fake, clients, providers, admins, clients, providers, identidades, states, sessoes, hasher)
+	return &ambienteLoginSocial{uc: uc, clients: clients, providers: providers, admins: admins, identidades: identidades}
 }
 
 func iniciarEObterState(t *testing.T, uc *ucauth.LoginSocialUseCase, publico ucauth.PublicoLoginSocial) (string, string) {
@@ -57,6 +59,37 @@ func iniciarEObterState(t *testing.T, uc *ucauth.LoginSocialUseCase, publico uca
 		t.Fatalf("Iniciar: esperava sucesso, got: %v", err)
 	}
 	return stateTexto, nonce
+}
+
+func TestLoginSocialComEmailDoAdminEhRejeitado(t *testing.T) {
+	// o mesmo email do admin, chegando por qualquer intenção (client, provider
+	// ou "entrar"), não pode criar nem vincular conta — o admin é reservado.
+	for _, publico := range []ucauth.PublicoLoginSocial{ucauth.PublicoClient, ucauth.PublicoProvider, ucauth.PublicoLogin} {
+		t.Run(string(publico), func(t *testing.T) {
+			const emailAdmin = "admin@agendago.com"
+			fake := &oidcFake{identidade: &socialidentity.IdentidadeOIDC{
+				Sub: "google-sub-admin", Email: emailAdmin, EmailVerificado: true, Nome: "Dono",
+			}}
+			amb := novoAmbienteLoginSocial(fake)
+			seedAdmin(t, amb.admins, emailAdmin)
+
+			state, nonce := iniciarEObterState(t, amb.uc, publico)
+			_, err := amb.uc.Concluir(context.Background(), "code-qualquer", state, state, nonce)
+			if err != ucauth.ErrEmailReservadoAdmin {
+				t.Fatalf("esperava ErrEmailReservadoAdmin, got: %v", err)
+			}
+
+			if c, _ := amb.clients.BuscarPorEmail(emailAdmin); c != nil {
+				t.Error("não deveria criar cliente com o email do admin")
+			}
+			if p, _ := amb.providers.BuscarPorEmail(emailAdmin); p != nil {
+				t.Error("não deveria criar prestador com o email do admin")
+			}
+			if v, _ := amb.identidades.BuscarPorProvedorSub(socialidentity.Google, "google-sub-admin"); v != nil {
+				t.Error("não deveria vincular identidade social ao email do admin")
+			}
+		})
+	}
 }
 
 func TestLoginSocialClient(t *testing.T) {

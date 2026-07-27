@@ -7,6 +7,7 @@ import (
 
 	"agendago/internal/adapter/email"
 	"agendago/internal/adapter/security"
+	"agendago/internal/domain/admin"
 	"agendago/internal/domain/client"
 	"agendago/internal/domain/provider"
 	ucclient "agendago/internal/usecase/client"
@@ -20,23 +21,61 @@ type ambienteCadastro struct {
 	confirmar *ucclient.ConfirmarCadastroUseCase
 	clients   *memoria.ClientMemoria
 	providers *memoria.ProviderMemoria
+	admins    *memoria.AdminMemoria
 	mailer    *email.MailerMemoria
 }
 
 func novoAmbienteCadastro() *ambienteCadastro {
 	clients := memoria.NovoClientMemoria()
 	providers := memoria.NovoProviderMemoria()
+	admins := memoria.NovoAdminMemoria()
 	pendentes := memoria.NovoSignupMemoria()
 	mailer := email.NovaMailerMemoria()
 	notificador := email.NovoNotificador(mailer, "http://localhost:5173", time.UTC, email.ExecutorSincrono)
 	hasher := security.NovoHasherArgon2id()
 
 	return &ambienteCadastro{
-		solicitar: ucclient.NovoSolicitarCadastroUseCase(clients, providers, pendentes, notificador, hasher),
-		confirmar: ucclient.NovoConfirmarCadastroUseCase(clients, providers, pendentes),
+		solicitar: ucclient.NovoSolicitarCadastroUseCase(clients, providers, admins, pendentes, notificador, hasher),
+		confirmar: ucclient.NovoConfirmarCadastroUseCase(clients, providers, admins, pendentes),
 		clients:   clients,
 		providers: providers,
+		admins:    admins,
 		mailer:    mailer,
+	}
+}
+
+// seedAdmin semeia um admin com o email dado no repositório em memória.
+// Compartilhado pelos testes do pacote usecase_test que exercitam a reserva do
+// email do admin nos fluxos de cadastro e login social.
+func seedAdmin(t *testing.T, admins *memoria.AdminMemoria, email string) {
+	t.Helper()
+	a, err := admin.Novo("admin-id", email, "hash-qualquer")
+	if err != nil {
+		t.Fatalf("admin.Novo: %v", err)
+	}
+	if err := admins.Salvar(a); err != nil {
+		t.Fatalf("Salvar admin: %v", err)
+	}
+}
+
+func TestSolicitarCadastroClienteComEmailDoAdminNaoCriaConta(t *testing.T) {
+	amb := novoAmbienteCadastro()
+	const emailAdmin = "admin@agendago.com"
+	seedAdmin(t, amb.admins, emailAdmin)
+
+	err := amb.solicitar.Executar(ucclient.SolicitarCadastroInput{
+		Nome: "Intruso", Email: emailAdmin, Telefone: "11999998888", Senha: "12345678",
+	})
+	if err != nil {
+		t.Fatalf("esperava nil (resposta uniforme), got: %v", err)
+	}
+
+	// não pode ter mandado email nem criado pendente: o email do admin é reservado
+	if enviados := len(amb.mailer.Enviadas()); enviados != 0 {
+		t.Errorf("não deveria enviar email para o email do admin, enviados: %d", enviados)
+	}
+	if c, _ := amb.clients.BuscarPorEmail(emailAdmin); c != nil {
+		t.Error("não deveria existir cliente com o email do admin")
 	}
 }
 

@@ -68,7 +68,7 @@ func novoAmbienteAgendamento(t *testing.T) *ambienteAgendamento {
 	cancelarPorToken := ucappointment.NovoCancelarPorTokenUseCase(appointments, cancelamentos, providerRepo, clientRepo, notificador, 24*time.Hour, time.UTC)
 	hasher := security.NovoHasherArgon2id()
 	consultarPreCadastro := ucclient.NovoConsultarPreCadastroUseCase(preCadastros)
-	concluirPreCadastro := ucclient.NovoConcluirPreCadastroUseCase(clientRepo, providerRepo, preCadastros, hasher)
+	concluirPreCadastro := ucclient.NovoConcluirPreCadastroUseCase(clientRepo, providerRepo, memoria.NovoAdminMemoria(), preCadastros, hasher)
 	listar := ucappointment.NovoListarUseCase(appointments, providerRepo, clientRepo)
 	lembrar := ucappointment.NovoLembrarUseCase(appointments, providerRepo, clientRepo, notificador, time.UTC, 24*time.Hour)
 
