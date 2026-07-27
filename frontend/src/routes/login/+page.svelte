@@ -36,9 +36,6 @@
 		if (codigo === 'social_outro_tipo') {
 			return 'Esse email já tem conta como outro tipo de usuário (cliente/prestador).';
 		}
-		if (codigo === 'social_admin') {
-			return 'Esse email é do administrador. Entre pela página de login de administrador.';
-		}
 		if (codigo === 'social') {
 			return 'Não foi possível entrar com o Google.';
 		}

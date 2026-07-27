@@ -126,16 +126,15 @@ func (h *OAuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		// na tabela do tipo pedido. Mesma mensagem de ErrEmailJaCadastradoOutroTipo.
 		case errors.Is(err, ucauth.ErrEmailJaCadastradoOutroTipo), errors.Is(err, ucauth.ErrCredenciaisInvalidas):
 			h.redirecionarErro(w, r, "social_outro_tipo")
-		// Email do admin: reservado. Não cria conta social — o admin entra pela
-		// rota de login de administrador. Mensagem própria para não empurrar o
-		// admin ao cadastro (como faria social_sem_conta).
-		case errors.Is(err, ucauth.ErrEmailReservadoAdmin):
-			h.redirecionarErro(w, r, "social_admin")
 		// Entrou pelo "Entrar com Google" sem ter conta: não é erro, é fluxo
 		// normal de quem ainda vai se cadastrar. O frontend leva ao cadastro.
 		case errors.Is(err, ucauth.ErrContaNaoEncontrada):
 			h.redirecionarErro(w, r, "social_sem_conta")
-		case errors.Is(err, ucauth.ErrStateInvalido), errors.Is(err, ucauth.ErrEmailNaoVerificado), errors.Is(err, ucauth.ErrUsuarioInativo):
+		// ErrEmailReservadoAdmin cai no bucket genérico "social" de propósito:
+		// uma mensagem específica revelaria que aquele email é o do
+		// administrador (enumeração). Fica indistinguível de state inválido,
+		// email não verificado e conta banida.
+		case errors.Is(err, ucauth.ErrStateInvalido), errors.Is(err, ucauth.ErrEmailNaoVerificado), errors.Is(err, ucauth.ErrUsuarioInativo), errors.Is(err, ucauth.ErrEmailReservadoAdmin):
 			h.redirecionarErro(w, r, "social")
 		default:
 			responderErroInterno(w, r, err)
