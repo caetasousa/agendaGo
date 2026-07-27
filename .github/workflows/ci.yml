@@ -506,6 +506,11 @@ jobs:
 
       # Fixa a tag no SHA deste commit: o servidor sobe exatamente o artefato
       # que passou nos testes, não um `latest` que pode ter mudado no meio.
+      #
+      # `--quiet` no pull porque o progresso por camada, sem terminal para
+      # reescrever a linha, vira MILHARES de linhas de "Downloading 10.49MB" no
+      # log — e o erro, quando existe, se perde no meio delas. O teto de tempo
+      # do job é que protege contra um pull travado, não a barra de progresso.
       - name: puxa as imagens e sobe a stack
         if: steps.cfg.outputs.configurado == 'true'
         env:
@@ -515,7 +520,7 @@ jobs:
         run: |
           ssh -4 -o ConnectTimeout=15 -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" \
             "cd ~/agendago \
-             && IMAGE_TAG=${{ github.sha }} docker compose -f docker-compose.prod.yml pull \
+             && IMAGE_TAG=${{ github.sha }} docker compose -f docker-compose.prod.yml pull --quiet \
              && IMAGE_TAG=${{ github.sha }} docker compose -f docker-compose.prod.yml up -d \
              && docker image prune -f"
 
