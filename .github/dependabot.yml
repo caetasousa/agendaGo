@@ -1,0 +1,82 @@
+# Atualização automática de dependências.
+#
+# Já esteve configurado aqui e foi removido: na primeira execução abriu 12 PRs
+# de uma vez, e neste projeto se commita direto na main. Volta agora com o
+# volume tratado como o problema que era — ver a justificativa completa em
+# docs/entrega-continua.md.
+#
+# O que mudou em relação à configuração que foi removida:
+#   - `monthly` em vez de `weekly` (era o que gerava ~4 PRs por semana);
+#   - `groups` juntando patch/minor num PR por ecossistema, em vez de um por
+#     dependência — major continua separado, que é o que costuma quebrar;
+#   - `open-pull-requests-limit` baixo, como teto rígido.
+#
+# Os alertas de SEGURANÇA não passam por aqui: eles são configurados em
+# Settings → Code security e chegam assim que a CVE é publicada, sem esperar o
+# ciclo mensal. É esse canal que fecha o ciclo com a varredura do CI — o resto
+# é higiene de versão.
+#
+# `prefix: chore` para os PRs nascerem dentro da convenção de commits do
+# projeto (Conventional Commits em português).
+version: 2
+
+updates:
+  - package-ecosystem: gomod
+    directory: /backend
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      go-menores:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      npm-menores:
+        update-types: [minor, patch]
+
+  # As imagens base dos Dockerfiles (Go, Node, Alpine, Caddy): é a camada que o
+  # Trivy varre, então manter a base atualizada é o que faz a varredura passar
+  # sem precisar remover coisa da imagem na mão.
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: chore
+      include: scope
+
+  - package-ecosystem: docker
+    directory: /frontend
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: chore
+      include: scope
+
+  # As próprias actions do CI. Sem isto elas envelhecem em silêncio até uma
+  # runtime antiga ser desligada e o workflow parar de rodar sem ninguém ter
+  # mexido em nada.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      actions:
+        update-types: [minor, patch]
