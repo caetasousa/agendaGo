@@ -25,37 +25,26 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Menor privilégio por padrão: o GITHUB_TOKEN só lê o repositório. Os jobs que
+# precisam de mais (publicar no GHCR, enviar SARIF para a aba Security) elevam
+# o que precisam, e só eles.
+permissions:
+  contents: read
+
 jobs:
   backend:
     name: Backend (build, vet, testes + integração)
     runs-on: ubuntu-latest
+    # O job leva ~1 min. Sem teto explícito o padrão do GitHub é 360 min, e um
+    # passo travado seguraria o grupo de concorrência por 6 horas.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
-      # Pull anônimo no Docker Hub tem cota por IP (100/6h) e os runners do
-      # GitHub compartilham IP: quando estoura, qualquer `docker pull` falha
-      # por timeout e derruba o job. Autenticado, a cota passa a ser da conta.
-      #
-      # Sem os secrets configurados o passo é pulado e nada muda — o mesmo
-      # padrão do deploy, para o repositório seguir funcionando sem eles.
-      - name: Docker Hub configurado?
-        id: dockerhub
-        env:
-          USUARIO: ${{ secrets.DOCKERHUB_USERNAME }}
-        run: |
-          if [ -n "$USUARIO" ]; then
-            echo "configurado=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "configurado=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::DOCKERHUB_USERNAME não configurado — pulls seguem anônimos, sujeitos à cota por IP."
-          fi
-
-      - name: login no Docker Hub
-        if: steps.dockerhub.outputs.configurado == 'true'
-        uses: docker/login-action@v3
+      - uses: ./.github/actions/docker-hub-login
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          usuario: ${{ secrets.DOCKERHUB_USERNAME }}
+          token: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - uses: actions/setup-go@v6
         with:
@@ -79,21 +68,13 @@ jobs:
         working-directory: backend
         run: go build ./...
 
-      # Baixa a imagem ANTES dos testes, com retentativa. O Docker Hub limita
-      # pulls anônimos por IP e os runners do GitHub compartilham IP: quando
-      # estoura, o pull falha por timeout e os 11 testes de integração caem
-      # juntos, sem nenhum deles ter chegado a rodar. Com a imagem já no cache
-      # local, o Testcontainers não toca a rede.
-      - name: baixa a imagem do Postgres (com retentativa)
-        run: |
-          for tentativa in 1 2 3; do
-            if docker pull postgres:16-alpine; then exit 0; fi
-            espera=$((tentativa * 15))
-            echo "::warning::pull falhou (tentativa $tentativa/3); nova tentativa em ${espera}s"
-            sleep $espera
-          done
-          echo "::error::não foi possível baixar postgres:16-alpine do Docker Hub"
-          exit 1
+      # Baixa a imagem ANTES dos testes: sem isto o Testcontainers a buscaria
+      # no meio da suíte, e um pull barrado pela cota derrubaria os testes de
+      # integração todos juntos.
+      - name: baixa a imagem do Postgres
+        uses: ./.github/actions/docker-pull
+        with:
+          imagem: postgres:16-alpine
 
       # Roda os testes rápidos e os de integração (Testcontainers sobe um
       # Postgres efêmero via o Docker já presente no runner).
@@ -137,37 +118,18 @@ jobs:
         working-directory: frontend
         run: npm run test:unit
 
-  # Varredura de vulnerabilidades: as três camadas onde uma CVE esquecida mora.
-  # govulncheck cobre o código Go (só o que é realmente alcançável a partir do
-  # binário); npm audit cobre as dependências JS — travando só nas que vão pra
-  # imagem (--omit=dev), porque uma CVE no Vite ou no Playwright não roda em
-  # produção e não deveria barrar um deploy de correção; Trivy varre a imagem
-  # pronta (sistema base + libs de SO), que os dois anteriores não enxergam.
-  seguranca:
-    name: Varredura de vulnerabilidades
+  # Vulnerabilidades nas dependências do código. govulncheck cobre o Go (só o
+  # que é realmente alcançável a partir do binário); npm audit cobre o JS —
+  # travando só nas dependências que vão pra imagem (--omit=dev), porque uma
+  # CVE no Vite ou no Playwright não roda em produção e não deveria barrar um
+  # deploy de correção. A camada de sistema operacional é do job irmão,
+  # `seguranca-imagens`, que nenhum dos dois enxerga daqui.
+  seguranca-codigo:
+    name: Vulnerabilidades (dependências do código)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
-
-      # Eleva a cota de pull do Docker Hub (ver job `backend`).
-      - name: Docker Hub configurado?
-        id: dockerhub
-        env:
-          USUARIO: ${{ secrets.DOCKERHUB_USERNAME }}
-        run: |
-          if [ -n "$USUARIO" ]; then
-            echo "configurado=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "configurado=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::DOCKERHUB_USERNAME não configurado — pulls seguem anônimos, sujeitos à cota por IP."
-          fi
-
-      - name: login no Docker Hub
-        if: steps.dockerhub.outputs.configurado == 'true'
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - uses: actions/setup-go@v6
         with:
@@ -183,10 +145,14 @@ jobs:
           go install github.com/swaggo/swag/cmd/swag@v1.16.6
           swag init -g cmd/api/main.go -o docs
 
+      # Versão fixa, como a do swag: com @latest uma release nova do
+      # govulncheck pode reprovar um commit que não mexeu em nada, e o build de
+      # ontem deixa de ser reproduzível hoje. A varredura semanal já garante
+      # que CVEs novas apareçam sem depender de atualizar a ferramenta.
       - name: govulncheck (backend)
         working-directory: backend
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
           govulncheck ./...
 
       - uses: actions/setup-node@v5
@@ -208,64 +174,116 @@ jobs:
         if: always()
         run: npm audit || true
 
-      - name: build das imagens (só para varrer, sem publicar)
-        run: |
-          docker build -t agendago-api:scan -f backend/Dockerfile.prod backend
-          docker build -t agendago-web:scan -f frontend/Dockerfile.prod frontend
+  # Varredura das imagens prontas (sistema base + libs de SO), que o
+  # govulncheck e o npm audit não enxergam. Uma perna por imagem: as TRÊS que
+  # vão para produção, inclusive a de migrations — ela roda na VPS com acesso
+  # ao banco e antes ficava de fora da varredura.
+  seguranca-imagens:
+    name: Vulnerabilidades (imagens)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      # Necessário para publicar os achados do Trivy na aba Security.
+      security-events: write
+    strategy:
+      # Uma imagem reprovada não deve esconder o resultado das outras duas.
+      fail-fast: false
+      matrix:
+        include:
+          - imagem: agendago-api
+            contexto: ./backend
+            dockerfile: ./backend/Dockerfile.prod
+          - imagem: agendago-web
+            contexto: ./frontend
+            dockerfile: ./frontend/Dockerfile.prod
+          - imagem: agendago-migrations
+            contexto: ./backend
+            dockerfile: ./backend/Dockerfile.migrations
+    steps:
+      - uses: actions/checkout@v5
 
-      - name: Trivy — agendago-api
+      - uses: ./.github/actions/docker-hub-login
+        with:
+          usuario: ${{ secrets.DOCKERHUB_USERNAME }}
+          token: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # O buildx sobe um container do BuildKit vindo do Docker Hub, e o pull
+      # anônimo falha quando o limite por IP do runner estoura.
+      - name: baixa a imagem do BuildKit
+        uses: ./.github/actions/docker-pull
+        with:
+          imagem: moby/buildkit:buildx-stable-1
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Antes isto era `docker build` puro, sem cache: a mesma imagem era
+      # compilada aqui e de novo em `publicar-imagens`. Usando buildx com o
+      # MESMO scope de cache, a build daqui alimenta a de lá (que roda depois,
+      # via needs) e nenhuma das duas recompila Go ou npm à toa.
+      # `load: true` deixa a imagem no daemon local para o Trivy varrer.
+      - name: build da imagem (só para varrer, sem publicar)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.contexto }}
+          file: ${{ matrix.dockerfile }}
+          load: true
+          tags: ${{ matrix.imagem }}:scan
+          cache-from: type=gha,scope=${{ matrix.imagem }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.imagem }}
+
+      # Relatório legível no log, com HIGH junto. Nunca trava: HIGH em imagem
+      # base costuma não ter correção disponível, e barrar o deploy nisso
+      # transformaria o portão em ruído que se aprende a ignorar.
+      - name: Trivy — relatório (HIGH + CRITICAL, não trava)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: agendago-api:scan
+          image-ref: ${{ matrix.imagem }}:scan
           severity: 'CRITICAL,HIGH'
           exit-code: '0'
 
-      - name: Trivy — agendago-api (trava em CRITICAL)
+      # No log o achado se perde no scroll e desaparece no run seguinte; em
+      # SARIF ele vai para a aba Security com histórico, deduplicação e a data
+      # em que apareceu. `category` distinta por imagem: sem isso, a última
+      # perna da matriz sobrescreveria o resultado das anteriores.
+      - name: Trivy — SARIF
+        if: always()
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: agendago-api:scan
-          severity: 'CRITICAL'
-          exit-code: '1'
-
-      - name: Trivy — agendago-web
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: agendago-web:scan
+          image-ref: ${{ matrix.imagem }}:scan
           severity: 'CRITICAL,HIGH'
           exit-code: '0'
+          format: sarif
+          output: trivy-${{ matrix.imagem }}.sarif
 
-      - name: Trivy — agendago-web (trava em CRITICAL)
+      - name: publica o SARIF na aba Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-${{ matrix.imagem }}.sarif
+          category: trivy-${{ matrix.imagem }}
+
+      # O portão vem por último, para que o relatório e o SARIF subam mesmo
+      # quando ele reprova — é justamente na execução que falha que o registro
+      # importa mais.
+      - name: Trivy — portão (trava em CRITICAL)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: agendago-web:scan
+          image-ref: ${{ matrix.imagem }}:scan
           severity: 'CRITICAL'
           exit-code: '1'
 
   e2e:
     name: E2E (Playwright sobre o docker-compose)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
 
-      # Eleva a cota de pull do Docker Hub (ver job `backend`).
-      - name: Docker Hub configurado?
-        id: dockerhub
-        env:
-          USUARIO: ${{ secrets.DOCKERHUB_USERNAME }}
-        run: |
-          if [ -n "$USUARIO" ]; then
-            echo "configurado=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "configurado=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::DOCKERHUB_USERNAME não configurado — pulls seguem anônimos, sujeitos à cota por IP."
-          fi
-
-      - name: login no Docker Hub
-        if: steps.dockerhub.outputs.configurado == 'true'
-        uses: docker/login-action@v3
+      - uses: ./.github/actions/docker-hub-login
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          usuario: ${{ secrets.DOCKERHUB_USERNAME }}
+          token: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - uses: actions/setup-node@v5
         with:
@@ -349,8 +367,9 @@ jobs:
     # A varredura semanal (schedule) não pode disparar deploy: ela roda sem
     # commit novo, e reimplantar produção sozinho toda segunda não é o objetivo.
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
-    needs: [backend, frontend, e2e, seguranca]
+    needs: [backend, frontend, e2e, seguranca-codigo, seguranca-imagens]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       packages: write
@@ -369,40 +388,17 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Eleva a cota de pull do Docker Hub (ver job `backend`).
-      - name: Docker Hub configurado?
-        id: dockerhub
-        env:
-          USUARIO: ${{ secrets.DOCKERHUB_USERNAME }}
-        run: |
-          if [ -n "$USUARIO" ]; then
-            echo "configurado=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "configurado=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::DOCKERHUB_USERNAME não configurado — pulls seguem anônimos, sujeitos à cota por IP."
-          fi
-
-      - name: login no Docker Hub
-        if: steps.dockerhub.outputs.configurado == 'true'
-        uses: docker/login-action@v3
+      - uses: ./.github/actions/docker-hub-login
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          usuario: ${{ secrets.DOCKERHUB_USERNAME }}
+          token: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Mesmo problema do job `backend`: o buildx sobe um container do BuildKit
-      # vindo do Docker Hub, e o pull anônimo falha quando o limite por IP do
-      # runner estoura. Baixar antes, com retentativa, faz o "Booting builder"
-      # encontrar a imagem no cache local em vez de ir à rede.
-      - name: baixa a imagem do BuildKit (com retentativa)
-        run: |
-          for tentativa in 1 2 3; do
-            if docker pull moby/buildkit:buildx-stable-1; then exit 0; fi
-            espera=$((tentativa * 15))
-            echo "::warning::pull falhou (tentativa $tentativa/3); nova tentativa em ${espera}s"
-            sleep $espera
-          done
-          echo "::error::não foi possível baixar a imagem do BuildKit do Docker Hub"
-          exit 1
+      # Faz o "Booting builder" do buildx encontrar a imagem no cache local em
+      # vez de ir à rede e esbarrar na cota por IP.
+      - name: baixa a imagem do BuildKit
+        uses: ./.github/actions/docker-pull
+        with:
+          imagem: moby/buildkit:buildx-stable-1
 
       - uses: docker/setup-buildx-action@v3
 
@@ -449,6 +445,7 @@ jobs:
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     needs: publicar-imagens
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
