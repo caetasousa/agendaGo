@@ -14,12 +14,16 @@ on:
   schedule:
     - cron: '0 9 * * 1'
 
-# Cancela execuções antigas do mesmo ref quando um novo push chega. O deploy
-# roda por último e é rápido; se dois pushes chegarem juntos, vence o mais
-# recente — que é o comportamento desejado.
+# Cancela execuções antigas do mesmo ref quando um novo push chega — mas só
+# em pull request. Na main não: `cancel-in-progress` é de nível de workflow e
+# alcança TODOS os jobs do run anterior, inclusive o `implantar`. Um segundo
+# push durante o deploy mataria o job no meio do caminho — entre o `pull` e o
+# `up -d`, deixando a stack em versões misturadas, ou durante a reescrita do
+# crontab, que é um `crontab -l | ... | crontab -` e truncaria o agendamento
+# do backup sem avisar. Definir `concurrency` no job não protege disso.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   backend:
