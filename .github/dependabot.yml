@@ -2,30 +2,32 @@
 # (job `seguranca`), mas apontar não corrige: sem alguém abrindo o PR, a
 # dependência envelhece até virar incidente. O Dependabot é esse alguém.
 #
-# Semanal, e não diário, de propósito: um PR por semana por ecossistema é uma
-# revisão que cabe na rotina; uma enxurrada diária vira ruído ignorado.
+# Tudo agrupado num PR por ecossistema. Sem agrupar, a primeira execução abriu
+# 12 PRs de uma vez — um por dependência —, e uma enxurrada dessas vira ruído
+# que ninguém revisa. Quatro PRs por semana cabem na rotina.
 version: 2
 updates:
   - package-ecosystem: gomod
     directory: /backend
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
     commit-message:
       prefix: chore
+    groups:
+      go:
+        patterns:
+          - '*'
 
   - package-ecosystem: npm
     directory: /frontend
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
     commit-message:
       prefix: chore
     groups:
-      # As dependências de desenvolvimento sobem juntas num PR só — são muitas
-      # (vite, svelte, playwright, tailwind) e nenhuma vai para a imagem.
-      desenvolvimento:
-        dependency-type: development
+      npm:
+        patterns:
+          - '*'
 
   - package-ecosystem: github-actions
     directory: /
@@ -33,6 +35,10 @@ updates:
       interval: weekly
     commit-message:
       prefix: chore
+    groups:
+      actions:
+        patterns:
+          - '*'
 
   # As imagens base do Dockerfile de produção (golang, node, alpine) e a do
   # Flyway — é onde mora a maior parte do que o Trivy acusa.
@@ -44,3 +50,7 @@ updates:
       interval: weekly
     commit-message:
       prefix: chore
+    groups:
+      imagens-base:
+        patterns:
+          - '*'
