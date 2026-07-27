@@ -2,6 +2,6 @@
 # host de produção não precise do repositório — sem ela, o job de migration
 # dependeria de um bind mount de ./backend/migrations, obrigando a ter o
 # código-fonte na VPS só para aplicar o schema.
-FROM flyway/flyway:10-alpine
+FROM flyway/flyway:13-alpine
 
 COPY migrations /flyway/sql

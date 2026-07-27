@@ -18,7 +18,7 @@ COPY . .
 RUN swag init -g cmd/api/main.go -o docs && \
     CGO_ENABLED=0 go build -tags timetzdata -ldflags="-s -w" -o /bin/api ./cmd/api
 
-FROM alpine:3.21
+FROM alpine:3.24
 
 # certificados TLS (chamadas HTTPS de saída) e usuário sem privilégios
 RUN apk add --no-cache ca-certificates && \
