@@ -76,6 +76,27 @@ go test -tags=integration ./...
 
 </details>
 
+<details>
+<summary><b>Detector de corrida</b> — <code>-race</code>, e por que ele está no <code>make test</code></summary>
+
+<br>
+
+```bash
+go test -race -tags=integration ./...
+```
+
+A API serve requisições concorrentes, e o rate limiter e o worker de email
+compartilham estado entre goroutines. Corrida de dados aí **não quebra o
+teste**: o teste passa, e o defeito aparece em produção sob carga, como um
+comportamento errado intermitente que não reproduz.
+
+O `-race` instrumenta os acessos à memória e acusa o conflito na hora, com o
+stack das duas goroutines envolvidas. Custa 2–3× no tempo de execução — por
+isso está no `make test` (a suíte completa, igual ao CI) e **fora do
+`make test-fast`**, que existe para o ciclo curto de edição.
+
+</details>
+
 > [!TIP]
 > Use `-v` para ver cada caso individualmente e `-count=1` para ignorar o cache
 > do Go (que reaproveita resultados quando nada mudou).
@@ -142,6 +163,27 @@ npm run test:e2e
 > são centenas de requisições do mesmo IP em poucos minutos, e o teto por conta
 > também alcança os testes que erram a senha de propósito.
 
+**Quando falha só no CI.** É o cenário mais chato do E2E: verde na sua máquina,
+vermelho no runner, e nada além de texto para investigar. A config
+(`playwright.config.ts`) grava evidência para esse caso:
+
+| Config | Valor | Por quê |
+|---|---|---|
+| `retries` | `2` só no CI | no runner a suíte disputa CPU com Postgres, API e Vite; parte da "falha" é lentidão. Local continua `0` — falhou, falhou |
+| `trace` | `on-first-retry` | grava DOM, rede e screenshot de **cada passo**. Pesado demais para ligar sempre; na repetição, é exatamente quando se vai investigar |
+| `screenshot` | `only-on-failure` | o estado da tela no momento da quebra |
+| `video` | `retain-on-failure` | o caminho até ela |
+
+O job `e2e` sobe tudo isso como artefato quando falha (`playwright-report`,
+14 dias de retenção). Baixe, descompacte e abra:
+
+```bash
+npx playwright show-trace caminho/do/trace.zip
+```
+
+O trace viewer navega passo a passo, com o DOM de cada momento — é o que evita
+ter que reproduzir o ambiente do CI na mão.
+
 </details>
 
 **Onde cada coisa mora:**
@@ -162,18 +204,30 @@ Todo push na `main` e todo pull request rodam as três camadas em paralelo
 
 ```mermaid
 flowchart LR
-    P["📝 push / PR"] --> B["🔷 Backend<br/><i>vet + build + testes</i>"]
+    P["📝 push / PR"] --> B["🔷 Backend<br/><i>vet + build + testes -race</i>"]
     P --> F["🟠 Frontend<br/><i>svelte-check + unit</i>"]
     P --> E["🌐 E2E<br/><i>Playwright sobre o compose</i>"]
+    P --> S["🛡️ Varredura<br/><i>código + imagens</i>"]
     B --> G{"todos<br/>passaram?"}
     F --> G
     E --> G
+    S --> G
     G -->|sim, e é main| I["📦 publica imagens<br/>+ deploy"]
+    E -.->|em falha| A(["📎 trace + vídeo<br/>como artefato"])
 
     style G fill:#f9a825,color:#000
     style I fill:#43a047,color:#fff
 ```
 
 > [!IMPORTANT]
-> A publicação das imagens de produção **depende dos três jobs passarem**. Um
+> A publicação das imagens de produção **depende de todos os jobs passarem**. Um
 > teste vermelho não vira imagem, e imagem que não existe não chega na VPS.
+
+Cada job tem `timeout-minutes` declarado: eles levam de 0,3 a 3,7 min, e sem
+teto explícito o padrão do GitHub seria 360 min — um teste travado seguraria a
+fila por seis horas antes de alguém notar.
+
+> [!TIP]
+> O que o CI faz além de rodar testes — varredura de vulnerabilidades,
+> publicação das imagens e deploy — está em
+> **[entrega-continua.md](entrega-continua.md)**.

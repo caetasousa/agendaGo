@@ -264,13 +264,13 @@ No Caddy ficam os cabeçalhos que não dependem do build: HSTS, `X-Content-Type-
 
 ### Varredura de dependências: govulncheck, npm audit e Trivy
 
-Num projeto pequeno em produção, a via mais provável de comprometimento não é uma falha escrita aqui — é uma CVE numa biblioteca que ninguém percebeu que envelheceu. O CI (`.github/workflows/ci.yml`, job `seguranca`) cobre as três camadas onde isso mora, porque nenhuma ferramenta enxerga a camada da outra:
+Num projeto pequeno em produção, a via mais provável de comprometimento não é uma falha escrita aqui — é uma CVE numa biblioteca que ninguém percebeu que envelheceu. O CI (`.github/workflows/ci.yml`, jobs `seguranca-codigo` e `seguranca-imagens`) cobre as três camadas onde isso mora, porque nenhuma ferramenta enxerga a camada da outra:
 
 - **[govulncheck](https://go.dev/blog/govulncheck)** — suas libs Go e a stdlib. O diferencial é a análise de alcançabilidade: só acusa vulnerabilidade em código **realmente chamado** a partir do binário, em vez de listar tudo que existe na árvore de dependências. Por isso o que ele aponta trava o deploy.
 - **`npm audit`** — dependências JS. Roda duas vezes: `--omit=dev` (só o que vai para a imagem) travando o CI, e completo em modo relatório, porque uma CVE no Vite ou no Playwright não roda em produção e não pode barrar um deploy de correção.
-- **[Trivy](https://trivy.dev/)** — a imagem pronta: sistema base (alpine, node) e bibliotecas de sistema, que os dois anteriores não enxergam. `CRITICAL` trava a publicação; `HIGH` sai como relatório.
+- **[Trivy](https://trivy.dev/)** — a imagem pronta: sistema base (alpine, node) e bibliotecas de sistema, que os dois anteriores não enxergam. Roda numa matriz sobre as **três** imagens que vão para produção, inclusive a de migrations. `CRITICAL` trava a publicação; `HIGH` sai como relatório.
 
-O job roda a cada push e também num `schedule` semanal — sem isso, uma CVE publicada numa semana sem commit passaria despercebida até o próximo push.
+Os jobs rodam a cada push e também num `schedule` semanal — sem isso, uma CVE publicada numa semana sem commit passaria despercebida até o próximo push.
 
 > [!TIP]
 > Este é o resumo. O documento **[entrega-continua.md](entrega-continua.md)** destrincha cada ferramenta, explica o que fazer quando o job fica vermelho e traz três casos reais deste projeto (uma correção por atualização, uma por remoção e uma no compilador).
@@ -278,6 +278,28 @@ O job roda a cada push e também num `schedule` semanal — sem isso, uma CVE pu
 **Para estudar:**
 - [Go — Vulnerability Management](https://go.dev/doc/security/vuln/) (como o banco de vulnerabilidades e a análise de chamadas funcionam)
 - [OWASP — Vulnerable and Outdated Components](https://owasp.org/Top10/A06_2021-Vulnerable_and_Outdated_Components/) (o item do Top 10 que essas ferramentas atacam)
+
+### Code scanning: os achados do Trivy em SARIF
+
+Varredura cujo resultado só existe no log de um job tem um problema prático: o achado se perde no scroll e desaparece na execução seguinte. Não dá para responder *"essa CVE apareceu quando?"* nem *"já não tínhamos resolvido isso?"*.
+
+O Trivy exporta em **SARIF** (*Static Analysis Results Interchange Format*), o formato padrão para resultado de análise estática, e o `github/codeql-action/upload-sarif` publica na aba **Security** do repositório — com histórico, deduplicação e a data do primeiro aparecimento. É gratuito em repositório público, e exige `permissions: security-events: write` no job (ver `seguranca-imagens` em `.github/workflows/ci.yml`).
+
+**Para estudar:**
+- [GitHub — Code scanning com SARIF](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning) (como um relatório vira alerta rastreável)
+- [SARIF — a especificação](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) (por que existe um formato comum entre ferramentas)
+
+### Dependabot: atualização de dependências com o volume sob controle
+
+O Dependabot abre PR quando sai versão nova de uma dependência. Já esteve configurado aqui, foi **removido** por volume (12 PRs de uma vez, ~4/semana depois de agrupar) e voltou em `.github/dependabot.yml` com a cadência tratada como o parâmetro que era: `monthly`, agrupando patch/minor num PR por ecossistema, com teto de PRs abertos.
+
+A divisão de trabalho com a varredura é o ponto: o Dependabot avisa que **saiu versão nova**; a varredura avisa que **a versão que você tem virou um problema** — o que também acontece sem ninguém publicar nada, como quando sai uma CVE de stdlib do Go. Os alertas de *segurança* do Dependabot não seguem o ciclo mensal: chegam assim que a CVE é publicada.
+
+> [!TIP]
+> O histórico completo da remoção e da volta está em **[entrega-continua.md](entrega-continua.md)**, seção *Dependabot: removido, e depois readmitido com coleira*.
+
+**Para estudar:**
+- [Dependabot — opções de configuração](https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference) (`groups`, `open-pull-requests-limit`, `commit-message`)
 
 ---
 

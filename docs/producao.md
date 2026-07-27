@@ -549,14 +549,22 @@ entra sem senha, e tem acesso ao Docker.
 | `VPS_USER` | 🔒 Secrets | `deploy` |
 | `VPS_SSH_KEY` | 🔒 Secrets | a chave **privada**, com as linhas `BEGIN`/`END` |
 | `VPS_PORT` | 🔒 Secrets | opcional, padrão `22` |
-| `VPS_KNOWN_HOSTS` | 🔒 Secrets | saída de `ssh-keyscan SEU_IP` |
+| `VPS_KNOWN_HOSTS` | 🔒 Secrets | **obrigatório**; saída de `ssh-keyscan -H SEU_IP` |
 | `DOMINIO` | 📢 Variables | seu domínio, para a verificação pós-deploy |
 | `BACKUP_CRON` | 📢 Variables | opcional; horário do backup diário (padrão `0 3 * * *`) |
 
-> [!TIP]
-> `VPS_KNOWN_HOSTS` é opcional mas recomendado: sem ele o CI aceita a identidade
-> que o servidor apresentar na hora, o que abre janela para **man-in-the-middle**
-> no primeiro contato.
+> [!IMPORTANT]
+> `VPS_KNOWN_HOSTS` **era opcional e deixou de ser**. Sem ele, o CI aceitava a
+> identidade que o servidor apresentasse na hora — a cada deploy, não só no
+> primeiro contato — e entregava a chave de deploy em seguida, o que abre janela
+> para **man-in-the-middle**. Hoje o job falha com a instrução no próprio erro.
+>
+> ```bash
+> ssh-keyscan -H SEU_IP          # porta 22
+> ssh-keyscan -p 2222 -H SEU_IP  # porta customizada
+> ```
+>
+> Cole a saída inteira (várias linhas, uma por tipo de chave) no segredo.
 
 **4. Testar sem commit:** *Actions → CI → **Run workflow***, habilitado pelo
 `workflow_dispatch`.

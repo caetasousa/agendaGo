@@ -15,26 +15,62 @@ ler o resultado quando fica vermelho.
 ```mermaid
 flowchart TD
     P["🧑‍💻 push na main"] --> T{"testes"}
-    T --> B["🔷 backend<br/>vet · build · testes + integração"]
+    T --> B["🔷 backend<br/>vet · build · testes -race + integração"]
     T --> F["🟠 frontend<br/>svelte-check · unit"]
     T --> E["🎭 e2e<br/>Playwright sobre o compose"]
-    T --> S["🛡️ seguranca<br/>govulncheck · npm audit · Trivy"]
+    T --> SC["🛡️ seguranca-codigo<br/>govulncheck · npm audit"]
+    T --> SI["🐳 seguranca-imagens<br/>Trivy nas 3 imagens"]
 
-    B & F & E & S --> I["📦 publicar-imagens<br/>build e push no GHCR"]
+    B & F & E & SC & SI --> I["📦 publicar-imagens<br/>build e push no GHCR"]
     I --> D["🚀 implantar<br/>ssh na VPS: pull + up -d"]
-    D --> V["✅ verifica /api/health"]
+    D --> V["✅ verifica /api/health e /"]
 
-    C(["⏰ cron semanal"]) -.->|só varredura, sem deploy| S
+    SI -.->|SARIF| A(["🔎 aba Security"])
+    C(["⏰ cron semanal"]) -.->|só varredura, sem deploy| SC
+    C -.-> SI
 
-    style S fill:#b45309,stroke:#78350f,color:#fff
+    style SC fill:#b45309,stroke:#78350f,color:#fff
+    style SI fill:#b45309,stroke:#78350f,color:#fff
     style D fill:#00add8,stroke:#007d9c,color:#fff
 ```
 
 **A regra que segura tudo:** `publicar-imagens` declara
-`needs: [backend, frontend, e2e, seguranca]`. Se qualquer um dos quatro falhar,
-nenhuma imagem é publicada e o servidor nunca é tocado. **Produção só recebe
-código que passou por completo** — não existe "deploy mesmo com o teste
-vermelho".
+`needs: [backend, frontend, e2e, seguranca-codigo, seguranca-imagens]`. Se
+qualquer um dos cinco falhar, nenhuma imagem é publicada e o servidor nunca é
+tocado. **Produção só recebe código que passou por completo** — não existe
+"deploy mesmo com o teste vermelho".
+
+> [!NOTE]
+> A varredura era um job só, `seguranca`. Virou dois porque o Trivy passou a
+> rodar numa matriz — uma perna por imagem, inclusive a de **migrations**, que
+> antes ia para produção sem ser varrida apesar de rodar na VPS com acesso ao
+> banco. As dependências do código (`govulncheck`, `npm audit`) não têm o que
+> fazer numa matriz por imagem, então ficaram no job irmão.
+
+### Por que o cancelamento automático não vale para a main
+
+```yaml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+```
+
+Cancelar a execução anterior quando chega um push novo economiza tempo e é o
+que se quer **em pull request**: ninguém espera o CI de um commit que já foi
+substituído.
+
+Na `main` era perigoso. `cancel-in-progress` é de nível de workflow e alcança
+*todos* os jobs do run anterior — inclusive o `implantar`. Dois pushes seguidos
+podiam matar o deploy no meio:
+
+- entre o `docker compose pull` e o `up -d`, deixando a stack com containers em
+  versões diferentes;
+- durante a reescrita do crontab, que é um `crontab -l | grep -v … | crontab -`
+  — cancelar ali **trunca o agendamento do backup**, em silêncio. O backup só
+  faria falta no dia em que fosse necessário.
+
+Definir `concurrency` no próprio job não resolve: a regra do workflow vence.
+A saída é a expressão acima — o comportamento rápido continua onde é seguro.
 
 ### Por que a VPS só faz `pull`, nunca `build`
 
@@ -106,11 +142,11 @@ enxerga se o seu código realmente *chama* a função vulnerável. **Nenhuma das
 três ferramentas substitui as outras** — é por isso que o job `seguranca` roda
 as três.
 
-| Ferramenta | Camada | O que trava o CI |
-|---|---|---|
-| `govulncheck` | Go: suas libs + stdlib | qualquer vulnerabilidade **alcançável** |
-| `npm audit` | JS: dependências | `high`+ **em produção** (`--omit=dev`) |
-| `trivy` | imagem: SO e libs de sistema | `CRITICAL` |
+| Ferramenta | Camada | Job | O que trava o CI |
+|---|---|---|---|
+| `govulncheck` | Go: suas libs + stdlib | `seguranca-codigo` | qualquer vulnerabilidade **alcançável** |
+| `npm audit` | JS: dependências | `seguranca-codigo` | `high`+ **em produção** (`--omit=dev`) |
+| `trivy` | imagem: SO e libs de sistema | `seguranca-imagens` | `CRITICAL` |
 
 ---
 
@@ -185,15 +221,60 @@ binário que a imagem base já traz.
 O Trivy varre a imagem **pronta**, como ela vai para o servidor.
 
 ```yaml
-severity: 'CRITICAL'
-exit-code: '1'      # trava
----
 severity: 'CRITICAL,HIGH'
 exit-code: '0'      # só relata
+---
+severity: 'CRITICAL'
+exit-code: '1'      # trava
 ```
 
 Duas passadas pelo mesmo motivo do `npm audit`: `CRITICAL` interrompe a
-publicação, `HIGH` fica visível sem bloquear.
+publicação, `HIGH` fica visível sem bloquear. O portão vem **por último** de
+propósito — assim o relatório e o SARIF sobem mesmo na execução que reprova,
+que é justamente aquela em que se quer ler o resultado.
+
+#### As três imagens, não duas
+
+A matriz cobre `agendago-api`, `agendago-web` e `agendago-migrations`. A de
+migrations entrou depois: ela roda na VPS com credencial de banco e passava
+direto, sem varredura, só porque não era uma das duas imagens "principais".
+Imagem que chega ao servidor é imagem varrida — não há categoria de exceção.
+
+#### Por que a varredura constrói com buildx
+
+A build daqui usa `docker/build-push-action` com o mesmo `scope` de cache do
+job que publica:
+
+```yaml
+cache-from: type=gha,scope=${{ matrix.imagem }}
+cache-to: type=gha,mode=max,scope=${{ matrix.imagem }}
+```
+
+Antes era `docker build` puro, sem cache: a mesma imagem era compilada aqui e
+**de novo** em `publicar-imagens`, minutos depois, do zero. Compartilhando o
+cache, a segunda build reaproveita as camadas da primeira — Go e npm não
+recompilam à toa.
+
+#### O SARIF e a aba Security
+
+```yaml
+- name: Trivy — SARIF
+  format: sarif
+  output: trivy-${{ matrix.imagem }}.sarif
+- uses: github/codeql-action/upload-sarif@v3
+  with:
+    category: trivy-${{ matrix.imagem }}
+```
+
+No log, o achado se perde no scroll e desaparece na execução seguinte. Em
+SARIF, ele vai para a aba **Security** do repositório com histórico,
+deduplicação e a data em que apareceu pela primeira vez — dá para responder
+"desde quando essa CVE está aqui?", que o log não responde.
+
+> [!NOTE]
+> `category` distinta por imagem é obrigatório numa matriz: sem isso, a última
+> perna a terminar sobrescreve o resultado das anteriores e só uma das três
+> imagens fica registrada.
 
 ---
 
@@ -266,7 +347,7 @@ mexido em nada** — basta sair uma CVE nova de stdlib. Isso não é o CI quebra
 
 ```mermaid
 flowchart TD
-    A["🔴 job seguranca falhou"] --> B{"qual passo?"}
+    A["🔴 varredura falhou"] --> B{"qual passo?"}
 
     B -->|govulncheck| C{"o pacote é<br/>crypto/* net/* ?"}
     C -->|sim| D["atualize o Go<br/>(CI e Dockerfile já usam tag flutuante)"]
@@ -286,34 +367,122 @@ qual é o caminho no relatório, não a severidade.
 
 ---
 
-## 5️⃣ Por que não usamos Dependabot
+## 5️⃣ Dependabot: removido, e depois readmitido com coleira
 
-O Dependabot vigia versões e **abre um PR** quando sai uma nova. Chegou a ficar
-configurado aqui; foi removido.
+Esta seção já se chamou *"Por que não usamos Dependabot"*. A decisão mudou, e
+vale registrar as duas metades — porque o motivo original **continua válido**.
 
-O motivo é de fluxo, não técnico: neste projeto se commita direto na `main` e
-não se usa pull request. O Dependabot só sabe se comunicar por PR — na primeira
-execução abriu **12 PRs** de uma vez, um por dependência. Agrupados por
-ecossistema ainda eram 4 por semana. Volume que ninguém revisa vira ruído, e
-ruído recorrente ensina a ignorar o aviso — exatamente o contrário do objetivo.
+### Por que tinha sido removido
 
-**O que ficou no lugar:** um `schedule` semanal no próprio CI.
+O Dependabot vigia versões e **abre um PR** quando sai uma nova. Neste projeto
+se commita direto na `main` e não se usa pull request. Ele só sabe se comunicar
+por PR: na primeira execução abriu **12 PRs** de uma vez, um por dependência.
+Agrupados por ecossistema, ainda eram 4 por semana. Volume que ninguém revisa
+vira ruído, e ruído recorrente ensina a ignorar o aviso — o contrário do
+objetivo.
+
+### O que faltava sem ele
+
+O `schedule` semanal do CI **detecta**: toda segunda a varredura roda e o build
+fica vermelho se apareceu CVE nova.
 
 ```yaml
 schedule:
   - cron: '0 9 * * 1'   # segunda, 9h UTC (6h em Brasília)
 ```
 
-Sem ele, o job `seguranca` só rodaria quando alguém commitasse — e uma CVE
-publicada numa semana sem push passaria despercebida até o próximo commit.
-Com ele, o ciclo fica:
+O que ele não faz é **fechar o ciclo**. Descoberto o problema, achar a versão
+corrigida, subir o bump e conferir se quebrou alguma coisa continuava sendo
+trabalho manual, numa segunda de manhã, com o CI vermelho pressionando. O
+Caso 1 (`postcss`) é exatamente isso: um `npm audit fix` que a máquina podia
+ter proposto sozinha.
 
-> roda sozinho toda segunda → achou CVE, build vermelho → você corrige e
-> commita normal
+### A configuração que voltou
 
-Zero PRs, e o aviso não se perde. A diferença para o Dependabot é que ninguém
-te entrega a correção pronta: você lê o relatório e decide, que é justamente o
-que os três casos da seção anterior mostram ser necessário.
+O problema nunca foi o Dependabot — era o **volume**. Então o volume virou o
+parâmetro a ajustar:
+
+| | Como era | Como está |
+|---|---|---|
+| Cadência | `weekly` | **`monthly`** |
+| Agrupamento | um PR por dependência | **um PR por ecossistema** (patch/minor) |
+| Teto | sem limite | `open-pull-requests-limit` 2–3 |
+| Volume resultante | ~12, depois ~4/semana | **~4/mês** |
+
+Major continua vindo separado, porque é o que costuma quebrar e merece ser lido
+sozinho.
+
+> [!IMPORTANT]
+> **Alertas de segurança não passam por essa cadência.** Eles são ligados em
+> *Settings → Code security*, não no `dependabot.yml`, e chegam assim que a CVE
+> é publicada. É esse canal que fecha o ciclo com a varredura; o ciclo mensal é
+> só higiene de versão.
+
+E o `schedule` semanal continua: as duas coisas resolvem problemas diferentes.
+O Dependabot avisa que **saiu versão nova**; a varredura avisa que **a versão
+que você tem virou um problema** — o que também acontece sem ninguém publicar
+nada, como no Caso 3 (stdlib do Go).
+
+---
+
+## 6️⃣ As proteções chatas do workflow
+
+Nenhuma delas aparece quando tudo dá certo. Todas existem por causa de um jeito
+específico de dar errado.
+
+### `timeout-minutes` em todos os jobs
+
+O padrão do GitHub é **360 minutos**. Os jobs daqui levam de 0,3 a 3,7 min: um
+`waitFor` travado no Playwright ou um `ssh` pendurado numa VPS que não responde
+seguraria o grupo de concorrência por seis horas antes de alguém perceber. Cada
+job declara um teto com folga (10 a 20 min) — se estourar, é bug, não lentidão.
+
+### `permissions: contents: read` no topo
+
+O `GITHUB_TOKEN` chega a cada job com as permissões padrão do repositório.
+Declarar o mínimo no topo e elevar só onde é necessário deixa explícito quem
+precisa de quê:
+
+| Job | Permissão extra | Para quê |
+|---|---|---|
+| `publicar-imagens` | `packages: write` | publicar no GHCR |
+| `seguranca-imagens` | `security-events: write` | enviar o SARIF |
+
+Todos os outros só leem o repositório. Num CI que guarda a chave SSH de
+produção, isso é a diferença entre um passo comprometido conseguir ler código e
+conseguir publicar imagem.
+
+### `VPS_KNOWN_HOSTS` deixou de ser opcional
+
+Havia um fallback: sem o segredo, o job rodava `ssh-keyscan` e aceitava a
+identidade de quem respondesse — **a cada deploy**, não só na primeira vez —
+e em seguida entregava a chave de deploy. Como a VPS já está de pé, fixar a
+identidade custa um comando, e o caso ausente virou falha com a instrução no
+próprio erro:
+
+```
+::error::VPS_KNOWN_HOSTS não configurado. Gere com: ssh-keyscan -p 22 -H SEU_IP
+```
+
+### As actions locais em `.github/actions/`
+
+Dois blocos viviam copiados em quatro jobs: o login condicional no Docker Hub e
+o `docker pull` com retentativa. Viraram *composite actions* locais:
+
+```yaml
+- uses: ./.github/actions/docker-hub-login
+  with:
+    usuario: ${{ secrets.DOCKERHUB_USERNAME }}
+    token: ${{ secrets.DOCKERHUB_TOKEN }}
+
+- uses: ./.github/actions/docker-pull
+  with:
+    imagem: postgres:16-alpine
+```
+
+O ganho não é tamanho de arquivo: é a explicação da cota do Docker Hub passar a
+morar num lugar só, em vez de quatro cópias que se desatualizam em ritmos
+diferentes.
 
 ---
 
