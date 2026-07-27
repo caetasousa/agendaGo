@@ -50,10 +50,33 @@ jobs:
         working-directory: backend
         run: go build ./...
 
+      # Baixa a imagem ANTES dos testes, com retentativa. O Docker Hub limita
+      # pulls anônimos por IP e os runners do GitHub compartilham IP: quando
+      # estoura, o pull falha por timeout e os 11 testes de integração caem
+      # juntos, sem nenhum deles ter chegado a rodar. Com a imagem já no cache
+      # local, o Testcontainers não toca a rede.
+      - name: baixa a imagem do Postgres (com retentativa)
+        run: |
+          for tentativa in 1 2 3; do
+            if docker pull postgres:16-alpine; then exit 0; fi
+            espera=$((tentativa * 15))
+            echo "::warning::pull falhou (tentativa $tentativa/3); nova tentativa em ${espera}s"
+            sleep $espera
+          done
+          echo "::error::não foi possível baixar postgres:16-alpine do Docker Hub"
+          exit 1
+
       # Roda os testes rápidos e os de integração (Testcontainers sobe um
       # Postgres efêmero via o Docker já presente no runner).
+      #
+      # Ryuk é o container que o Testcontainers usa para faxinar o que sobrar;
+      # ele mora no Docker Hub e seria mais um pull sujeito à mesma limitação.
+      # O runner é efêmero e os testes já encerram os containers no t.Cleanup,
+      # então aqui ele não tem o que fazer.
       - name: testes
         working-directory: backend
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: 'true'
         run: go test -tags=integration ./...
 
   frontend:
