@@ -421,9 +421,8 @@ jobs:
   #   VPS_USER         usuário SSH (não-root, no grupo docker)
   #   VPS_SSH_KEY      chave PRIVADA de deploy (a pública vai no authorized_keys)
   #   VPS_PORT         opcional, padrão 22
-  #   VPS_KNOWN_HOSTS  opcional, saída de `ssh-keyscan HOST` (fixa a identidade
-  #                    do servidor; sem isso a primeira conexão confia no que
-  #                    for apresentado)
+  #   VPS_KNOWN_HOSTS  saída de `ssh-keyscan -H HOST` (fixa a identidade do
+  #                    servidor). Obrigatório quando VPS_HOST existe.
   # E a variável DOMINIO (aba Variables) para a verificação pós-deploy.
   implantar:
     name: Deploy na VPS
@@ -460,11 +459,15 @@ jobs:
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           printf '%s\n' "$CHAVE" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
-          if [ -n "$KNOWN_HOSTS" ]; then
-            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-          else
-            ssh-keyscan -4 -T 15 -p "$PORTA" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          # Antes havia um fallback para `ssh-keyscan` quando o segredo não
+          # existia — o que aceitava a identidade de quem respondesse, a cada
+          # deploy, e entregava a chave de deploy junto. Como a VPS já está de
+          # pé, fixar a identidade é barato e o caso ausente vira falha.
+          if [ -z "$KNOWN_HOSTS" ]; then
+            echo "::error::VPS_KNOWN_HOSTS não configurado. Gere com: ssh-keyscan -p $PORTA -H $HOST"
+            exit 1
           fi
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
       # Mantém compose e Caddyfile do servidor iguais aos do repositório: sem
@@ -533,15 +536,23 @@ jobs:
           ssh -4 -o ConnectTimeout=15 -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" \
             'printf "  fuso do servidor: %s (agora: %s)\n" "$(timedatectl show --property=Timezone --value 2>/dev/null || readlink -f /etc/localtime)" "$(date "+%F %T %Z")"; printf "  crontab: %s\n" "$(crontab -l | grep backup.sh)"'
 
-      # Deploy sem verificação é deploy no escuro: se a API não responder, o
-      # job falha e o erro aparece no commit.
+      # Deploy sem verificação é deploy no escuro: se a aplicação não responder,
+      # o job falha e o erro aparece no commit.
+      #
+      # Checa a API e a página inicial. Só /api/health deixava passar um deploy
+      # em que o container `web` subiu quebrado: a API responde, o job fica
+      # verde e quem descobre é o usuário.
       - name: verifica se a aplicação respondeu
         if: steps.cfg.outputs.configurado == 'true' && vars.DOMINIO != ''
+        env:
+          DOMINIO: ${{ vars.DOMINIO }}
         run: |
           for i in $(seq 1 12); do
-            if curl -fsS "https://${{ vars.DOMINIO }}/api/health" >/dev/null; then
-              echo "aplicação no ar"; exit 0
+            if curl -fsS "https://$DOMINIO/api/health" >/dev/null \
+              && curl -fsS -o /dev/null "https://$DOMINIO/"; then
+              echo "aplicação no ar (API e frontend)"; exit 0
             fi
             sleep 5
           done
-          echo "a aplicação não respondeu em /api/health após o deploy"; exit 1
+          echo "a aplicação não respondeu em /api/health e/ou / após o deploy"
+          exit 1
