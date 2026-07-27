@@ -8,6 +8,11 @@ on:
   # Permite republicar as imagens e reimplantar sem precisar de um commit
   # novo (útil para reaplicar um deploy que falhou por causa do servidor).
   workflow_dispatch:
+  # Varredura semanal de vulnerabilidades. Sem isto, o job `seguranca` só roda
+  # quando alguém commita: uma CVE publicada numa semana sem push passaria
+  # despercebida até o próximo commit. Segunda, 9h UTC (6h em Brasília).
+  schedule:
+    - cron: '0 9 * * 1'
 
 # Cancela execuções antigas do mesmo ref quando um novo push chega. O deploy
 # roda por último e é rápido; se dois pushes chegarem juntos, vence o mais
@@ -222,7 +227,9 @@ jobs:
   # Só roda em push na main e depois que todos os testes passaram.
   publicar-imagens:
     name: Publica imagens no GHCR
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    # A varredura semanal (schedule) não pode disparar deploy: ela roda sem
+    # commit novo, e reimplantar produção sozinho toda segunda não é o objetivo.
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     needs: [backend, frontend, e2e, seguranca]
     runs-on: ubuntu-latest
     permissions:
@@ -284,7 +291,9 @@ jobs:
   # E a variável DOMINIO (aba Variables) para a verificação pós-deploy.
   implantar:
     name: Deploy na VPS
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    # A varredura semanal (schedule) não pode disparar deploy: ela roda sem
+    # commit novo, e reimplantar produção sozinho toda segunda não é o objetivo.
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     needs: publicar-imagens
     runs-on: ubuntu-latest
     steps:
