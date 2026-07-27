@@ -336,7 +336,7 @@ jobs:
           if [ -n "$KNOWN_HOSTS" ]; then
             printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           else
-            ssh-keyscan -p "$PORTA" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+            ssh-keyscan -4 -T 15 -p "$PORTA" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
           fi
           chmod 600 ~/.ssh/known_hosts
 
@@ -350,14 +350,14 @@ jobs:
           USUARIO: ${{ secrets.VPS_USER }}
           PORTA: ${{ secrets.VPS_PORT || '22' }}
         run: |
-          ssh -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" 'mkdir -p ~/agendago/scripts'
-          scp -i ~/.ssh/id_deploy -P "$PORTA" \
+          ssh -4 -o ConnectTimeout=15 -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" 'mkdir -p ~/agendago/scripts'
+          scp -4 -o ConnectTimeout=15 -i ~/.ssh/id_deploy -P "$PORTA" \
             docker-compose.prod.yml Caddyfile "$USUARIO@$HOST:~/agendago/"
           # O script de backup também é versionado: assim ele chega na VPS
           # revisado, em vez de virar um arquivo solto que ninguém sabe de onde veio.
-          scp -i ~/.ssh/id_deploy -P "$PORTA" \
+          scp -4 -o ConnectTimeout=15 -i ~/.ssh/id_deploy -P "$PORTA" \
             scripts/backup.sh "$USUARIO@$HOST:~/agendago/scripts/"
-          ssh -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" 'chmod +x ~/agendago/scripts/backup.sh'
+          ssh -4 -o ConnectTimeout=15 -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" 'chmod +x ~/agendago/scripts/backup.sh'
 
       # Fixa a tag no SHA deste commit: o servidor sobe exatamente o artefato
       # que passou nos testes, não um `latest` que pode ter mudado no meio.
@@ -368,7 +368,7 @@ jobs:
           USUARIO: ${{ secrets.VPS_USER }}
           PORTA: ${{ secrets.VPS_PORT || '22' }}
         run: |
-          ssh -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" \
+          ssh -4 -o ConnectTimeout=15 -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" \
             "cd ~/agendago \
              && IMAGE_TAG=${{ github.sha }} docker compose -f docker-compose.prod.yml pull \
              && IMAGE_TAG=${{ github.sha }} docker compose -f docker-compose.prod.yml up -d \
@@ -389,7 +389,7 @@ jobs:
           # Horário configurável por variável do repositório, sem mexer no código.
           AGENDA: ${{ vars.BACKUP_CRON || '0 3 * * *' }}
         run: |
-          ssh -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" "
+          ssh -4 -o ConnectTimeout=15 -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" "
             mkdir -p \$HOME/backups
             ( crontab -l 2>/dev/null | grep -v 'agendago/scripts/backup.sh'
               echo '$AGENDA \$HOME/agendago/scripts/backup.sh >> \$HOME/backups/backup.log 2>&1'
@@ -403,7 +403,7 @@ jobs:
           # não é atualizado por `timedatectl set-timezone` em toda imagem de
           # Ubuntu, e reportaria o fuso antigo num servidor já corrigido.
           echo 'agendamento efetivo no servidor:'
-          ssh -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" \
+          ssh -4 -o ConnectTimeout=15 -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" \
             'printf "  fuso do servidor: %s (agora: %s)\n" "$(timedatectl show --property=Timezone --value 2>/dev/null || readlink -f /etc/localtime)" "$(date "+%F %T %Z")"; printf "  crontab: %s\n" "$(crontab -l | grep backup.sh)"'
 
       # Deploy sem verificação é deploy no escuro: se a API não responder, o
