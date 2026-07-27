@@ -76,7 +76,7 @@ func Novo(id, nome, email, telefone, senhaHash string) (*Provider, error) {
 		DescansoMinutos:              0,
 		DuracaoAtendimentoMinutos:    duracaoAtendimentoSugerida,
 		HorariosPadrao:               horariosComerciaisPadrao,
-		PermiteMarcacaoPeloPrestador: true,
+		PermiteMarcacaoPeloPrestador: false,
 		CriadoEm:                     agora,
 		AtualizadoEm:                 agora,
 	}, nil

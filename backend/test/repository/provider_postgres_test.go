@@ -165,6 +165,7 @@ func TestProviderPostgres(t *testing.T) {
 
 	t.Run("salva e busca prestador por ID", func(t *testing.T) {
 		p, _ := provider.Novo("88888888-8888-8888-8888-888888888888", "Carlos Souza", "carlos@email.com", "11999998888", "12345678")
+		p.PermiteMarcacaoPeloPrestador = true
 		if err := repo.Salvar(p); err != nil {
 			t.Fatalf("esperava sucesso ao salvar, got: %v", err)
 		}
@@ -180,7 +181,7 @@ func TestProviderPostgres(t *testing.T) {
 			t.Errorf("esperava email 'carlos@email.com', got: %s", encontrado.Email)
 		}
 		if !encontrado.PermiteMarcacaoPeloPrestador {
-			t.Error("esperava PermiteMarcacaoPeloPrestador true por padrão")
+			t.Error("esperava PermiteMarcacaoPeloPrestador preservado como true após salvar e buscar")
 		}
 	})
 

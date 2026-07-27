@@ -67,10 +67,10 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 
 	t.Run("desativa e reativa a marcação pelo prestador", func(t *testing.T) {
 		repo := memoria.NovoProviderMemoria()
-		p := novoProviderComPreferencias(repo)
-		if !p.PermiteMarcacaoPeloPrestador {
-			t.Fatal("esperava que a marcação pelo prestador nascesse ativada")
-		}
+		// a marcação pelo prestador nasce desativada; ativa antes de exercitar o toggle
+		p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", "hash-da-senha")
+		p.PermiteMarcacaoPeloPrestador = true
+		repo.Salvar(p)
 		uc := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
 
 		out, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{

@@ -45,6 +45,9 @@ func novoAmbienteAgendamento(t *testing.T) *ambienteAgendamento {
 	providerRepo := memoria.NovoProviderMemoria()
 	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", "hash")
 	p.AtivarAgenda()
+	// marcação pelo prestador nasce desativada; o ambiente habilita para os
+	// testes que exercitam esse fluxo (TestMarcarPeloPrestador)
+	p.AtivarMarcacaoPeloPrestador()
 	providerRepo.Salvar(p)
 
 	clientRepo := memoria.NovoClientMemoria()
