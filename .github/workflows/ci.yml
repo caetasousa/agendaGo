@@ -102,15 +102,20 @@ jobs:
       # ele mora no Docker Hub e seria mais um pull sujeito à mesma limitação.
       # O runner é efêmero e os testes já encerram os containers no t.Cleanup,
       # então aqui ele não tem o que fazer.
+      #
+      # `-race` porque a API serve requisições concorrentes (rate limiter e
+      # envio de email compartilham estado entre goroutines): corrida de dados
+      # não quebra o teste sem o detector, só aparece em produção sob carga.
       - name: testes
         working-directory: backend
         env:
           TESTCONTAINERS_RYUK_DISABLED: 'true'
-        run: go test -tags=integration ./...
+        run: go test -race -tags=integration ./...
 
   frontend:
     name: Frontend (svelte-check + unit)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
 
