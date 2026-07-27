@@ -117,8 +117,9 @@ Ele entra pela [mesma tela de login](http://localhost:5173/login) e cai no paine
 | `POST` | [`/auth/provider/login`](http://localhost:8080/swagger/index.html#/auth/post_auth_provider_login) | Login do prestador |
 | `POST` | [`/auth/client/login`](http://localhost:8080/swagger/index.html#/auth/post_auth_client_login) | Login do cliente |
 | `POST` | [`/auth/admin/login`](http://localhost:8080/swagger/index.html#/auth/post_auth_admin_login) | Login do administrador |
-| `GET` | [`/auth/client/google/start`](http://localhost:8080/swagger/index.html#/auth/get_auth_client_google_start) | Iniciar login social do cliente com Google |
-| `GET` | [`/auth/provider/google/start`](http://localhost:8080/swagger/index.html#/auth/get_auth_provider_google_start) | Iniciar login social do prestador com Google |
+| `GET` | [`/auth/google/start`](http://localhost:8080/swagger/index.html#/auth/get_auth_google_start) | Entrar com Google (tela de login) — o tipo da conta é descoberto, não informado |
+| `GET` | [`/auth/client/google/start`](http://localhost:8080/swagger/index.html#/auth/get_auth_client_google_start) | Cadastrar/entrar como cliente com Google |
+| `GET` | [`/auth/provider/google/start`](http://localhost:8080/swagger/index.html#/auth/get_auth_provider_google_start) | Cadastrar/entrar como prestador com Google |
 | `GET` | [`/auth/google/callback`](http://localhost:8080/swagger/index.html#/auth/get_auth_google_callback) | Callback do login social |
 | `POST` | [`/auth/logout`](http://localhost:8080/swagger/index.html#/auth/post_auth_logout) | Encerrar sessão |
 | `GET` | [`/auth/me`](http://localhost:8080/swagger/index.html#/auth/get_auth_me) | Usuário autenticado atual |
