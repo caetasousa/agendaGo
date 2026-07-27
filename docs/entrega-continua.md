@@ -85,8 +85,19 @@ segundos. O `.env` **nunca** é enviado; ele mora só no host, com os segredos.
 ### Por que a tag é o SHA do commit
 
 ```yaml
-IMAGE_TAG=${{ github.sha }} docker compose -f docker-compose.prod.yml pull
+IMAGE_TAG=${{ github.sha }} docker compose -f docker-compose.prod.yml pull --quiet
 ```
+
+> [!NOTE]
+> O `--quiet` é só sobre o log. Sem terminal para reescrever a linha de
+> progresso, o Docker imprime **uma linha nova por atualização de cada
+> camada** — o deploy de uma imagem só já produziu milhares de linhas de
+> `Downloading 10.49MB`, e um erro no meio disso não é encontrável. Erros
+> continuam saindo em stderr; quem protege contra um pull travado é o
+> `timeout-minutes` do job, não a barra de progresso.
+>
+> No deploy **manual** ([producao.md](producao.md)) a barra continua, porque
+> ali existe terminal e ela se reescreve no lugar.
 
 O servidor sobe exatamente o artefato que passou nos testes. Se fosse `latest`,
 haveria uma janela em que outro push republicaria a tag entre o teste e o
