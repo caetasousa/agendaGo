@@ -1,0 +1,127 @@
+# Mescla sozinho os PRs do Dependabot que forem de patch/minor e passarem no CI.
+#
+# Por que o gatilho é `workflow_run` e não `pull_request`:
+#
+#   O padrão comum é reagir à abertura do PR e chamar `gh pr merge --auto`,
+#   deixando o GitHub mesclar quando o CI terminar. Desde 25/03/2026 o GitHub
+#   recusa ATIVAR o auto-merge num PR cujos requisitos ainda não foram
+#   cumpridos — e no momento em que o PR abre o CI nem começou, então esse
+#   caminho falha com 422. Esperar o CI terminar e mesclar direto não depende
+#   desse comportamento.
+#
+#   O efeito colateral é bom: não exige branch protection com checks
+#   obrigatórios. Aqui isso importa, porque se commita direto na main e exigir
+#   PR passaria a atrapalhar o fluxo normal de trabalho.
+#
+# O que NUNCA é mesclado sozinho: major. Foi o TypeScript 6 → 7 que quebrou o
+# svelte-check e o E2E de uma vez — major merece leitura, mesmo verde.
+name: Dependabot auto-merge
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  mesclar:
+    name: Mescla se for patch/minor e o CI passou
+    # As três condições juntas: o CI passou inteiro, era a execução de um pull
+    # request (não um push na main) e quem abriu foi o Dependabot.
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Descobre o PR pelo branch da execução que terminou. `pull_requests` do
+      # evento vem vazio em alguns casos, e o Dependabot sempre usa branch no
+      # próprio repositório — procurar pelo head é mais confiável.
+      - name: identifica o PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          numero=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open \
+            --json number --jq '.[0].number // empty')
+          if [ -z "$numero" ]; then
+            echo "::notice::nenhum PR aberto para o branch $BRANCH — nada a fazer."
+            echo "encontrado=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          titulo=$(gh pr view "$numero" --repo "$REPO" --json title --jq .title)
+          echo "encontrado=true" >> "$GITHUB_OUTPUT"
+          echo "numero=$numero" >> "$GITHUB_OUTPUT"
+          echo "titulo=$titulo" >> "$GITHUB_OUTPUT"
+          echo "PR #$numero: $titulo"
+
+      # Decide pelo título, que o Dependabot escreve em formato estável.
+      #
+      # Dois formatos, e os dois são tratáveis sem consultar mais nada:
+      #   "bump X from 1.2.3 to 1.2.4"          → compara os majors
+      #   "bump the <grupo> group with N updates" → seguro por construção, porque
+      #      os grupos do dependabot.yml só admitem update-types minor e patch
+      #
+      # Qualquer título que não case com nenhum dos dois é tratado como major:
+      # na dúvida, não mescla.
+      - name: patch/minor ou major?
+        id: tipo
+        if: steps.pr.outputs.encontrado == 'true'
+        env:
+          TITULO: ${{ steps.pr.outputs.titulo }}
+        run: |
+          if printf '%s' "$TITULO" | grep -qE 'bump the .+ group'; then
+            echo "::notice::PR de grupo — os grupos deste repositório só contêm minor/patch."
+            echo "seguro=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Pega só o número maior de cada lado. O formato da versão varia mais
+          # do que parece — "6.0.3", "5" e "22-alpine" são todos títulos reais
+          # deste repositório —, então casa o inteiro inicial e ignora o resto.
+          de=$(printf '%s' "$TITULO" | sed -nE 's/.* from ([0-9]+)[^ ]* to .*/\1/p')
+          para=$(printf '%s' "$TITULO" | sed -nE 's/.* from [^ ]+ to ([0-9]+)[^ ]*.*/\1/p')
+
+          if [ -z "$de" ] || [ -z "$para" ]; then
+            echo "::warning::não consegui ler as versões do título — deixando para revisão manual."
+            echo "seguro=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$de" = "$para" ]; then
+            echo "major $de inalterado: patch/minor, pode mesclar."
+            echo "seguro=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::major $de → $para: fica para revisão manual."
+            echo "seguro=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: mescla
+        if: steps.pr.outputs.encontrado == 'true' && steps.tipo.outputs.seguro == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          NUMERO: ${{ steps.pr.outputs.numero }}
+        run: |
+          # --squash mantém a main com um commit por atualização, e --delete-branch
+          # evita acumular branches dependabot/* no repositório.
+          gh pr merge "$NUMERO" --repo "$REPO" --squash --delete-branch
+          echo "::notice::PR #$NUMERO mesclado."
+
+      # Deixa registrado no próprio PR por que ele não foi mesclado, em vez de
+      # o autor ter que adivinhar por que o CI ficou verde e nada aconteceu.
+      - name: comenta quando não mescla
+        if: steps.pr.outputs.encontrado == 'true' && steps.tipo.outputs.seguro != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          NUMERO: ${{ steps.pr.outputs.numero }}
+        run: |
+          gh pr comment "$NUMERO" --repo "$REPO" --body \
+            "O CI passou, mas este PR é **major** (ou o título não permitiu determinar o tipo), então o auto-merge não o mescla — precisa de revisão manual. Ver \`.github/workflows/dependabot-auto-merge.yml\`."
