@@ -34,7 +34,10 @@ COPY --from=build /bin/api /usr/local/bin/api
 
 EXPOSE 8080
 
+# /ready, não /health: o liveness responde "ok" mesmo com o banco fora do ar, e um
+# healthcheck que nunca reprova não informa nada. O 503 de /ready faz o container
+# aparecer como unhealthy enquanto a API não consegue atender de fato.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
-    CMD wget -qO- http://localhost:8080/health || exit 1
+    CMD wget -qO- http://localhost:8080/ready || exit 1
 
 ENTRYPOINT ["api"]

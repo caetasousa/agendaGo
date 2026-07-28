@@ -78,6 +78,10 @@ services:
     image: ${IMAGE_REPO:-ghcr.io/caetasousa}/agendago-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
     logging: *logging
+    # Sem `healthcheck` aqui de propósito: a imagem já traz o dela
+    # (backend/Dockerfile.prod), batendo em /ready. Declarar de novo criaria duas
+    # definições para manter em sincronia — `docker compose ps` mostra o estado
+    # de saúde do mesmo jeito.
     # Binário estático rodando como usuário sem privilégio: não precisa de
     # capability nenhuma nem de escrever em disco. read_only impede que um
     # comprometimento deixe qualquer coisa gravada no container.

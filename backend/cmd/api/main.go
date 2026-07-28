@@ -40,6 +40,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/httprate"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -183,6 +184,7 @@ func main() {
 	// roteador
 	r := config.NovoRouter()
 	r.Get("/health", health)
+	r.Get("/ready", ready(pool))
 	// leituras públicas: respondem a qualquer um, sem identificação nenhuma.
 	// O teto evita que raspar a vitrine inteira em laço custe ao banco.
 	r.Group(func(r chi.Router) {
@@ -388,8 +390,8 @@ func novoLoginSocialUseCase(
 
 // health godoc
 //
-//	@Summary		Health check
-//	@Description	Retorna o status do servidor
+//	@Summary		Liveness check
+//	@Description	Informa que o processo está no ar. Não toca em dependência nenhuma — use /ready para saber se a API consegue atender.
 //	@Tags			infra
 //	@Produce		json
 //	@Success		200	{object}	map[string]string
@@ -397,4 +399,34 @@ func novoLoginSocialUseCase(
 func health(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+// timeoutReady limita o ping de readiness: sem teto, um banco travado (em vez de
+// fora do ar) seguraria a checagem até o timeout do cliente, e o orquestrador
+// ficaria sem resposta justamente quando ela mais importa.
+const timeoutReady = 2 * time.Second
+
+// ready godoc
+//
+//	@Summary		Readiness check
+//	@Description	Informa se a API consegue atender de fato: faz ping no pool do banco. Responde 503 quando o banco está indisponível.
+//	@Tags			infra
+//	@Produce		json
+//	@Success		200	{object}	map[string]string
+//	@Failure		503	{object}	map[string]string
+//	@Router			/ready [get]
+func ready(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancelar := context.WithTimeout(r.Context(), timeoutReady)
+		defer cancelar()
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := pool.Ping(ctx); err != nil {
+			slog.Error("readiness: banco indisponível", slog.String("erro", err.Error()))
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]string{"status": "degradado", "erro": "banco indisponível"})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	}
 }

@@ -54,11 +54,12 @@ func RequisicaoLogger(r *http.Request) *slog.Logger {
 // Middleware emite um log estruturado (nível INFO) por requisição HTTP — o log
 // de acesso do sistema — com método, rota, status, duração, bytes, IP e
 // request_id. A rota é o padrão casado, não o caminho, para não registrar
-// tokens. Requisições ao /health (health check do container, de alta
-// frequência) são omitidas para não poluir o log.
+// tokens. Requisições a /health e /ready (sondas do container e do monitor
+// externo, de alta frequência) são omitidas para não poluir o log — a falha do
+// /ready já se registra sozinha, com nível ERROR.
 func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/health" {
+		if r.URL.Path == "/health" || r.URL.Path == "/ready" {
 			next.ServeHTTP(w, r)
 			return
 		}
