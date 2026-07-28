@@ -114,3 +114,12 @@ export async function cadastrarPrestadorELogar(
 	await cadastrarPrestador(page, request, nome, email);
 	await entrar(page, email);
 }
+
+// tokenDeConvite espera o email de convite de membro chegar no Mailpit e
+// extrai o token do link `/convite?token=...`.
+export async function tokenDeConvite(
+	request: import('@playwright/test').APIRequestContext,
+	destinatario: string
+): Promise<string> {
+	return buscaTokenNoMailpit(request, destinatario, 'Convite para operar uma agenda');
+}
