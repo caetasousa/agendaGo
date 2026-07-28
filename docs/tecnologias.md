@@ -346,6 +346,71 @@ A imagem é a `flyway/flyway:13-alpine`. A escolha da linha não é indiferente:
 - [Flyway — Como funciona](https://documentation.red-gate.com/fd/migrations-184127470.html)
 - [Alpine — releases e datas de fim de suporte](https://alpinelinux.org/releases/) (o calendário que decide se uma correção vai chegar até você)
 
+### Expand/contract: mudar schema sem janela de manutenção
+
+Migration imutável resolve *como* o schema evolui, mas não resolve o problema de **quem está no ar durante o deploy**. Por alguns minutos, código velho e código novo falam com o mesmo banco. Uma migration que renomeia ou remove coluna quebra a versão que ainda está servindo requisição.
+
+O padrão **expand/contract** divide a mudança em dois deploys:
+
+1. **Expand** — só adiciona. Cria as tabelas novas, copia os dados, e **afrouxa** o que o código novo vai parar de preencher. Nada é removido, então as duas versões do código funcionam ao mesmo tempo. O rollback é voltar a imagem.
+2. **Contract** — só depois de confirmado que ninguém lê mais o que ficou para trás, um deploy seguinte remove. É o passo irreversível, e por isso ele espera.
+
+`V14__separa_identidade_de_provider.sql` é o exemplo no repositório: cria `usuarios` e `provider_membros`, copia cada prestador para as duas, e **solta o `NOT NULL`** das colunas de identidade que ficaram em `providers`. Esse último passo é o que menos parece necessário e é o que mais dói esquecer — sem ele, o código novo (que não escreve mais nessas colunas) não consegue inserir nenhum prestador, e a falha só aparece no primeiro cadastro em produção. Aqui ela apareceu num teste de integração, que aplica a migration num Postgres real e tenta o `INSERT`.
+
+O backfill dessa migration usa outra manobra que vale registrar: ao criar a conta de cada prestador existente, **reusa o mesmo UUID** da agenda. Como `sessions.user_id` e `social_identities.user_id` apontavam para aquele id, as duas tabelas seguiram válidas sem serem migradas — e nenhuma sessão aberta caiu no deploy.
+
+**Para estudar:**
+- [Martin Fowler — ParallelChange (expand/contract)](https://martinfowler.com/bliki/ParallelChange.html) (a formulação original do padrão)
+- [PostgreSQL — ALTER TABLE](https://www.postgresql.org/docs/16/sql-altertable.html) (quais alterações travam a tabela e quais não travam)
+
+> [!IMPORTANT]
+> **A V14 não seguiu esse padrão, de propósito.** Ela cria as tabelas novas e
+> remove as colunas antigas de `providers` no mesmo passo, porque neste momento
+> do projeto o banco de produção é descartável: não há usuário real cuja sessão
+> ou senha precise sobreviver ao deploy. Fazer expand/contract ali seria pagar
+> duas migrations, uma coluna órfã e um deploy extra para proteger dado que não
+> existe. **Quando houver base real, a divisão volta a ser obrigatória** — é por
+> isso que o padrão está documentado aqui, e não porque a V14 o use.
+
+### Autorização por papel, resolvida no domínio
+
+Quem pode fazer o quê numa agenda é decidido em `internal/domain/membro/`, não
+nos handlers. O `Papel` é um enum de string (`dono`, `operador`) e as perguntas
+são métodos: `PodeGerenciarAgenda()`, `PodeAdministrarConta()`. A borda HTTP só
+consulta — `middleware.ExigirGestaoDaAgenda` chama o domínio e devolve 403.
+
+A coluna `papel` é `VARCHAR` **sem `CHECK`**, seguindo a regra do CLAUDE.md: o
+banco guarda o valor, o domínio decide quais valores existem. Isso tem uma
+consequência prática boa — criar um papel novo não exige migration — e uma
+armadilha, que é o motivo de o middleware existir: um valor que o domínio não
+reconhece precisa ser **negado**, não ignorado. É exatamente o que o teste
+`papel desconhecido é barrado com 403` fixa.
+
+**Até onde este desenho escala.** Adicionar um papel custa uma constante e um
+ajuste nos predicados — sem migration, sem tocar em handler. Isso resolve bem a
+próxima meia dúzia de papéis. O que ele **não** resolve:
+
+- **É baseado em papel, não em capacidade.** Cada capacidade nova é um método
+  novo em `Membro`, e cada método precisa responder para todos os papéis: o
+  custo cresce como papéis × capacidades, mantido à mão. O dia em que a resposta
+  virar "depende do plano contratado" ou "depende de qual agenda", a tabela
+  de verdade não cabe mais em dois booleanos.
+- **Um vínculo por pessoa está assumido em vários lugares.** `BuscarPorUsuario`
+  devolve o primeiro, e `Identidade` carrega um `ProviderID` só. Operar duas
+  agendas exige um seletor — de agenda ativa — que hoje não existe.
+- **Papel não é escopo.** `PodeGerenciarAgenda()` responde sim/não para a agenda
+  inteira; não sabe dizer "pode ver os agendamentos mas não mudar o expediente".
+  Granularidade dentro da agenda pede outra estrutura (permissões nomeadas,
+  atribuídas ao papel), não mais métodos.
+
+O gatilho para trocar de desenho é o primeiro requisito que peça **permissão
+por recurso** em vez de por papel. Enquanto a pergunta couber em "que papel esta
+pessoa tem nesta agenda", este modelo é o mais simples que funciona.
+
+**Para estudar:**
+- [NIST — Role-Based Access Control (RBAC)](https://csrc.nist.gov/projects/role-based-access-control) (o modelo canônico e seus níveis)
+- [Google Zanzibar](https://research.google/pubs/pub48190/) (o extremo oposto: autorização por relação, para quando papel não basta)
+
 ### Docker Compose
 
 Orquestra Postgres + Flyway + API (com hot reload via [Air](https://github.com/air-verse/air)) + frontend em um único `docker compose up`, documentado no `docker-compose.yml` da raiz. Produção tem um compose próprio (`docker-compose.prod.yml`) que **não builda nada**: consome as imagens já publicadas no GHCR e põe o Caddy na frente — ver `docs/producao.md`.

@@ -415,6 +415,67 @@ Valores centralizados em `config/agendamento.go` e no domínio:
 
 ---
 
+## 6️⃣ 👥 Conta e agenda são coisas diferentes
+
+Um prestador não é uma linha só. São três:
+
+| Peça | O que é | Onde |
+|---|---|---|
+| **Conta** | quem loga: email, senha, telefone, e se está banido | `usuarios` |
+| **Agenda** | o que se opera: expediente, duração, buffer, se oferta horários | `providers` |
+| **Vínculo** | liga as duas, com um papel (`dono` ou `operador`) | `provider_membros` |
+
+O motivo é simples: **uma segunda pessoa precisa poder operar a agenda sem
+compartilhar a senha do dono**. Recepcionista, secretária, sócia. Enquanto
+login e agenda fossem a mesma linha, a única forma de dar acesso era entregar a
+credencial.
+
+Consequências que valem saber:
+
+- **O banimento é da conta, não da agenda.** Um prestador banido some da
+  vitrine e para de ofertar horários — mas quem responde por isso é `usuarios`,
+  e a agenda sozinha não sabe dizer se está banida. Por isso vitrine, slots e
+  disponibilidade consultam o dono antes de ofertar qualquer coisa.
+- **Os agendamentos pertencem à agenda, não a quem operou.** `appointments`
+  aponta para o `provider_id`. Quem marcou é irrelevante para o histórico.
+- **Hoje todo mundo tem exatamente um vínculo, como `dono`.** A migração V14
+  converteu cada prestador existente em conta + agenda + vínculo, reusando o
+  mesmo id — por isso nenhuma sessão caiu no deploy.
+- **A UI de convidar alguém ainda não existe.** O modelo está pronto; a tela é
+  trabalho de outra fase.
+
+### Papéis: o que cada um pode
+
+| | `dono` | `operador` |
+|---|:---:|:---:|
+| Operar a agenda — expediente, duração, buffer, agendamentos | ✅ | ✅ |
+| Administrar a conta — encerrar, convidar e remover membros | ✅ | ❌ |
+
+As duas perguntas vivem no domínio, em `internal/domain/membro/`, como
+`PodeGerenciarAgenda()` e `PodeAdministrarConta()` — não espalhadas em `if`s
+pelos handlers. Quem responde "este papel pode fazer isto?" é um arquivo só.
+
+A checagem acontece na borda HTTP: o grupo de `/providers/me/*` passa por
+`ExigirGestaoDaAgenda`, e o que for exclusivo do dono passará por
+`ExigirAdministracaoDaConta`. **Hoje os dois papéis passam no primeiro**, então
+o middleware não muda comportamento nenhum — ele existe pela ordem em que as
+coisas dão errado. Sem ele, um papel novo e mais restrito nasceria com acesso a
+todas as rotas e só o perderia onde alguém lembrasse de checar; com ele, o
+padrão é negar.
+
+> [!NOTE]
+> **Ainda não existe rota exclusiva do dono.** `PodeAdministrarConta` e o
+> middleware correspondente estão prontos e testados, mas nada em produção os
+> usa — a primeira rota a precisar deles será a de convidar um membro.
+
+> [!NOTE]
+> **`clients` ficou de fora, de propósito.** Cliente não tem agenda nem segunda
+> pessoa operando, e o modelo de convidado (`TemConta() == false`) não cabe numa
+> tabela de identidade de login. Unificar seria uma refatoração grande sem
+> demanda que a justifique.
+
+---
+
 ## 🗺️ Mapa para o código
 
 <details>
@@ -424,7 +485,9 @@ Valores centralizados em `config/agendamento.go` e no domínio:
 
 | Conceito | Local | Conteúdo |
 |---|---|---|
-| Prestador | `internal/domain/provider/` | `ativo`, `aceita_agendamentos`, `descanso_minutos`, `duracao_atendimento_minutos`, `HorariosPadrao` |
+| Conta (quem loga) | `internal/domain/usuario/` | `email`, `senha_hash`, `telefone`, `ativo` (moderação) |
+| Vínculo conta↔agenda | `internal/domain/membro/` | `Papel` (`dono` \| `operador`), `PodeGerenciarAgenda`, `PodeAdministrarConta` |
+| Agenda do prestador | `internal/domain/provider/` | `nome`, `aceita_agendamentos`, `descanso_minutos`, `duracao_atendimento_minutos`, `HorariosPadrao` |
 | Cliente | `internal/domain/client/` | conta ou convidado, `telefone` (contato), `ativo` (moderação) |
 | Admin | `internal/domain/admin/` | moderador; semeado por env, sem cadastro |
 | Disponibilidade | `internal/domain/availability/` | `TimeBlock`, `DateException` (bloqueio/extra), validação estrita |
