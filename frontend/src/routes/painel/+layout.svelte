@@ -8,7 +8,7 @@
 	const ehPrestador = $derived(sessao.usuario?.tipo === 'provider');
 	const permiteMarcacao = $derived(sessao.usuario?.provider?.permiteMarcacaoPeloPrestador ?? false);
 
-	type Item = { href: string; rotulo: string; icone: 'inicio' | 'agendamentos' | 'disponibilidade' | 'preferencias' | 'marcar' | 'agendar' };
+	type Item = { href: string; rotulo: string; icone: 'inicio' | 'agendamentos' | 'disponibilidade' | 'preferencias' | 'marcar' | 'agendar' | 'equipe' };
 	type Secao = { titulo: string | null; itens: Item[] };
 
 	// Agrupamento por intenção: o que é operação do dia a dia fica separado do
@@ -41,7 +41,8 @@
 				titulo: 'Sua agenda',
 				itens: [
 					{ href: '/painel/disponibilidade', rotulo: 'Disponibilidade', icone: 'disponibilidade' },
-					{ href: '/painel/preferencias', rotulo: 'Preferências', icone: 'preferencias' }
+					{ href: '/painel/preferencias', rotulo: 'Preferências', icone: 'preferencias' },
+					{ href: '/painel/equipe', rotulo: 'Equipe', icone: 'equipe' }
 				]
 			}
 		];
