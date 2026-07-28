@@ -120,6 +120,15 @@ func (r *MembroMemoria) EmailDoDono(providerID string) (string, error) {
 	return "", nil
 }
 
+// Remover apaga um vínculo, espelhando o contrato do Postgres — que não erra
+// quando o id não existe.
+func (r *MembroMemoria) Remover(id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.dados, id)
+	return nil
+}
+
 // ListarPorProvider devolve todos os vínculos de uma agenda, ordenados por
 // criação.
 func (r *MembroMemoria) ListarPorProvider(providerID string) ([]*membro.Membro, error) {

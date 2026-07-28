@@ -111,6 +111,13 @@ func (r *MembroPostgres) EmailDoDono(providerID string) (string, error) {
 	return email, err
 }
 
+// Remover apaga um vínculo, revogando o acesso daquela pessoa à agenda.
+func (r *MembroPostgres) Remover(id string) error {
+	_, err := r.pool.Exec(context.Background(),
+		`DELETE FROM provider_membros WHERE id = $1`, id)
+	return err
+}
+
 // ListarPorProvider devolve todos os vínculos de uma agenda, ordenados por
 // criação — quem tem acesso a ela e com qual papel.
 func (r *MembroPostgres) ListarPorProvider(providerID string) ([]*membro.Membro, error) {
