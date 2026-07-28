@@ -60,7 +60,20 @@ Mensagens de commit seguem o padrão Conventional Commits, sempre em português:
 
 **Sempre perguntar antes de fazer `git commit`**, sem exceção — mesmo com a
 alteração pronta, revisada e os testes passando. Terminar o trabalho, apresentar
-o que mudou e **aguardar confirmação explícita**. Vale igualmente para `git push`.
+o que mudou e **aguardar confirmação explícita**.
 
 Uma autorização vale só para os commits daquele pedido: pedir de novo na próxima
-vez.
+vez. Pedir para *construir* alguma coisa **não** autoriza commitar.
+
+### Nunca dar push — e nem perguntar
+
+**`git push` é sempre do usuário, nunca do assistente.** Não executar, e
+**não perguntar se pode**: a pergunta já empurra uma decisão que não é sua.
+
+Terminado o trabalho e feitos os commits autorizados, apenas informar que está
+pronto — quantos commits, o que entrou — e parar por aí. Quem decide se e quando
+publicar é o usuário.
+
+Isso vale mesmo quando o push parece a consequência natural do que foi pedido
+(implantar, ver a esteira rodar, validar em produção). Nesses casos, descrever o
+que aconteceria e deixar a decisão de lado do usuário.
