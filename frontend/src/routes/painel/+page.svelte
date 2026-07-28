@@ -11,7 +11,11 @@
 	let { data }: { data: PageData } = $props();
 
 	const ehPrestador = $derived(data.usuario.tipo === 'provider');
-	const linkAgendamento = $derived(`${page.url.origin}/agendar/${data.usuario.id}`);
+	// O link público aponta para a AGENDA, não para a conta de quem está logado.
+	// Os dois ids coincidem nos prestadores anteriores à separação (a migração
+	// reusou o UUID), mas divergem em toda conta criada depois — usar o da
+	// conta aqui levaria a um link para um prestador que não existe.
+	const linkAgendamento = $derived(`${page.url.origin}/agendar/${data.usuario.provider?.id ?? ''}`);
 
 	// Só o primeiro nome na saudação: o nome completo vive na sidebar, e é o que
 	// fazia o título quebrar em duas linhas quando era longo.

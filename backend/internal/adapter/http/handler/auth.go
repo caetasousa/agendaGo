@@ -175,19 +175,26 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	responderJSON(w, http.StatusOK, dto.MeResponse{
-		ID:                           perfil.ID,
-		Nome:                         perfil.Nome,
-		Email:                        perfil.Email,
-		Telefone:                     perfil.Telefone,
-		Tipo:                         perfil.Tipo,
-		AceitaAgendamentos:           perfil.AceitaAgendamentos,
-		DescansoMinutos:              perfil.DescansoMinutos,
-		DuracaoAtendimentoMinutos:    perfil.DuracaoAtendimentoMinutos,
-		HorariosPadrao:               blocosParaDTO(perfil.HorariosPadrao),
-		PermiteMarcacaoPeloPrestador: perfil.PermiteMarcacaoPeloPrestador,
-		TelefonePendente:             perfil.TelefonePendente,
-	})
+	resp := dto.MeResponse{
+		ID:               perfil.ID,
+		Nome:             perfil.Nome,
+		Email:            perfil.Email,
+		Telefone:         perfil.Telefone,
+		Tipo:             perfil.Tipo,
+		TelefonePendente: perfil.TelefonePendente,
+	}
+	if perfil.Provider != nil {
+		resp.Provider = &dto.ProviderDoMeResponse{
+			ID:                           perfil.Provider.ID,
+			Papel:                        perfil.Provider.Papel,
+			AceitaAgendamentos:           perfil.Provider.AceitaAgendamentos,
+			DescansoMinutos:              perfil.Provider.DescansoMinutos,
+			DuracaoAtendimentoMinutos:    perfil.Provider.DuracaoAtendimentoMinutos,
+			HorariosPadrao:               blocosParaDTO(perfil.Provider.HorariosPadrao),
+			PermiteMarcacaoPeloPrestador: perfil.Provider.PermiteMarcacaoPeloPrestador,
+		}
+	}
+	responderJSON(w, http.StatusOK, resp)
 }
 
 func decodificarLogin(w http.ResponseWriter, r *http.Request) (dto.LoginRequest, bool) {

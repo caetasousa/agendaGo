@@ -26,11 +26,11 @@ export async function load(): Promise<{
 		// telefone pendente é um placeholder técnico, não um valor real — o
 		// campo começa vazio para o prestador digitar o telefone de verdade
 		telefone: usuario.telefonePendente ? '' : (usuario.telefone ?? ''),
-		aceitaAgendamentos: usuario.aceitaAgendamentos ?? false,
-		descansoMinutos: usuario.descansoMinutos ?? 0,
-		duracaoAtendimentoMinutos: usuario.duracaoAtendimentoMinutos ?? 60,
-		horariosPadrao: usuario.horariosPadrao ?? [],
-		permiteMarcacaoPeloPrestador: usuario.permiteMarcacaoPeloPrestador ?? true,
+		aceitaAgendamentos: usuario.provider?.aceitaAgendamentos ?? false,
+		descansoMinutos: usuario.provider?.descansoMinutos ?? 0,
+		duracaoAtendimentoMinutos: usuario.provider?.duracaoAtendimentoMinutos ?? 60,
+		horariosPadrao: usuario.provider?.horariosPadrao ?? [],
+		permiteMarcacaoPeloPrestador: usuario.provider?.permiteMarcacaoPeloPrestador ?? true,
 		telefonePendente: usuario.telefonePendente ?? false
 	};
 }

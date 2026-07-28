@@ -32,17 +32,28 @@ func (r RedefinirSenhaRequest) Validar() error {
 	return validate.Struct(r)
 }
 
-type MeResponse struct {
+// ProviderDoMeResponse é a agenda que o usuário autenticado opera, e o papel
+// dele nela. Fica num objeto próprio para separar, na resposta, o que é da
+// conta (email, telefone) do que é da agenda — quando uma pessoa puder operar
+// a agenda de outra, misturar os dois no topo deixaria de fazer sentido.
+type ProviderDoMeResponse struct {
 	ID                           string     `json:"id"`
-	Nome                         string     `json:"nome"`
-	Email                        string     `json:"email"`
-	Telefone                     string     `json:"telefone,omitempty"`
-	Tipo                         string     `json:"tipo"`
-	AceitaAgendamentos           *bool      `json:"aceitaAgendamentos,omitempty"`
-	DescansoMinutos              *int       `json:"descansoMinutos,omitempty"`
-	DuracaoAtendimentoMinutos    *int       `json:"duracaoAtendimentoMinutos,omitempty"`
-	HorariosPadrao               []BlocoDTO `json:"horariosPadrao,omitempty"`
-	PermiteMarcacaoPeloPrestador *bool      `json:"permiteMarcacaoPeloPrestador,omitempty"`
+	Papel                        string     `json:"papel"`
+	AceitaAgendamentos           bool       `json:"aceitaAgendamentos"`
+	DescansoMinutos              int        `json:"descansoMinutos"`
+	DuracaoAtendimentoMinutos    int        `json:"duracaoAtendimentoMinutos"`
+	HorariosPadrao               []BlocoDTO `json:"horariosPadrao"`
+	PermiteMarcacaoPeloPrestador bool       `json:"permiteMarcacaoPeloPrestador"`
+}
+
+type MeResponse struct {
+	ID       string `json:"id"`
+	Nome     string `json:"nome"`
+	Email    string `json:"email"`
+	Telefone string `json:"telefone,omitempty"`
+	Tipo     string `json:"tipo"`
+	// Provider só vem para o tipo provider — ausente para cliente e admin.
+	Provider *ProviderDoMeResponse `json:"provider,omitempty"`
 	// TelefonePendente é true quando o prestador entrou via login social e
 	// ainda não confirmou um telefone de verdade — o frontend usa isso para
 	// travar o painel em Preferências até ele completar o cadastro.

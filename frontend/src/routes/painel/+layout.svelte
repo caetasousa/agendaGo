@@ -6,7 +6,7 @@
 	let { children } = $props();
 
 	const ehPrestador = $derived(sessao.usuario?.tipo === 'provider');
-	const permiteMarcacao = $derived(sessao.usuario?.permiteMarcacaoPeloPrestador ?? false);
+	const permiteMarcacao = $derived(sessao.usuario?.provider?.permiteMarcacaoPeloPrestador ?? false);
 
 	type Item = { href: string; rotulo: string; icone: 'inicio' | 'agendamentos' | 'disponibilidade' | 'preferencias' | 'marcar' | 'agendar' };
 	type Secao = { titulo: string | null; itens: Item[] };

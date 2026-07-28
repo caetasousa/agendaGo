@@ -15,17 +15,28 @@ export interface LoginResponse {
 	tipo: string;
 }
 
+// A agenda que o usuário autenticado opera, e o papel dele nela. Fica num
+// objeto próprio para separar o que é da conta (email, telefone) do que é da
+// agenda — quando uma pessoa puder operar a agenda de outra, misturar os dois
+// no topo deixaria de fazer sentido.
+export interface ProviderDoMe {
+	id: string;
+	papel: string;
+	aceitaAgendamentos: boolean;
+	descansoMinutos: number;
+	duracaoAtendimentoMinutos: number;
+	horariosPadrao: Bloco[];
+	permiteMarcacaoPeloPrestador: boolean;
+}
+
 export interface MeResponse {
 	id: string;
 	nome: string;
 	email: string;
 	telefone?: string;
 	tipo: string;
-	aceitaAgendamentos?: boolean;
-	descansoMinutos?: number;
-	duracaoAtendimentoMinutos?: number;
-	horariosPadrao?: Bloco[];
-	permiteMarcacaoPeloPrestador?: boolean;
+	// provider só vem para o tipo provider — ausente para cliente e admin.
+	provider?: ProviderDoMe;
 	// telefonePendente é true quando o prestador entrou via login social e
 	// ainda não confirmou um telefone de verdade — travamos o painel em
 	// Preferências até ele completar o cadastro.
