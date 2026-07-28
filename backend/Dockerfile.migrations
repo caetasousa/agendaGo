@@ -9,15 +9,30 @@
 # está no Alpine 3.23 e é reconstruída com frequência — zero CRITICAL.
 FROM flyway/flyway:13-alpine
 
-# Atualiza os pacotes do sistema por cima da base. A imagem oficial do Flyway é
-# reconstruída em ritmo próprio, e entre uma reconstrução e outra ela acumula
-# correção já publicada pelo Alpine — aqui isso valia 5 dos 20 HIGH que o Trivy
-# acusava (libexpat, p11-kit). Os 15 restantes vivem nos JARs do próprio Flyway
-# (netty, jackson, mssql-jdbc) e só somem quando o upstream republicar: não há
-# tag mais nova que a 13 para onde subir, e reempacotar as dependências Java de
-# uma ferramenta de terceiro custaria mais do que o risco justifica — o
-# container roda por segundos, sem porta exposta, e só fala com o Postgres
-# interno do compose.
-RUN apk upgrade --no-cache
+# Duas limpezas, pelo mesmo motivo: o que não roda aqui não deveria vir junto.
+#
+# 1) apk upgrade — a imagem oficial do Flyway é reconstruída em ritmo próprio, e
+#    entre uma reconstrução e outra acumula correção já publicada pelo Alpine.
+#
+# 2) Remoção dos drivers e libs que este projeto nunca toca. O Flyway oficial
+#    embarca 290 MB de drivers para vinte e tantos bancos; o agendaGo fala com
+#    PostgreSQL e nada mais. Couchbase, Databricks e SQL Server carregavam netty,
+#    jackson, lz4 e mssql-jdbc — e eram a origem de TODOS os alertas de
+#    vulnerabilidade da aba Security do repositório. É a mesma jogada já aplicada
+#    ao npm em frontend/Dockerfile.prod: a correção é remover, não atualizar,
+#    porque não existe versão corrigida de uma dependência que não deveria estar
+#    aqui. Resultado medido: 15 HIGH + 24 MEDIUM → 0 + 0.
+#
+# CUIDADO ao mexer nesta lista: o Flyway resolve os plugins de banco por
+# ServiceLoader e os carrega avidamente. Remover /flyway/drivers/cassandra, por
+# exemplo, derruba o boot com ClassNotFoundException de com.datastax.oss.driver,
+# mesmo sem nenhum uso de Cassandra. Removeu algo? Rode as migrations contra um
+# Postgres de verdade antes de confiar — o teste que vale é `flyway migrate`
+# aplicando as 13 migrations e criando as 15 tabelas.
+RUN apk upgrade --no-cache && \
+    rm -rf /flyway/drivers/couchbase \
+           /flyway/drivers/databricks-jdbc-*.jar \
+           /flyway/drivers/mssql-jdbc-*.jar \
+           /flyway/lib/netty
 
 COPY migrations /flyway/sql
