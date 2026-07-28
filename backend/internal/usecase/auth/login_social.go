@@ -6,10 +6,12 @@ import (
 	"time"
 
 	"agendago/internal/domain/client"
+	"agendago/internal/domain/membro"
 	"agendago/internal/domain/oauthstate"
 	"agendago/internal/domain/provider"
 	"agendago/internal/domain/session"
 	"agendago/internal/domain/socialidentity"
+	"agendago/internal/domain/usuario"
 	"agendago/internal/pkg/token"
 
 	"github.com/google/uuid"
@@ -82,9 +84,19 @@ type criadorClient interface {
 	Salvar(c *client.Client) error
 }
 
-// criadorProvider cria e persiste um novo prestador sem senha (login social).
+// criadorProvider cria e persiste uma nova agenda sem senha (login social).
 type criadorProvider interface {
 	Salvar(p *provider.Provider) error
+}
+
+// criadorUsuario cria e persiste a identidade de quem loga.
+type criadorUsuario interface {
+	Salvar(u *usuario.Usuario) error
+}
+
+// criadorMembro cria e persiste o vínculo entre identidade e agenda.
+type criadorMembro interface {
+	Salvar(m *membro.Membro) error
 }
 
 // PublicoLoginSocial identifica com que intenção o fluxo social começou.
@@ -108,10 +120,14 @@ const (
 type LoginSocialUseCase struct {
 	google       provedorOIDC
 	clients      contaClient
-	providers    contaProvider
+	usuarios     contaUsuario
+	membros      buscadorMembro
+	providers    buscadorProvider
 	admins       buscadorAdmin
 	criaClient   criadorClient
+	criaUsuario  criadorUsuario
 	criaProvider criadorProvider
+	criaMembro   criadorMembro
 	identidades  repositorioIdentidadeSocial
 	states       repositorioOAuthState
 	sessoes      repositorioSessao
@@ -123,10 +139,14 @@ type LoginSocialUseCase struct {
 func NovoLoginSocialUseCase(
 	google provedorOIDC,
 	clients contaClient,
-	providers contaProvider,
+	usuarios contaUsuario,
+	membros buscadorMembro,
+	providers buscadorProvider,
 	admins buscadorAdmin,
 	criaClient criadorClient,
+	criaUsuario criadorUsuario,
 	criaProvider criadorProvider,
+	criaMembro criadorMembro,
 	identidades repositorioIdentidadeSocial,
 	states repositorioOAuthState,
 	sessoes repositorioSessao,
@@ -135,10 +155,14 @@ func NovoLoginSocialUseCase(
 	return &LoginSocialUseCase{
 		google:       google,
 		clients:      clients,
+		usuarios:     usuarios,
+		membros:      membros,
 		providers:    providers,
 		admins:       admins,
 		criaClient:   criaClient,
+		criaUsuario:  criaUsuario,
 		criaProvider: criaProvider,
+		criaMembro:   criaMembro,
 		identidades:  identidades,
 		states:       states,
 		sessoes:      sessoes,
@@ -246,7 +270,7 @@ func (uc *LoginSocialUseCase) resolverPorEmail(id *socialidentity.IdentidadeOIDC
 		return nil, ErrEmailReservadoAdmin
 	}
 
-	prestador, err := uc.providers.BuscarPorEmail(id.Email)
+	prestador, err := uc.usuarios.BuscarPorEmail(id.Email)
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +310,7 @@ func (uc *LoginSocialUseCase) resolverClient(id *socialidentity.IdentidadeOIDC) 
 	// o email não pode já pertencer a um prestador — mesma regra do
 	// cadastro por senha (ver usecase/provider/cadastrar.go): um email só
 	// existe em um dos dois papéis no sistema.
-	prestadorExistente, err := uc.providers.BuscarPorEmail(id.Email)
+	prestadorExistente, err := uc.usuarios.BuscarPorEmail(id.Email)
 	if err != nil {
 		return nil, err
 	}
@@ -354,35 +378,84 @@ func (uc *LoginSocialUseCase) resolverProvider(id *socialidentity.IdentidadeOIDC
 		return nil, ErrEmailJaCadastradoOutroTipo
 	}
 
-	existente, err := uc.providers.BuscarPorEmail(id.Email)
+	existente, err := uc.usuarios.BuscarPorEmail(id.Email)
 	if err != nil {
 		return nil, err
 	}
 
+	var u *usuario.Usuario
 	var p *provider.Provider
 	if existente != nil {
-		p = existente
+		u = existente
+		vinculo, err := uc.membros.BuscarPorUsuario(u.ID)
+		if err != nil {
+			return nil, err
+		}
+		if vinculo == nil {
+			return nil, ErrCredenciaisInvalidas
+		}
+		if p, err = uc.providers.BuscarPorID(vinculo.ProviderID); err != nil {
+			return nil, err
+		}
+		if p == nil {
+			return nil, ErrCredenciaisInvalidas
+		}
 	} else {
-		senhaHash, err := uc.senhaSentinela()
-		if err != nil {
-			return nil, err
-		}
-		p, err = provider.Novo(uuid.NewString(), id.Nome, id.Email, TelefonePendente, senhaHash)
-		if err != nil {
-			return nil, err
-		}
-		if err := uc.criaProvider.Salvar(p); err != nil {
+		if u, p, err = uc.criarContaDePrestador(id); err != nil {
 			return nil, err
 		}
 	}
-	if !p.Ativo {
+	if !u.Ativo {
 		return nil, ErrUsuarioInativo
 	}
 
-	if err := uc.vincularIdentidade(id, p.ID, session.TipoProvider); err != nil {
+	// A identidade social se vincula à CONTA, não à agenda: quem entra pelo
+	// Google entra como pessoa, e a agenda vem do vínculo.
+	if err := uc.vincularIdentidade(id, u.ID, session.TipoProvider); err != nil {
 		return nil, err
 	}
-	return uc.novaSessao(p.ID, p.Nome, session.TipoProvider)
+	return uc.novaSessao(u.ID, p.Nome, session.TipoProvider)
+}
+
+// criarContaDePrestador cria as três peças de um prestador novo: a identidade,
+// a agenda e o vínculo de dono entre as duas. O usuário nasce com
+// TelefonePendente — o frontend detecta isso (via PerfilOutput.TelefonePendente)
+// e força a ida a Preferências antes de liberar o resto do painel.
+//
+// Sem transação, como o resto dos usecases: os três repositórios são chamados
+// em sequência e cada um comita o seu. Uma falha no meio deixa conta sem
+// vínculo, que o login trata como credencial inválida em vez de deixar entrar
+// pela metade.
+func (uc *LoginSocialUseCase) criarContaDePrestador(id *socialidentity.IdentidadeOIDC) (*usuario.Usuario, *provider.Provider, error) {
+	senhaHash, err := uc.senhaSentinela()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	u, err := usuario.Novo(uuid.NewString(), id.Email, TelefonePendente, senhaHash)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := uc.criaUsuario.Salvar(u); err != nil {
+		return nil, nil, err
+	}
+
+	p, err := provider.Novo(uuid.NewString(), id.Nome)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := uc.criaProvider.Salvar(p); err != nil {
+		return nil, nil, err
+	}
+
+	vinculo, err := membro.Novo(uuid.NewString(), u.ID, p.ID, membro.PapelDono)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := uc.criaMembro.Salvar(vinculo); err != nil {
+		return nil, nil, err
+	}
+	return u, p, nil
 }
 
 func (uc *LoginSocialUseCase) vincularIdentidade(id *socialidentity.IdentidadeOIDC, userID string, userType session.TipoUsuario) error {
@@ -394,14 +467,30 @@ func (uc *LoginSocialUseCase) criarSessaoParaUsuarioExistente(userID string, use
 	var nome string
 	var ativo bool
 	if userType == session.TipoProvider {
-		p, err := uc.providers.BuscarPorID(userID)
+		// A identidade social aponta para a CONTA; o nome exibido vem da
+		// agenda que ela opera, resolvida pelo vínculo.
+		u, err := uc.usuarios.BuscarPorID(userID)
+		if err != nil {
+			return nil, err
+		}
+		if u == nil {
+			return nil, ErrCredenciaisInvalidas
+		}
+		vinculo, err := uc.membros.BuscarPorUsuario(u.ID)
+		if err != nil {
+			return nil, err
+		}
+		if vinculo == nil {
+			return nil, ErrCredenciaisInvalidas
+		}
+		p, err := uc.providers.BuscarPorID(vinculo.ProviderID)
 		if err != nil {
 			return nil, err
 		}
 		if p == nil {
 			return nil, ErrCredenciaisInvalidas
 		}
-		nome, ativo = p.Nome, p.Ativo
+		nome, ativo = p.Nome, u.Ativo
 	} else {
 		c, err := uc.clients.BuscarPorID(userID)
 		if err != nil {

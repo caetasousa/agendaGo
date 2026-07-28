@@ -11,10 +11,19 @@ import (
 type ProviderMemoria struct {
 	mu    sync.RWMutex
 	dados map[string]*provider.Provider
+	// membros responde quem é o dono e se ele está ativo — no Postgres isso é
+	// um join. Pode ser nil nos testes que não exercitam a vitrine.
+	membros *MembroMemoria
 }
 
 func NovoProviderMemoria() *ProviderMemoria {
 	return &ProviderMemoria{dados: make(map[string]*provider.Provider)}
+}
+
+// NovoProviderMemoriaCom liga o fake de agendas ao de vínculos, necessário
+// para ListarAtivos filtrar como o join do Postgres filtra.
+func NovoProviderMemoriaCom(membros *MembroMemoria) *ProviderMemoria {
+	return &ProviderMemoria{dados: make(map[string]*provider.Provider), membros: membros}
 }
 
 func (r *ProviderMemoria) Salvar(p *provider.Provider) error {
@@ -22,19 +31,6 @@ func (r *ProviderMemoria) Salvar(p *provider.Provider) error {
 	defer r.mu.Unlock()
 	r.dados[p.ID] = p
 	return nil
-}
-
-// BuscarPorEmail retorna (nil, nil) quando não há prestador com o email,
-// seguindo o mesmo contrato do repositório Postgres.
-func (r *ProviderMemoria) BuscarPorEmail(email string) (*provider.Provider, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	for _, p := range r.dados {
-		if p.Email == email {
-			return p, nil
-		}
-	}
-	return nil, nil
 }
 
 // BuscarPorID retorna (nil, nil) quando não há prestador com o id, seguindo
@@ -58,16 +54,6 @@ func (r *ProviderMemoria) Atualizar(p *provider.Provider) error {
 	return nil
 }
 
-// AtualizarSenha persiste um novo hash de senha, espelhando o contrato do Postgres.
-func (r *ProviderMemoria) AtualizarSenha(id, senhaHash string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if p, ok := r.dados[id]; ok {
-		p.SenhaHash = senhaHash
-	}
-	return nil
-}
-
 // Listar devolve uma página de prestadores (inclusive banidos, como a visão de
 // moderação) e o total. A ordenação por nome+id espelha o ORDER BY do
 // Postgres: sem ela, a ordem viria do mapa — aleatória — e a paginação
@@ -77,10 +63,18 @@ func (r *ProviderMemoria) Listar(pag paging.Pagina) ([]*provider.Provider, int, 
 	return fatiar(todos, pag), len(todos), nil
 }
 
-// ListarAtivos devolve uma página de prestadores ativos e o total de ativos —
-// a vitrine pública.
+// ListarAtivos devolve uma página das agendas cujo dono está ativo e o total
+// delas — a vitrine pública. O banimento mora em usuarios, então o fake
+// precisa do de vínculos para responder como o join do Postgres responderia;
+// sem ele, nenhuma agenda é considerada ativa.
 func (r *ProviderMemoria) ListarAtivos(pag paging.Pagina) ([]*provider.Provider, int, error) {
-	ativos := r.ordenadosPorNome(func(p *provider.Provider) bool { return p.Ativo })
+	ativos := r.ordenadosPorNome(func(p *provider.Provider) bool {
+		if r.membros == nil {
+			return false
+		}
+		ativo, err := r.membros.DonoAtivo(p.ID)
+		return err == nil && ativo
+	})
 	return fatiar(ativos, pag), len(ativos), nil
 }
 

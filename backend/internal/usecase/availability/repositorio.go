@@ -26,7 +26,14 @@ type repositorioDateException interface {
 	Remover(id string) error
 }
 
-// repositorioProvider busca o prestador para checar AceitaAgendamentos.
+// repositorioProvider busca a agenda para checar AceitaAgendamentos.
 type repositorioProvider interface {
 	BuscarPorID(id string) (*provider.Provider, error)
+}
+
+// repositorioMembro responde se o dono da agenda está ativo — banimento é da
+// conta, não da agenda, e sem isso um prestador banido continuaria ofertando
+// horários.
+type repositorioMembro interface {
+	DonoAtivo(providerID string) (bool, error)
 }

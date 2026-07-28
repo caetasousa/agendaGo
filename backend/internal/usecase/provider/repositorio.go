@@ -5,13 +5,27 @@ import (
 
 	"agendago/internal/domain/admin"
 	"agendago/internal/domain/client"
+	"agendago/internal/domain/membro"
 	"agendago/internal/domain/provider"
 	"agendago/internal/domain/signup"
+	"agendago/internal/domain/usuario"
 )
 
+// repositorioCadastrar persiste a agenda de um prestador novo.
 type repositorioCadastrar interface {
 	Salvar(p *provider.Provider) error
-	BuscarPorEmail(email string) (*provider.Provider, error)
+}
+
+// repositorioUsuarioCadastro persiste a identidade e verifica se o email já
+// está em uso do lado prestador.
+type repositorioUsuarioCadastro interface {
+	Salvar(u *usuario.Usuario) error
+	BuscarPorEmail(email string) (*usuario.Usuario, error)
+}
+
+// repositorioMembroCadastro persiste o vínculo entre identidade e agenda.
+type repositorioMembroCadastro interface {
+	Salvar(m *membro.Membro) error
 }
 
 // buscadorClient verifica se o email já pertence a um cliente/convidado — o
@@ -44,10 +58,17 @@ type enviadorCadastro interface {
 	EnviarAvisoContaExistente(email, nome string)
 }
 
-// repositorioPreferencias busca e persiste as preferências mutáveis do prestador.
+// repositorioPreferencias busca e persiste as preferências mutáveis da agenda.
 type repositorioPreferencias interface {
 	BuscarPorID(id string) (*provider.Provider, error)
 	Atualizar(p *provider.Provider) error
+}
+
+// repositorioUsuario busca e persiste os dados mutáveis da conta — hoje só o
+// telefone, que a tela de Preferências edita junto com os da agenda.
+type repositorioUsuario interface {
+	BuscarPorID(id string) (*usuario.Usuario, error)
+	Atualizar(u *usuario.Usuario) error
 }
 
 // hasherSenha gera o hash da senha em texto puro para persistência.

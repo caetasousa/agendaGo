@@ -81,7 +81,10 @@ func (uc *SolicitarCadastroUseCase) Executar(in SolicitarCadastroInput) error {
 		return err
 	}
 	if prestador != nil {
-		uc.enviador.EnviarAvisoContaExistente(in.Email, prestador.Nome)
+		// Saúda com o nome digitado agora, não com o da conta que já existe: a
+		// conta é de quem recebe o email, e o nome dela não precisa voltar
+		// para quem tentou o cadastro.
+		uc.enviador.EnviarAvisoContaExistente(in.Email, in.Nome)
 		return nil
 	}
 

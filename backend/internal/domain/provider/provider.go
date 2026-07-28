@@ -7,17 +7,16 @@ import (
 	"agendago/internal/domain/availability"
 )
 
-// Provider representa um prestador de serviço no sistema de agendamento.
-// Ativo distingue banimento (moderação pelo admin) de AceitaAgendamentos
-// (escolha do próprio prestador): um prestador inativo não loga, some da
-// vitrine e não oferta horários, mesmo com a agenda ativada.
+// Provider representa a AGENDA de um prestador de serviço: expediente,
+// duração, buffer e se está ofertando horários.
+//
+// Identidade — email, senha, telefone, situação da conta — não mora aqui: é do
+// domínio usuario, ligado a esta agenda pelo domínio membro. A separação
+// existe para que uma segunda pessoa (recepção, sócia) possa operar a mesma
+// agenda com login próprio.
 type Provider struct {
 	ID                        string
 	Nome                      string
-	Email                     string
-	Telefone                  string
-	SenhaHash                 string
-	Ativo                     bool
 	AceitaAgendamentos        bool
 	DescansoMinutos           int
 	DuracaoAtendimentoMinutos int
@@ -32,46 +31,26 @@ type Provider struct {
 }
 
 var (
-	// ErrNomeObrigatorio é retornado quando o nome do prestador está vazio.
+	// ErrNomeObrigatorio é retornado quando o nome da agenda está vazio.
 	ErrNomeObrigatorio = errors.New("nome é obrigatório")
-	// ErrEmailObrigatorio é retornado quando o email do prestador está vazio.
-	ErrEmailObrigatorio = errors.New("email é obrigatório")
-	// ErrSenhaObrigatoria é retornado quando o hash de senha do prestador está vazio.
-	ErrSenhaObrigatoria = errors.New("senha é obrigatória")
-	// ErrTelefoneObrigatorio é retornado quando o telefone do prestador está vazio ou é muito curto.
-	ErrTelefoneObrigatorio = errors.New("telefone é obrigatório")
 	// ErrDescansoInvalido é retornado quando o tempo de descanso é negativo.
 	ErrDescansoInvalido = errors.New("descanso não pode ser negativo")
 	// ErrDuracaoInvalida é retornado quando a duração do atendimento está fora de [15, 1440] minutos.
 	ErrDuracaoInvalida = errors.New("duração do atendimento deve ficar entre 15 minutos e um dia")
 )
 
-// Novo cria um Provider com agenda desativada por padrão. Recebe o hash da
-// senha já calculado — o domínio não conhece o algoritmo de hash usado.
-// Retorna erro se nome, email ou senhaHash estiverem vazios, ou se o telefone
-// for inválido (validação leve: ao menos 8 dígitos).
-func Novo(id, nome, email, telefone, senhaHash string) (*Provider, error) {
+// Novo cria uma agenda com atendimentos desativados por padrão. Retorna erro
+// se o nome estiver vazio. Credencial nenhuma passa por aqui: quem loga é o
+// usuario, ligado a esta agenda por um membro.
+func Novo(id, nome string) (*Provider, error) {
 	if nome == "" {
 		return nil, ErrNomeObrigatorio
-	}
-	if email == "" {
-		return nil, ErrEmailObrigatorio
-	}
-	if senhaHash == "" {
-		return nil, ErrSenhaObrigatoria
-	}
-	if !telefoneValido(telefone) {
-		return nil, ErrTelefoneObrigatorio
 	}
 
 	agora := time.Now()
 	return &Provider{
 		ID:                           id,
 		Nome:                         nome,
-		Email:                        email,
-		Telefone:                     telefone,
-		SenhaHash:                    senhaHash,
-		Ativo:                        true,
 		AceitaAgendamentos:           false,
 		DescansoMinutos:              0,
 		DuracaoAtendimentoMinutos:    duracaoAtendimentoSugerida,
@@ -80,42 +59,6 @@ func Novo(id, nome, email, telefone, senhaHash string) (*Provider, error) {
 		CriadoEm:                     agora,
 		AtualizadoEm:                 agora,
 	}, nil
-}
-
-// telefoneValido faz uma validação leve: exige ao menos 8 dígitos, ignorando
-// formatação. Não verifica se o número existe.
-func telefoneValido(telefone string) bool {
-	digitos := 0
-	for _, r := range telefone {
-		if r >= '0' && r <= '9' {
-			digitos++
-		}
-	}
-	return digitos >= 8
-}
-
-// DefinirTelefone atualiza o telefone de contato do prestador (Preferências).
-// Retorna erro se o telefone for inválido.
-func (p *Provider) DefinirTelefone(telefone string) error {
-	if !telefoneValido(telefone) {
-		return ErrTelefoneObrigatorio
-	}
-	p.Telefone = telefone
-	p.AtualizadoEm = time.Now()
-	return nil
-}
-
-// Banir desativa o prestador (moderação pelo admin): ele deixa de logar, some
-// da vitrine e para de ofertar horários. Reversível por Reativar.
-func (p *Provider) Banir() {
-	p.Ativo = false
-	p.AtualizadoEm = time.Now()
-}
-
-// Reativar reverte um banimento, devolvendo o acesso do prestador.
-func (p *Provider) Reativar() {
-	p.Ativo = true
-	p.AtualizadoEm = time.Now()
 }
 
 // duracaoAtendimentoSugerida é a duração inicial de um atendimento (1h) para

@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"errors"
-	"time"
 
 	"agendago/internal/domain/availability"
 	"agendago/internal/domain/provider"
@@ -34,9 +33,9 @@ func (r *ProviderPostgres) Salvar(p *provider.Provider) error {
 	defer tx.Rollback(ctx)
 
 	_, err = tx.Exec(ctx,
-		`INSERT INTO providers (id, nome, email, telefone, senha_hash, ativo, aceita_agendamentos, descanso_minutos, duracao_atendimento_minutos, permite_marcacao_pelo_prestador)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-		p.ID, p.Nome, p.Email, p.Telefone, p.SenhaHash, p.Ativo, p.AceitaAgendamentos, p.DescansoMinutos, p.DuracaoAtendimentoMinutos, p.PermiteMarcacaoPeloPrestador,
+		`INSERT INTO providers (id, nome, aceita_agendamentos, descanso_minutos, duracao_atendimento_minutos, permite_marcacao_pelo_prestador)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		p.ID, p.Nome, p.AceitaAgendamentos, p.DescansoMinutos, p.DuracaoAtendimentoMinutos, p.PermiteMarcacaoPeloPrestador,
 	)
 	if err != nil {
 		return err
@@ -49,32 +48,9 @@ func (r *ProviderPostgres) Salvar(p *provider.Provider) error {
 	return tx.Commit(ctx)
 }
 
-// BuscarPorEmail retorna (prestador, nil) quando encontra, (nil, nil) quando
-// não existe prestador com o email, e (nil, err) em falha real de infraestrutura.
-func (r *ProviderPostgres) BuscarPorEmail(email string) (*provider.Provider, error) {
-	ctx := context.Background()
-	var p provider.Provider
-	err := r.pool.QueryRow(ctx,
-		`SELECT id, nome, email, telefone, senha_hash, ativo, aceita_agendamentos, descanso_minutos, duracao_atendimento_minutos, permite_marcacao_pelo_prestador, criado_em, atualizado_em
-		 FROM providers WHERE email = $1`, email,
-	).Scan(
-		&p.ID, &p.Nome, &p.Email, &p.Telefone, &p.SenhaHash, &p.Ativo, &p.AceitaAgendamentos,
-		&p.DescansoMinutos, &p.DuracaoAtendimentoMinutos, &p.PermiteMarcacaoPeloPrestador, &p.CriadoEm, &p.AtualizadoEm,
-	)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	if p.HorariosPadrao, err = r.buscarHorariosPadrao(ctx, p.ID); err != nil {
-		return nil, err
-	}
-	return &p, nil
-}
-
-// Atualizar persiste as preferências mutáveis do prestador (telefone, agenda,
-// descanso e expediente padrão). Não altera nome, email ou senha.
+// Atualizar persiste as preferências mutáveis da agenda (ofertar horários,
+// descanso, duração e expediente padrão). Não altera o nome. Telefone e senha
+// não passam por aqui: são da conta, em UsuarioPostgres.
 func (r *ProviderPostgres) Atualizar(p *provider.Provider) error {
 	ctx := context.Background()
 	tx, err := r.pool.Begin(ctx)
@@ -85,9 +61,9 @@ func (r *ProviderPostgres) Atualizar(p *provider.Provider) error {
 
 	_, err = tx.Exec(ctx,
 		`UPDATE providers
-		 SET telefone = $2, ativo = $3, aceita_agendamentos = $4, descanso_minutos = $5, duracao_atendimento_minutos = $6, permite_marcacao_pelo_prestador = $7, atualizado_em = $8
+		 SET aceita_agendamentos = $2, descanso_minutos = $3, duracao_atendimento_minutos = $4, permite_marcacao_pelo_prestador = $5, atualizado_em = $6
 		 WHERE id = $1`,
-		p.ID, p.Telefone, p.Ativo, p.AceitaAgendamentos, p.DescansoMinutos, p.DuracaoAtendimentoMinutos, p.PermiteMarcacaoPeloPrestador, p.AtualizadoEm,
+		p.ID, p.AceitaAgendamentos, p.DescansoMinutos, p.DuracaoAtendimentoMinutos, p.PermiteMarcacaoPeloPrestador, p.AtualizadoEm,
 	)
 	if err != nil {
 		return err
@@ -103,27 +79,16 @@ func (r *ProviderPostgres) Atualizar(p *provider.Provider) error {
 	return tx.Commit(ctx)
 }
 
-// AtualizarSenha persiste um novo hash de senha — usado na redefinição via
-// recuperação de senha. Método dedicado para não passar pelo Atualizar
-// genérico, que não toca a coluna senha_hash.
-func (r *ProviderPostgres) AtualizarSenha(id, senhaHash string) error {
-	_, err := r.pool.Exec(context.Background(),
-		`UPDATE providers SET senha_hash = $2, atualizado_em = $3 WHERE id = $1`,
-		id, senhaHash, time.Now(),
-	)
-	return err
-}
-
 // BuscarPorID retorna (prestador, nil) quando encontra, (nil, nil) quando não
 // existe prestador com o id, e (nil, err) em falha real de infraestrutura.
 func (r *ProviderPostgres) BuscarPorID(id string) (*provider.Provider, error) {
 	ctx := context.Background()
 	var p provider.Provider
 	err := r.pool.QueryRow(ctx,
-		`SELECT id, nome, email, telefone, senha_hash, ativo, aceita_agendamentos, descanso_minutos, duracao_atendimento_minutos, permite_marcacao_pelo_prestador, criado_em, atualizado_em
+		`SELECT id, nome, aceita_agendamentos, descanso_minutos, duracao_atendimento_minutos, permite_marcacao_pelo_prestador, criado_em, atualizado_em
 		 FROM providers WHERE id = $1`, id,
 	).Scan(
-		&p.ID, &p.Nome, &p.Email, &p.Telefone, &p.SenhaHash, &p.Ativo, &p.AceitaAgendamentos,
+		&p.ID, &p.Nome, &p.AceitaAgendamentos,
 		&p.DescansoMinutos, &p.DuracaoAtendimentoMinutos, &p.PermiteMarcacaoPeloPrestador, &p.CriadoEm, &p.AtualizadoEm,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -180,12 +145,19 @@ func (r *ProviderPostgres) Listar(pag paging.Pagina) ([]*provider.Provider, int,
 	return r.listarPaginado("", pag)
 }
 
-// ListarAtivos devolve uma página de prestadores ativos, ordenados por nome, e
-// o total de ativos — a vitrine pública. O filtro roda no SQL, não em memória:
-// com LIMIT, filtrar depois de buscar devolveria páginas mais curtas que o
-// pedido e esconderia prestadores válidos das páginas seguintes.
+// ListarAtivos devolve uma página de agendas cujo DONO está ativo, ordenadas
+// por nome, e o total delas — a vitrine pública. Quem foi banido pelo admin
+// some da vitrine, e desde a separação entre conta e agenda o banimento está
+// em usuarios: por isso o join, e não um `WHERE ativo` na própria providers.
+//
+// O filtro roda no SQL, não em memória: com LIMIT, filtrar depois de buscar
+// devolveria páginas mais curtas que o pedido e esconderia prestadores válidos
+// das páginas seguintes.
 func (r *ProviderPostgres) ListarAtivos(pag paging.Pagina) ([]*provider.Provider, int, error) {
-	return r.listarPaginado("WHERE ativo", pag)
+	return r.listarPaginado(`
+		JOIN provider_membros m ON m.provider_id = p.id AND m.papel = 'dono'
+		JOIN usuarios u ON u.id = m.usuario_id
+		WHERE u.ativo`, pag)
 }
 
 func (r *ProviderPostgres) listarPaginado(filtro string, pag paging.Pagina) ([]*provider.Provider, int, error) {
@@ -193,13 +165,13 @@ func (r *ProviderPostgres) listarPaginado(filtro string, pag paging.Pagina) ([]*
 	ctx := context.Background()
 
 	var total int
-	if err := r.pool.QueryRow(ctx, `SELECT count(*) FROM providers `+filtro).Scan(&total); err != nil {
+	if err := r.pool.QueryRow(ctx, `SELECT count(*) FROM providers p `+filtro).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, nome, email, telefone, senha_hash, ativo, aceita_agendamentos, descanso_minutos, duracao_atendimento_minutos, permite_marcacao_pelo_prestador, criado_em, atualizado_em
-		 FROM providers `+filtro+` ORDER BY nome, id LIMIT $1 OFFSET $2`, pag.Limite, pag.Offset)
+		`SELECT p.id, p.nome, p.aceita_agendamentos, p.descanso_minutos, p.duracao_atendimento_minutos, p.permite_marcacao_pelo_prestador, p.criado_em, p.atualizado_em
+		 FROM providers p `+filtro+` ORDER BY p.nome, p.id LIMIT $1 OFFSET $2`, pag.Limite, pag.Offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -209,7 +181,7 @@ func (r *ProviderPostgres) listarPaginado(filtro string, pag paging.Pagina) ([]*
 	for rows.Next() {
 		var p provider.Provider
 		if err := rows.Scan(
-			&p.ID, &p.Nome, &p.Email, &p.Telefone, &p.SenhaHash, &p.Ativo, &p.AceitaAgendamentos,
+			&p.ID, &p.Nome, &p.AceitaAgendamentos,
 			&p.DescansoMinutos, &p.DuracaoAtendimentoMinutos, &p.PermiteMarcacaoPeloPrestador, &p.CriadoEm, &p.AtualizadoEm,
 		); err != nil {
 			return nil, 0, err

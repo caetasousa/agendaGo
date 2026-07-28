@@ -65,9 +65,30 @@ type repositorioAppointment interface {
 	MarcarLembreteEnviado(id string, quando time.Time) (bool, error)
 }
 
-// repositorioProvider busca prestadores (duração, buffer e agenda ativa).
+// repositorioProvider busca a agenda (duração, buffer e se oferta horários).
 type repositorioProvider interface {
 	BuscarPorID(id string) (*provider.Provider, error)
+}
+
+// repositorioMembro resolve o que é da CONTA do prestador e não da agenda: se
+// o dono está banido, e para onde mandar as notificações. Desde a separação
+// entre conta e agenda, o Provider não sabe responder nenhuma das duas.
+type repositorioMembro interface {
+	DonoAtivo(providerID string) (bool, error)
+	EmailDoDono(providerID string) (string, error)
+}
+
+// emailDoPrestador resolve para onde vão as notificações de uma agenda.
+// Best-effort de propósito: erro ou agenda sem dono devolvem string vazia, e o
+// notificador fica sem destinatário. Todas as chamadas acontecem depois de o
+// agendamento já estar persistido — falhar aqui desfaria uma reserva válida
+// por causa de um email.
+func emailDoPrestador(membros repositorioMembro, providerID string) string {
+	email, err := membros.EmailDoDono(providerID)
+	if err != nil {
+		return ""
+	}
+	return email
 }
 
 // repositorioClient busca clientes para validar a sessão e enriquecer

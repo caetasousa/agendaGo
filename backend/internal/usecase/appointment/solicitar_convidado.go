@@ -31,6 +31,7 @@ type SolicitarConvidadoUseCase struct {
 	solicitar     *SolicitarUseCase
 	clientRepo    repositorioClient
 	providerRepo  repositorioProvider
+	membroRepo    repositorioMembro
 	cancelamentos repositorioCancelamento
 	preCadastros  repositorioPreCadastro
 	notificador   notificadorAgendamento
@@ -41,6 +42,7 @@ func NovoSolicitarConvidadoUseCase(
 	solicitar *SolicitarUseCase,
 	clientRepo repositorioClient,
 	providerRepo repositorioProvider,
+	membroRepo repositorioMembro,
 	cancelamentos repositorioCancelamento,
 	preCadastros repositorioPreCadastro,
 	notificador notificadorAgendamento,
@@ -49,6 +51,7 @@ func NovoSolicitarConvidadoUseCase(
 		solicitar:     solicitar,
 		clientRepo:    clientRepo,
 		providerRepo:  providerRepo,
+		membroRepo:    membroRepo,
 		cancelamentos: cancelamentos,
 		preCadastros:  preCadastros,
 		notificador:   notificador,
@@ -99,5 +102,5 @@ func (uc *SolicitarConvidadoUseCase) Executar(in SolicitarConvidadoInput) (*Soli
 // notificarConvidado delega à notificação compartilhada de convidado (tokens
 // de cancelamento e pré-cadastro + email de solicitação).
 func (uc *SolicitarConvidadoUseCase) notificarConvidado(out *SolicitarOutput, convidado *client.Client) {
-	notificarSolicitacaoAoConvidado(uc.providerRepo, uc.cancelamentos, uc.preCadastros, uc.notificador, out, convidado)
+	notificarSolicitacaoAoConvidado(uc.providerRepo, uc.membroRepo, uc.cancelamentos, uc.preCadastros, uc.notificador, out, convidado)
 }

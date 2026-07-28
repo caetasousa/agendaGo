@@ -41,6 +41,7 @@ type SolicitarUseCase struct {
 	repo           repositorioAppointment
 	clientRepo     repositorioClient
 	providerRepo   repositorioProvider
+	membroRepo     repositorioMembro
 	notificador    notificadorAgendamento
 	ttl            time.Duration
 }
@@ -51,6 +52,7 @@ func NovoSolicitarUseCase(
 	repo repositorioAppointment,
 	clientRepo repositorioClient,
 	providerRepo repositorioProvider,
+	membroRepo repositorioMembro,
 	notificador notificadorAgendamento,
 	ttl time.Duration,
 ) *SolicitarUseCase {
@@ -59,6 +61,7 @@ func NovoSolicitarUseCase(
 		repo:           repo,
 		clientRepo:     clientRepo,
 		providerRepo:   providerRepo,
+		membroRepo:     membroRepo,
 		notificador:    notificador,
 		ttl:            ttl,
 	}
@@ -175,7 +178,7 @@ func (uc *SolicitarUseCase) notificarSolicitacao(a *appointment.Appointment) {
 
 	uc.notificador.NotificarSolicitacao(NotificacaoAgendamento{
 		NomePrestador:  p.Nome,
-		EmailPrestador: p.Email,
+		EmailPrestador: emailDoPrestador(uc.membroRepo, p.ID),
 		NomeCliente:    c.Nome,
 		EmailCliente:   c.Email,
 		Data:           a.Data,

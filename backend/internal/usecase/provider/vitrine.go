@@ -13,6 +13,13 @@ type repositorioListar interface {
 	ListarAtivos(pag paging.Pagina) ([]*provider.Provider, int, error)
 }
 
+// repositorioDono responde se o dono de uma agenda está ativo. Banimento é da
+// conta, não da agenda: sem consultar isso, um prestador banido apareceria
+// ofertando horários no link direto.
+type repositorioDono interface {
+	DonoAtivo(providerID string) (bool, error)
+}
+
 // PrestadorResumo identifica um prestador na vitrine e no link público de
 // agendamento. AceitaAgendamentos indica se ele está ofertando horários.
 type PrestadorResumo struct {
@@ -48,9 +55,10 @@ func (uc *ListarUseCase) Executar(pag paging.Pagina) (*ListarOutput, error) {
 		return nil, err
 	}
 
+	// ListarAtivos já filtrou pelas agendas de dono ativo — daí o true.
 	resumos := make([]PrestadorResumo, 0, len(ativos))
 	for _, p := range ativos {
-		resumos = append(resumos, resumoDe(p))
+		resumos = append(resumos, resumoDe(p, true))
 	}
 	return &ListarOutput{Prestadores: resumos, Total: total}, nil
 }
@@ -58,12 +66,13 @@ func (uc *ListarUseCase) Executar(pag paging.Pagina) (*ListarOutput, error) {
 // BuscarResumoUseCase busca a identificação pública de um prestador — usada
 // pela página de agendamento acessada via link direto.
 type BuscarResumoUseCase struct {
-	repo repositorioPreferencias
+	repo  repositorioPreferencias
+	donos repositorioDono
 }
 
-// NovoBuscarResumoUseCase cria uma instância de BuscarResumoUseCase com o repositório injetado.
-func NovoBuscarResumoUseCase(repo repositorioPreferencias) *BuscarResumoUseCase {
-	return &BuscarResumoUseCase{repo: repo}
+// NovoBuscarResumoUseCase cria uma instância de BuscarResumoUseCase com os repositórios injetados.
+func NovoBuscarResumoUseCase(repo repositorioPreferencias, donos repositorioDono) *BuscarResumoUseCase {
+	return &BuscarResumoUseCase{repo: repo, donos: donos}
 }
 
 // Executar devolve o resumo público do prestador. Retorna
@@ -76,17 +85,21 @@ func (uc *BuscarResumoUseCase) Executar(id string) (*PrestadorResumo, error) {
 	if p == nil {
 		return nil, ErrProviderNaoEncontrado
 	}
-	resumo := resumoDe(p)
+	donoAtivo, err := uc.donos.DonoAtivo(p.ID)
+	if err != nil {
+		return nil, err
+	}
+	resumo := resumoDe(p, donoAtivo)
 	return &resumo, nil
 }
 
-func resumoDe(p *provider.Provider) PrestadorResumo {
+func resumoDe(p *provider.Provider, donoAtivo bool) PrestadorResumo {
 	return PrestadorResumo{
 		ID:                        p.ID,
 		Nome:                      p.Nome,
 		DuracaoAtendimentoMinutos: p.DuracaoAtendimentoMinutos,
 		// Um prestador banido aparece como "não oferta" no link direto, sem
 		// vazar o motivo — a página pública simplesmente não mostra horários.
-		AceitaAgendamentos: p.Ativo && p.AceitaAgendamentos,
+		AceitaAgendamentos: donoAtivo && p.AceitaAgendamentos,
 	}
 }

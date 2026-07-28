@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"agendago/internal/domain/membro"
 	"agendago/internal/domain/session"
 )
 
@@ -55,7 +56,15 @@ type LoginOutput struct {
 }
 
 // Identidade representa o usuário autenticado em uma requisição.
+//
+// ProviderID é a agenda que este usuário está operando, e NÃO é o mesmo que
+// UserID: para os prestadores criados antes da separação entre conta e pessoa
+// os dois valores coincidem, porque a migração reusou o id, mas quem for
+// convidado para operar a agenda de outra pessoa terá um UserID próprio. Só
+// vem preenchido para o tipo provider.
 type Identidade struct {
-	UserID string
-	Tipo   session.TipoUsuario
+	UserID     string
+	Tipo       session.TipoUsuario
+	ProviderID string
+	Papel      membro.Papel
 }

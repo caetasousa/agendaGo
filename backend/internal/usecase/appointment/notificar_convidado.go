@@ -18,6 +18,7 @@ import (
 // nada aqui falha a reserva já persistida.
 func notificarSolicitacaoAoConvidado(
 	providerRepo repositorioProvider,
+	membroRepo repositorioMembro,
 	cancelamentos repositorioCancelamento,
 	preCadastros repositorioPreCadastro,
 	notificador notificadorAgendamento,
@@ -46,7 +47,7 @@ func notificarSolicitacaoAoConvidado(
 
 	notificador.NotificarSolicitacaoConvidado(NotificacaoAgendamento{
 		NomePrestador:     p.Nome,
-		EmailPrestador:    p.Email,
+		EmailPrestador:    emailDoPrestador(membroRepo, p.ID),
 		NomeCliente:       convidado.Nome,
 		EmailCliente:      convidado.Email,
 		Data:              out.Data,

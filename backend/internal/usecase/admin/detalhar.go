@@ -59,19 +59,45 @@ type DetalheCliente struct {
 // admin: dados cadastrais + os agendamentos daquele usuário.
 type DetalharUseCase struct {
 	providers    repositorioProvider
+	usuarios     repositorioUsuario
+	vinculos     repositorioVinculo
 	clients      repositorioClient
 	agendamentos listadorAgendamentos
 }
 
 // NovoDetalharUseCase cria uma instância de DetalharUseCase com as dependências injetadas.
-func NovoDetalharUseCase(providers repositorioProvider, clients repositorioClient, agendamentos listadorAgendamentos) *DetalharUseCase {
-	return &DetalharUseCase{providers: providers, clients: clients, agendamentos: agendamentos}
+func NovoDetalharUseCase(
+	providers repositorioProvider,
+	usuarios repositorioUsuario,
+	vinculos repositorioVinculo,
+	clients repositorioClient,
+	agendamentos listadorAgendamentos,
+) *DetalharUseCase {
+	return &DetalharUseCase{providers: providers, usuarios: usuarios, vinculos: vinculos, clients: clients, agendamentos: agendamentos}
 }
 
 // Prestador devolve o detalhe do prestador com uma página dos agendamentos
 // recebidos. Retorna ErrProviderNaoEncontrado se o id não existe.
+// O id que chega é o da CONTA — é o que a listagem de moderação devolve. A
+// agenda vem do vínculo.
 func (uc *DetalharUseCase) Prestador(id string, pag paging.Pagina, agora time.Time) (*DetalhePrestador, error) {
-	p, err := uc.providers.BuscarPorID(id)
+	u, err := uc.usuarios.BuscarPorID(id)
+	if err != nil {
+		return nil, err
+	}
+	if u == nil {
+		return nil, ErrProviderNaoEncontrado
+	}
+
+	vinculo, err := uc.vinculos.BuscarPorUsuario(u.ID)
+	if err != nil {
+		return nil, err
+	}
+	if vinculo == nil {
+		return nil, ErrProviderNaoEncontrado
+	}
+
+	p, err := uc.providers.BuscarPorID(vinculo.ProviderID)
 	if err != nil {
 		return nil, err
 	}
@@ -79,16 +105,17 @@ func (uc *DetalharUseCase) Prestador(id string, pag paging.Pagina, agora time.Ti
 		return nil, ErrProviderNaoEncontrado
 	}
 
-	out, err := uc.agendamentos.DoPrestador(ucappointment.ListarInput{UsuarioID: id, Pagina: pag, Agora: agora})
+	// A listagem de agendamentos é por AGENDA, não por conta.
+	out, err := uc.agendamentos.DoPrestador(ucappointment.ListarInput{UsuarioID: p.ID, Pagina: pag, Agora: agora})
 	if err != nil {
 		return nil, err
 	}
 
 	return &DetalhePrestador{
-		ID:                 p.ID,
+		ID:                 u.ID,
 		Nome:               p.Nome,
-		Email:              p.Email,
-		Ativo:              p.Ativo,
+		Email:              u.Email,
+		Ativo:              u.Ativo,
 		AceitaAgendamentos: p.AceitaAgendamentos,
 		DescansoMinutos:    p.DescansoMinutos,
 		DuracaoMinutos:     p.DuracaoAtendimentoMinutos,

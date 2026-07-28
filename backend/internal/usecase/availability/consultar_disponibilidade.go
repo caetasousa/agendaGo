@@ -9,12 +9,15 @@ import (
 
 // blocosPadrao resolve o expediente default de uma data sem definição própria:
 // o expediente configurado em HorariosPadrao, aplicado em dias úteis quando o
-// prestador está ativo; vazio em fins de semana ou com o prestador banido pelo
+// dono da agenda está ativo; vazio em fins de semana ou com o dono banido pelo
 // admin. A agenda desativada (AceitaAgendamentos=false) só zera o expediente
 // para o público — o dono continua enxergando os próprios horários quando
 // incluirAgendaFechada é true.
-func blocosPadrao(p *provider.Provider, data time.Time, incluirAgendaFechada bool) []availability.TimeBlock {
-	if !p.Ativo || (!p.AceitaAgendamentos && !incluirAgendaFechada) {
+//
+// donoAtivo vem de fora porque o banimento é da conta, não da agenda: desde a
+// separação entre as duas, o Provider não sabe responder isso sozinho.
+func blocosPadrao(p *provider.Provider, donoAtivo bool, data time.Time, incluirAgendaFechada bool) []availability.TimeBlock {
+	if !donoAtivo || (!p.AceitaAgendamentos && !incluirAgendaFechada) {
 		return nil
 	}
 	dia := availability.DiaSemanaDe(data)
@@ -41,14 +44,16 @@ type ConsultarDisponibilidadeInput struct {
 type ConsultarDisponibilidadeUseCase struct {
 	excecaoRepo  repositorioDateException
 	providerRepo repositorioProvider
+	membroRepo   repositorioMembro
 }
 
 // NovoConsultarDisponibilidadeUseCase cria uma instância de ConsultarDisponibilidadeUseCase com os repositórios injetados.
 func NovoConsultarDisponibilidadeUseCase(
 	excecaoRepo repositorioDateException,
 	providerRepo repositorioProvider,
+	membroRepo repositorioMembro,
 ) *ConsultarDisponibilidadeUseCase {
-	return &ConsultarDisponibilidadeUseCase{excecaoRepo: excecaoRepo, providerRepo: providerRepo}
+	return &ConsultarDisponibilidadeUseCase{excecaoRepo: excecaoRepo, providerRepo: providerRepo, membroRepo: membroRepo}
 }
 
 // Executar resolve os blocos efetivos de ProviderID em Data seguindo a ordem:
@@ -75,5 +80,10 @@ func (uc *ConsultarDisponibilidadeUseCase) Executar(in ConsultarDisponibilidadeI
 		return excecao.Blocos, nil
 	}
 
-	return blocosPadrao(p, in.Data, in.IncluirAgendaFechada), nil
+	donoAtivo, err := uc.membroRepo.DonoAtivo(in.ProviderID)
+	if err != nil {
+		return nil, err
+	}
+
+	return blocosPadrao(p, donoAtivo, in.Data, in.IncluirAgendaFechada), nil
 }

@@ -12,6 +12,7 @@ import (
 type LembrarUseCase struct {
 	repo         repositorioAppointment
 	providerRepo repositorioProvider
+	membroRepo   repositorioMembro
 	clientRepo   repositorioClient
 	notificador  notificadorAgendamento
 	fuso         *time.Location
@@ -22,6 +23,7 @@ type LembrarUseCase struct {
 func NovoLembrarUseCase(
 	repo repositorioAppointment,
 	providerRepo repositorioProvider,
+	membroRepo repositorioMembro,
 	clientRepo repositorioClient,
 	notificador notificadorAgendamento,
 	fuso *time.Location,
@@ -30,6 +32,7 @@ func NovoLembrarUseCase(
 	return &LembrarUseCase{
 		repo:         repo,
 		providerRepo: providerRepo,
+		membroRepo:   membroRepo,
 		clientRepo:   clientRepo,
 		notificador:  notificador,
 		fuso:         fuso,
@@ -87,7 +90,7 @@ func (uc *LembrarUseCase) notificarLembrete(a *appointment.Appointment) {
 
 	uc.notificador.NotificarLembrete(NotificacaoAgendamento{
 		NomePrestador:  p.Nome,
-		EmailPrestador: p.Email,
+		EmailPrestador: emailDoPrestador(uc.membroRepo, p.ID),
 		NomeCliente:    c.Nome,
 		EmailCliente:   c.Email,
 		Data:           a.Data,

@@ -28,6 +28,7 @@ type CancelarPorTokenUseCase struct {
 	repo         repositorioAppointment
 	cancelamento repositorioCancelamento
 	providerRepo repositorioProvider
+	membroRepo   repositorioMembro
 	clientRepo   repositorioClient
 	notificador  notificadorAgendamento
 	antecedencia time.Duration
@@ -39,6 +40,7 @@ func NovoCancelarPorTokenUseCase(
 	repo repositorioAppointment,
 	cancelamento repositorioCancelamento,
 	providerRepo repositorioProvider,
+	membroRepo repositorioMembro,
 	clientRepo repositorioClient,
 	notificador notificadorAgendamento,
 	antecedencia time.Duration,
@@ -48,6 +50,7 @@ func NovoCancelarPorTokenUseCase(
 		repo:         repo,
 		cancelamento: cancelamento,
 		providerRepo: providerRepo,
+		membroRepo:   membroRepo,
 		clientRepo:   clientRepo,
 		notificador:  notificador,
 		antecedencia: antecedencia,
@@ -148,7 +151,7 @@ func (uc *CancelarPorTokenUseCase) notificarPrestador(a *appointment.Appointment
 
 	uc.notificador.NotificarCancelamento(NotificacaoAgendamento{
 		NomePrestador:         p.Nome,
-		EmailPrestador:        p.Email,
+		EmailPrestador:        emailDoPrestador(uc.membroRepo, p.ID),
 		NomeCliente:           c.Nome,
 		EmailCliente:          c.Email,
 		Data:                  a.Data,

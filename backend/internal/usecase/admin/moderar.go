@@ -4,7 +4,9 @@ import (
 	"errors"
 
 	"agendago/internal/domain/client"
+	"agendago/internal/domain/membro"
 	"agendago/internal/domain/provider"
+	"agendago/internal/domain/usuario"
 	"agendago/internal/pkg/paging"
 )
 
@@ -15,11 +17,30 @@ var (
 	ErrClientNaoEncontrado = errors.New("cliente não encontrado")
 )
 
-// repositorioProvider lista, busca e persiste prestadores para a moderação.
+// repositorioProvider lista e busca as agendas para a moderação.
 type repositorioProvider interface {
 	Listar(pag paging.Pagina) ([]*provider.Provider, int, error)
 	BuscarPorID(id string) (*provider.Provider, error)
 	Atualizar(p *provider.Provider) error
+}
+
+// repositorioUsuario busca e persiste a conta do prestador. O banimento é dela,
+// não da agenda: é a conta que deixa de logar.
+type repositorioUsuario interface {
+	BuscarPorID(id string) (*usuario.Usuario, error)
+	Atualizar(u *usuario.Usuario) error
+}
+
+// repositorioMembro resolve quem é o dono de cada agenda, para a listagem
+// juntar conta e agenda numa linha só.
+type repositorioMembro interface {
+	DonoDe(providerID string) (*usuario.Usuario, error)
+}
+
+// repositorioVinculo faz o caminho inverso: da conta para a agenda que ela
+// opera, usado no detalhe de um prestador.
+type repositorioVinculo interface {
+	BuscarPorUsuario(usuarioID string) (*membro.Membro, error)
 }
 
 // repositorioClient lista, busca e persiste clientes para a moderação.
@@ -47,13 +68,21 @@ type UsuarioResumo struct {
 // ModerarUseCase lista e bane/reativa prestadores e clientes.
 type ModerarUseCase struct {
 	providers repositorioProvider
+	usuarios  repositorioUsuario
+	membros   repositorioMembro
 	clients   repositorioClient
 	sessoes   revogadorSessoes
 }
 
 // NovoModerarUseCase cria uma instância de ModerarUseCase com as dependências injetadas.
-func NovoModerarUseCase(providers repositorioProvider, clients repositorioClient, sessoes revogadorSessoes) *ModerarUseCase {
-	return &ModerarUseCase{providers: providers, clients: clients, sessoes: sessoes}
+func NovoModerarUseCase(
+	providers repositorioProvider,
+	usuarios repositorioUsuario,
+	membros repositorioMembro,
+	clients repositorioClient,
+	sessoes revogadorSessoes,
+) *ModerarUseCase {
+	return &ModerarUseCase{providers: providers, usuarios: usuarios, membros: membros, clients: clients, sessoes: sessoes}
 }
 
 // ListarPrestadores devolve uma página de prestadores com o status de
@@ -63,15 +92,28 @@ func (uc *ModerarUseCase) ListarPrestadores(pag paging.Pagina) ([]UsuarioResumo,
 	if err != nil {
 		return nil, 0, err
 	}
+	// Uma consulta por agenda para achar o dono. A página da moderação é
+	// pequena (paginada), então o N+1 aqui é barato e evita espalhar um join
+	// de leitura pelo repositório de agendas.
 	resumos := make([]UsuarioResumo, 0, len(ps))
 	for _, p := range ps {
-		resumos = append(resumos, UsuarioResumo{
+		dono, err := uc.membros.DonoDe(p.ID)
+		if err != nil {
+			return nil, 0, err
+		}
+		resumo := UsuarioResumo{
 			ID:                 p.ID,
 			Nome:               p.Nome,
-			Email:              p.Email,
-			Ativo:              p.Ativo,
 			AceitaAgendamentos: p.AceitaAgendamentos,
-		})
+		}
+		// Agenda sem dono não deveria existir; se existir, aparece na
+		// moderação sem email e como inativa, em vez de sumir da lista.
+		if dono != nil {
+			resumo.ID = dono.ID
+			resumo.Email = dono.Email
+			resumo.Ativo = dono.Ativo
+		}
+		resumos = append(resumos, resumo)
 	}
 	return resumos, total, nil
 }
@@ -99,7 +141,7 @@ func (uc *ModerarUseCase) ListarClientes(pag paging.Pagina) ([]UsuarioResumo, in
 // ativo=false remove o acesso e a oferta; reversível por ReativarPrestador.
 // Retorna ErrProviderNaoEncontrado se o id não existe.
 func (uc *ModerarUseCase) BanirPrestador(id string) error {
-	if err := uc.mudarPrestador(id, func(p *provider.Provider) { p.Banir() }); err != nil {
+	if err := uc.mudarPrestador(id, func(u *usuario.Usuario) { u.Banir() }); err != nil {
 		return err
 	}
 	return uc.sessoes.RemoverDoUsuario(id)
@@ -107,7 +149,7 @@ func (uc *ModerarUseCase) BanirPrestador(id string) error {
 
 // ReativarPrestador reverte o banimento de um prestador.
 func (uc *ModerarUseCase) ReativarPrestador(id string) error {
-	return uc.mudarPrestador(id, func(p *provider.Provider) { p.Reativar() })
+	return uc.mudarPrestador(id, func(u *usuario.Usuario) { u.Reativar() })
 }
 
 // BanirCliente desativa um cliente (bloqueia o login) e revoga as sessões ativas dele.
@@ -123,16 +165,19 @@ func (uc *ModerarUseCase) ReativarCliente(id string) error {
 	return uc.mudarCliente(id, func(c *client.Client) { c.Reativar() })
 }
 
-func (uc *ModerarUseCase) mudarPrestador(id string, muda func(*provider.Provider)) error {
-	p, err := uc.providers.BuscarPorID(id)
+// mudarPrestador aplica a moderação na CONTA. O id que chega é o da conta —
+// para os prestadores anteriores à separação ele coincide com o da agenda,
+// porque a migração reusou o mesmo UUID.
+func (uc *ModerarUseCase) mudarPrestador(id string, muda func(*usuario.Usuario)) error {
+	u, err := uc.usuarios.BuscarPorID(id)
 	if err != nil {
 		return err
 	}
-	if p == nil {
+	if u == nil {
 		return ErrProviderNaoEncontrado
 	}
-	muda(p)
-	return uc.providers.Atualizar(p)
+	muda(u)
+	return uc.usuarios.Atualizar(u)
 }
 
 func (uc *ModerarUseCase) mudarCliente(id string, muda func(*client.Client)) error {

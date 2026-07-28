@@ -5,9 +5,11 @@ import (
 
 	"agendago/internal/domain/admin"
 	"agendago/internal/domain/client"
+	"agendago/internal/domain/membro"
 	"agendago/internal/domain/passwordreset"
 	"agendago/internal/domain/provider"
 	"agendago/internal/domain/session"
+	"agendago/internal/domain/usuario"
 )
 
 type repositorioSessao interface {
@@ -18,9 +20,27 @@ type repositorioSessao interface {
 	RemoverExpiradas() error
 }
 
+// buscadorProvider busca a AGENDA. Identidade (email, senha, telefone,
+// situação) mora em usuarios — por isso não há busca por email aqui.
 type buscadorProvider interface {
-	BuscarPorEmail(email string) (*provider.Provider, error)
 	BuscarPorID(id string) (*provider.Provider, error)
+}
+
+// buscadorUsuario busca a IDENTIDADE de quem loga pelo lado prestador.
+type buscadorUsuario interface {
+	BuscarPorEmail(email string) (*usuario.Usuario, error)
+	BuscarPorID(id string) (*usuario.Usuario, error)
+}
+
+// buscadorMembro resolve qual agenda um usuário opera.
+type buscadorMembro interface {
+	BuscarPorUsuario(usuarioID string) (*membro.Membro, error)
+}
+
+// contaUsuario busca usuários e persiste a troca de senha.
+type contaUsuario interface {
+	buscadorUsuario
+	AtualizarSenha(id, senhaHash string) error
 }
 
 type buscadorClient interface {
@@ -31,12 +51,6 @@ type buscadorClient interface {
 type buscadorAdmin interface {
 	BuscarPorEmail(email string) (*admin.Admin, error)
 	BuscarPorID(id string) (*admin.Admin, error)
-}
-
-// contaProvider busca prestadores por email e persiste a troca de senha.
-type contaProvider interface {
-	buscadorProvider
-	AtualizarSenha(id, senhaHash string) error
 }
 
 // contaClient busca clientes por email e persiste a troca de senha.

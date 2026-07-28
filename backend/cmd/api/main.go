@@ -72,6 +72,8 @@ func main() {
 
 	// repositórios
 	providerRepo := repository.NovoProviderPostgres(pool)
+	usuarioRepo := repository.NovoUsuarioPostgres(pool)
+	membroRepo := repository.NovoMembroPostgres(pool)
 	clientRepo := repository.NovoClientPostgres(pool)
 	sessionRepo := repository.NovoSessionPostgres(pool)
 	availabilityRepo := repository.NovoAvailabilityPostgres(pool)
@@ -121,38 +123,38 @@ func main() {
 	}
 
 	// usecases
-	solicitarCadastroProvider := ucprovider.NovoSolicitarCadastroUseCase(providerRepo, clientRepo, adminRepo, signupRepo, notificador, hasher)
-	confirmarCadastroProvider := ucprovider.NovoConfirmarCadastroUseCase(providerRepo, clientRepo, adminRepo, signupRepo)
-	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(providerRepo)
-	solicitarCadastroClient := ucclient.NovoSolicitarCadastroUseCase(clientRepo, providerRepo, adminRepo, signupRepo, notificador, hasher)
-	confirmarCadastroClient := ucclient.NovoConfirmarCadastroUseCase(clientRepo, providerRepo, adminRepo, signupRepo)
+	solicitarCadastroProvider := ucprovider.NovoSolicitarCadastroUseCase(usuarioRepo, clientRepo, adminRepo, signupRepo, notificador, hasher)
+	confirmarCadastroProvider := ucprovider.NovoConfirmarCadastroUseCase(providerRepo, usuarioRepo, membroRepo, clientRepo, adminRepo, signupRepo)
+	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(providerRepo, usuarioRepo)
+	solicitarCadastroClient := ucclient.NovoSolicitarCadastroUseCase(clientRepo, usuarioRepo, adminRepo, signupRepo, notificador, hasher)
+	confirmarCadastroClient := ucclient.NovoConfirmarCadastroUseCase(clientRepo, usuarioRepo, adminRepo, signupRepo)
 	consultarPreCadastro := ucclient.NovoConsultarPreCadastroUseCase(preCadastroRepo)
-	concluirPreCadastro := ucclient.NovoConcluirPreCadastroUseCase(clientRepo, providerRepo, adminRepo, preCadastroRepo, hasher)
-	loginProvider := ucauth.NovoLoginProviderUseCase(providerRepo, sessionRepo, hasher)
+	concluirPreCadastro := ucclient.NovoConcluirPreCadastroUseCase(clientRepo, usuarioRepo, adminRepo, preCadastroRepo, hasher)
+	loginProvider := ucauth.NovoLoginProviderUseCase(usuarioRepo, membroRepo, providerRepo, sessionRepo, hasher)
 	loginClient := ucauth.NovoLoginClientUseCase(clientRepo, sessionRepo, hasher)
 	loginAdmin := ucauth.NovoLoginAdminUseCase(adminRepo, sessionRepo, hasher)
-	loginSocial := novoLoginSocialUseCase(context.Background(), providerRepo, clientRepo, adminRepo, socialIdentityRepo, oauthStateRepo, sessionRepo, hasher)
+	loginSocial := novoLoginSocialUseCase(context.Background(), providerRepo, usuarioRepo, membroRepo, clientRepo, adminRepo, socialIdentityRepo, oauthStateRepo, sessionRepo, hasher)
 	logout := ucauth.NovoLogoutUseCase(sessionRepo)
-	validarSessao := ucauth.NovoValidarSessaoUseCase(sessionRepo)
-	perfil := ucauth.NovoPerfilUseCase(providerRepo, clientRepo, adminRepo)
-	solicitarRecuperacao := ucauth.NovoSolicitarRecuperacaoUseCase(providerRepo, clientRepo, passwordResetRepo, notificador)
-	redefinirSenha := ucauth.NovoRedefinirSenhaUseCase(providerRepo, clientRepo, passwordResetRepo, sessionRepo, hasher)
-	moderar := ucadmin.NovoModerarUseCase(providerRepo, clientRepo, sessionRepo)
-	consultarAgenda := ucavailability.NovoConsultarAgendaUseCase(availabilityRepo, providerRepo)
+	validarSessao := ucauth.NovoValidarSessaoUseCase(sessionRepo, membroRepo)
+	perfil := ucauth.NovoPerfilUseCase(usuarioRepo, providerRepo, clientRepo, adminRepo)
+	solicitarRecuperacao := ucauth.NovoSolicitarRecuperacaoUseCase(usuarioRepo, membroRepo, providerRepo, clientRepo, passwordResetRepo, notificador)
+	redefinirSenha := ucauth.NovoRedefinirSenhaUseCase(usuarioRepo, clientRepo, passwordResetRepo, sessionRepo, hasher)
+	moderar := ucadmin.NovoModerarUseCase(providerRepo, usuarioRepo, membroRepo, clientRepo, sessionRepo)
+	consultarAgenda := ucavailability.NovoConsultarAgendaUseCase(availabilityRepo, providerRepo, membroRepo)
 	definirDia := ucavailability.NovoDefinirDiaUseCase(availabilityRepo)
 	removerDia := ucavailability.NovoRemoverDiaUseCase(availabilityRepo)
-	consultarDisponibilidade := ucavailability.NovoConsultarDisponibilidadeUseCase(availabilityRepo, providerRepo)
+	consultarDisponibilidade := ucavailability.NovoConsultarDisponibilidadeUseCase(availabilityRepo, providerRepo, membroRepo)
 	listarPrestadores := ucprovider.NovoListarUseCase(providerRepo)
-	buscarPrestador := ucprovider.NovoBuscarResumoUseCase(providerRepo)
-	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(consultarDisponibilidade, appointmentRepo, providerRepo, config.FusoHorario)
-	solicitarAgendamento := ucappointment.NovoSolicitarUseCase(consultarSlots, appointmentRepo, clientRepo, providerRepo, notificador, config.TTLSolicitacao)
-	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitarAgendamento, clientRepo, providerRepo, cancelamentoRepo, preCadastroRepo, notificador)
+	buscarPrestador := ucprovider.NovoBuscarResumoUseCase(providerRepo, membroRepo)
+	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(consultarDisponibilidade, appointmentRepo, providerRepo, membroRepo, config.FusoHorario)
+	solicitarAgendamento := ucappointment.NovoSolicitarUseCase(consultarSlots, appointmentRepo, clientRepo, providerRepo, membroRepo, notificador, config.TTLSolicitacao)
+	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitarAgendamento, clientRepo, providerRepo, membroRepo, cancelamentoRepo, preCadastroRepo, notificador)
 	marcarPeloPrestador := ucappointment.NovoMarcarPeloPrestadorUseCase(solicitarAgendamento, clientRepo, providerRepo)
-	transicionarAgendamento := ucappointment.NovoTransicionarUseCase(appointmentRepo, providerRepo, clientRepo, cancelamentoRepo, preCadastroRepo, notificador, config.AntecedenciaMinimaCancelamento, config.FusoHorario)
-	cancelarPorToken := ucappointment.NovoCancelarPorTokenUseCase(appointmentRepo, cancelamentoRepo, providerRepo, clientRepo, notificador, config.AntecedenciaMinimaCancelamento, config.FusoHorario)
+	transicionarAgendamento := ucappointment.NovoTransicionarUseCase(appointmentRepo, providerRepo, membroRepo, clientRepo, cancelamentoRepo, preCadastroRepo, notificador, config.AntecedenciaMinimaCancelamento, config.FusoHorario)
+	cancelarPorToken := ucappointment.NovoCancelarPorTokenUseCase(appointmentRepo, cancelamentoRepo, providerRepo, membroRepo, clientRepo, notificador, config.AntecedenciaMinimaCancelamento, config.FusoHorario)
 	listarAgendamentos := ucappointment.NovoListarUseCase(appointmentRepo, providerRepo, clientRepo)
-	detalharUsuario := ucadmin.NovoDetalharUseCase(providerRepo, clientRepo, listarAgendamentos)
-	lembrarAgendamento := ucappointment.NovoLembrarUseCase(appointmentRepo, providerRepo, clientRepo, notificador, config.FusoHorario, config.AntecedenciaLembrete)
+	detalharUsuario := ucadmin.NovoDetalharUseCase(providerRepo, usuarioRepo, membroRepo, clientRepo, listarAgendamentos)
+	lembrarAgendamento := ucappointment.NovoLembrarUseCase(appointmentRepo, providerRepo, membroRepo, clientRepo, notificador, config.FusoHorario, config.AntecedenciaLembrete)
 
 	// handlers
 	identidadeDoContexto := func(r *http.Request) (ucauth.Identidade, bool) {
@@ -377,6 +379,8 @@ func novoMailer() interface{ Enviar(email.Mensagem) error } {
 func novoLoginSocialUseCase(
 	ctx context.Context,
 	providerRepo *repository.ProviderPostgres,
+	usuarioRepo *repository.UsuarioPostgres,
+	membroRepo *repository.MembroPostgres,
 	clientRepo *repository.ClientPostgres,
 	adminRepo *repository.AdminPostgres,
 	socialIdentityRepo *repository.SocialIdentityPostgres,
@@ -394,7 +398,12 @@ func novoLoginSocialUseCase(
 		os.Exit(1)
 	}
 
-	return ucauth.NovoLoginSocialUseCase(google, clientRepo, providerRepo, adminRepo, clientRepo, providerRepo, socialIdentityRepo, oauthStateRepo, sessionRepo, hasher)
+	return ucauth.NovoLoginSocialUseCase(
+		google,
+		clientRepo, usuarioRepo, membroRepo, providerRepo, adminRepo,
+		clientRepo, usuarioRepo, providerRepo, membroRepo,
+		socialIdentityRepo, oauthStateRepo, sessionRepo, hasher,
+	)
 }
 
 // health godoc

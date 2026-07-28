@@ -28,6 +28,7 @@ type TransicionarInput struct {
 type TransicionarUseCase struct {
 	repo             repositorioAppointment
 	providerRepo     repositorioProvider
+	membroRepo       repositorioMembro
 	clientRepo       repositorioClient
 	cancelamentoRepo repositorioCancelamento
 	preCadastroRepo  repositorioPreCadastro
@@ -40,6 +41,7 @@ type TransicionarUseCase struct {
 func NovoTransicionarUseCase(
 	repo repositorioAppointment,
 	providerRepo repositorioProvider,
+	membroRepo repositorioMembro,
 	clientRepo repositorioClient,
 	cancelamentoRepo repositorioCancelamento,
 	preCadastroRepo repositorioPreCadastro,
@@ -50,6 +52,7 @@ func NovoTransicionarUseCase(
 	return &TransicionarUseCase{
 		repo:             repo,
 		providerRepo:     providerRepo,
+		membroRepo:       membroRepo,
 		clientRepo:       clientRepo,
 		cancelamentoRepo: cancelamentoRepo,
 		preCadastroRepo:  preCadastroRepo,
@@ -181,7 +184,7 @@ func (uc *TransicionarUseCase) notificar(a *appointment.Appointment, evento func
 
 	evento(NotificacaoAgendamento{
 		NomePrestador:         p.Nome,
-		EmailPrestador:        p.Email,
+		EmailPrestador:        emailDoPrestador(uc.membroRepo, p.ID),
 		NomeCliente:           c.Nome,
 		EmailCliente:          c.Email,
 		Data:                  a.Data,
@@ -223,7 +226,7 @@ func (uc *TransicionarUseCase) notificarConfirmacao(a *appointment.Appointment) 
 
 	uc.notificador.NotificarConfirmacao(NotificacaoAgendamento{
 		NomePrestador:     p.Nome,
-		EmailPrestador:    p.Email,
+		EmailPrestador:    emailDoPrestador(uc.membroRepo, p.ID),
 		NomeCliente:       c.Nome,
 		EmailCliente:      c.Email,
 		Data:              a.Data,

@@ -49,6 +49,7 @@ type ConsultarSlotsUseCase struct {
 	resolvedor      resolvedorDisponibilidade
 	appointmentRepo repositorioAppointment
 	providerRepo    repositorioProvider
+	membroRepo      repositorioMembro
 	fuso            *time.Location
 }
 
@@ -57,12 +58,14 @@ func NovoConsultarSlotsUseCase(
 	resolvedor resolvedorDisponibilidade,
 	appointmentRepo repositorioAppointment,
 	providerRepo repositorioProvider,
+	membroRepo repositorioMembro,
 	fuso *time.Location,
 ) *ConsultarSlotsUseCase {
 	return &ConsultarSlotsUseCase{
 		resolvedor:      resolvedor,
 		appointmentRepo: appointmentRepo,
 		providerRepo:    providerRepo,
+		membroRepo:      membroRepo,
 		fuso:            fuso,
 	}
 }
@@ -97,6 +100,13 @@ func (uc *ConsultarSlotsUseCase) Executar(in ConsultarSlotsInput) (*ConsultarSlo
 		})
 	}
 
+	// O banimento é da conta, não da agenda: sem consultar isso, um prestador
+	// banido continuaria ofertando slots.
+	donoAtivo, err := uc.membroRepo.DonoAtivo(in.ProviderID)
+	if err != nil {
+		return nil, err
+	}
+
 	agoraLocal := in.Agora.In(uc.fuso)
 	hoje := time.Date(agoraLocal.Year(), agoraLocal.Month(), agoraLocal.Day(), 0, 0, 0, 0, time.UTC)
 	minutosAgora := agoraLocal.Hour()*60 + agoraLocal.Minute()
@@ -106,7 +116,7 @@ func (uc *ConsultarSlotsUseCase) Executar(in ConsultarSlotsInput) (*ConsultarSlo
 		dia := DiaSlots{Data: d}
 		diaTruncado := time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
 
-		if p.Ativo && (p.AceitaAgendamentos || in.IncluirAgendaFechada) && !diaTruncado.Before(hoje) {
+		if donoAtivo && (p.AceitaAgendamentos || in.IncluirAgendaFechada) && !diaTruncado.Before(hoje) {
 			blocos, err := uc.resolvedor.Executar(ucavailability.ConsultarDisponibilidadeInput{
 				ProviderID:           in.ProviderID,
 				Data:                 d,

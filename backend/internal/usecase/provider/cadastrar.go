@@ -4,9 +4,11 @@ import (
 	"errors"
 	"time"
 
+	"agendago/internal/domain/membro"
 	"agendago/internal/domain/provider"
 	"agendago/internal/domain/session"
 	"agendago/internal/domain/signup"
+	"agendago/internal/domain/usuario"
 	"agendago/internal/pkg/token"
 
 	"github.com/google/uuid"
@@ -40,7 +42,7 @@ type SolicitarCadastroInput struct {
 // outra pessoa. Agora o fluxo é o mesmo do cliente: resposta idêntica em todos
 // os casos, e o que muda é só o email que sai.
 type SolicitarCadastroUseCase struct {
-	repo      repositorioCadastrar
+	usuarios  repositorioUsuarioCadastro
 	clients   buscadorClient
 	admins    buscadorAdmin
 	pendentes repositorioCadastroPendente
@@ -50,14 +52,14 @@ type SolicitarCadastroUseCase struct {
 
 // NovoSolicitarCadastroUseCase cria uma instância de SolicitarCadastroUseCase com as dependências injetadas.
 func NovoSolicitarCadastroUseCase(
-	repo repositorioCadastrar,
+	usuarios repositorioUsuarioCadastro,
 	clients buscadorClient,
 	admins buscadorAdmin,
 	pendentes repositorioCadastroPendente,
 	enviador enviadorCadastro,
 	hasher hasherSenha,
 ) *SolicitarCadastroUseCase {
-	return &SolicitarCadastroUseCase{repo: repo, clients: clients, admins: admins, pendentes: pendentes, enviador: enviador, hasher: hasher}
+	return &SolicitarCadastroUseCase{usuarios: usuarios, clients: clients, admins: admins, pendentes: pendentes, enviador: enviador, hasher: hasher}
 }
 
 // Executar processa a solicitação. Devolve sempre nil (fora falha real de
@@ -86,12 +88,15 @@ func (uc *SolicitarCadastroUseCase) Executar(in SolicitarCadastroInput) error {
 		return nil
 	}
 
-	prestador, err := uc.repo.BuscarPorEmail(in.Email)
+	prestador, err := uc.usuarios.BuscarPorEmail(in.Email)
 	if err != nil {
 		return err
 	}
 	if prestador != nil {
-		uc.enviador.EnviarAvisoContaExistente(in.Email, prestador.Nome)
+		// Saúda com o nome digitado agora, não com o da conta que já existe: a
+		// conta é de quem recebe o email, e o nome dela não precisa voltar
+		// para quem tentou o cadastro.
+		uc.enviador.EnviarAvisoContaExistente(in.Email, in.Nome)
 		return nil
 	}
 
@@ -135,14 +140,23 @@ type ConfirmarCadastroOutput struct {
 // cria a conta.
 type ConfirmarCadastroUseCase struct {
 	repo      repositorioCadastrar
+	usuarios  repositorioUsuarioCadastro
+	membros   repositorioMembroCadastro
 	clients   buscadorClient
 	admins    buscadorAdmin
 	pendentes repositorioCadastroPendente
 }
 
 // NovoConfirmarCadastroUseCase cria uma instância de ConfirmarCadastroUseCase com as dependências injetadas.
-func NovoConfirmarCadastroUseCase(repo repositorioCadastrar, clients buscadorClient, admins buscadorAdmin, pendentes repositorioCadastroPendente) *ConfirmarCadastroUseCase {
-	return &ConfirmarCadastroUseCase{repo: repo, clients: clients, admins: admins, pendentes: pendentes}
+func NovoConfirmarCadastroUseCase(
+	repo repositorioCadastrar,
+	usuarios repositorioUsuarioCadastro,
+	membros repositorioMembroCadastro,
+	clients buscadorClient,
+	admins buscadorAdmin,
+	pendentes repositorioCadastroPendente,
+) *ConfirmarCadastroUseCase {
+	return &ConfirmarCadastroUseCase{repo: repo, usuarios: usuarios, membros: membros, clients: clients, admins: admins, pendentes: pendentes}
 }
 
 // Executar consome o token (uso único) e cria o prestador. Retorna
@@ -170,7 +184,7 @@ func (uc *ConfirmarCadastroUseCase) Executar(tokenPuro string) (*ConfirmarCadast
 		return nil, ErrCadastroInvalido
 	}
 
-	prestador, err := uc.repo.BuscarPorEmail(pendente.Email)
+	prestador, err := uc.usuarios.BuscarPorEmail(pendente.Email)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +199,19 @@ func (uc *ConfirmarCadastroUseCase) Executar(tokenPuro string) (*ConfirmarCadast
 		return nil, ErrCadastroInvalido
 	}
 
-	p, err := provider.Novo(uuid.NewString(), pendente.Nome, pendente.Email, pendente.Telefone, pendente.SenhaHash)
+	// Três peças, nesta ordem: a conta de quem loga, a agenda que ela opera, e
+	// o vínculo de dono entre as duas. Sem transação, como o resto dos
+	// usecases — uma falha no meio deixa conta sem vínculo, que o login trata
+	// como credencial inválida em vez de deixar entrar pela metade.
+	u, err := usuario.Novo(uuid.NewString(), pendente.Email, pendente.Telefone, pendente.SenhaHash)
+	if err != nil {
+		return nil, err
+	}
+	if err := uc.usuarios.Salvar(u); err != nil {
+		return nil, err
+	}
+
+	p, err := provider.Novo(uuid.NewString(), pendente.Nome)
 	if err != nil {
 		return nil, err
 	}
@@ -193,6 +219,14 @@ func (uc *ConfirmarCadastroUseCase) Executar(tokenPuro string) (*ConfirmarCadast
 		return nil, err
 	}
 
+	vinculo, err := membro.Novo(uuid.NewString(), u.ID, p.ID, membro.PapelDono)
+	if err != nil {
+		return nil, err
+	}
+	if err := uc.membros.Salvar(vinculo); err != nil {
+		return nil, err
+	}
+
 	uc.pendentes.RemoverExpirados()
-	return &ConfirmarCadastroOutput{ID: p.ID, Nome: p.Nome, Email: p.Email}, nil
+	return &ConfirmarCadastroOutput{ID: p.ID, Nome: p.Nome, Email: u.Email}, nil
 }

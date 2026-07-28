@@ -15,9 +15,12 @@ type BlocoInput struct {
 	FimMinutos    int
 }
 
-// AtualizarPreferenciasInput contém as preferências a aplicar. ProviderID vem
-// da identidade da sessão autenticada, nunca do corpo da requisição.
+// AtualizarPreferenciasInput contém as preferências a aplicar. UsuarioID e
+// ProviderID vêm da identidade da sessão autenticada, nunca do corpo da
+// requisição. São dois porque a tela de Preferências mexe nas duas coisas de
+// uma vez: o telefone é da conta, o resto é da agenda.
 type AtualizarPreferenciasInput struct {
+	UsuarioID                    string
 	ProviderID                   string
 	Telefone                     string
 	AceitaAgendamentos           bool
@@ -39,17 +42,18 @@ type AtualizarPreferenciasOutput struct {
 
 // AtualizarPreferenciasUseCase orquestra a atualização das preferências de um prestador.
 type AtualizarPreferenciasUseCase struct {
-	repo repositorioPreferencias
+	repo     repositorioPreferencias
+	usuarios repositorioUsuario
 }
 
-// NovoAtualizarPreferenciasUseCase cria uma instância de AtualizarPreferenciasUseCase com o repositório injetado.
-func NovoAtualizarPreferenciasUseCase(repo repositorioPreferencias) *AtualizarPreferenciasUseCase {
-	return &AtualizarPreferenciasUseCase{repo: repo}
+// NovoAtualizarPreferenciasUseCase cria uma instância de AtualizarPreferenciasUseCase com os repositórios injetados.
+func NovoAtualizarPreferenciasUseCase(repo repositorioPreferencias, usuarios repositorioUsuario) *AtualizarPreferenciasUseCase {
+	return &AtualizarPreferenciasUseCase{repo: repo, usuarios: usuarios}
 }
 
-// Executar carrega o prestador, aplica as preferências via regras de domínio
-// e persiste. Retorna ErrProviderNaoEncontrado se o prestador não existir e
-// ErrDescansoInvalido se o descanso for negativo.
+// Executar carrega a conta e a agenda, aplica as preferências via regras de
+// domínio e persiste as duas. Retorna ErrProviderNaoEncontrado se qualquer uma
+// das duas não existir e ErrDescansoInvalido se o descanso for negativo.
 func (uc *AtualizarPreferenciasUseCase) Executar(in AtualizarPreferenciasInput) (*AtualizarPreferenciasOutput, error) {
 	p, err := uc.repo.BuscarPorID(in.ProviderID)
 	if err != nil {
@@ -59,7 +63,17 @@ func (uc *AtualizarPreferenciasUseCase) Executar(in AtualizarPreferenciasInput) 
 		return nil, ErrProviderNaoEncontrado
 	}
 
-	if err := p.DefinirTelefone(in.Telefone); err != nil {
+	u, err := uc.usuarios.BuscarPorID(in.UsuarioID)
+	if err != nil {
+		return nil, err
+	}
+	if u == nil {
+		return nil, ErrProviderNaoEncontrado
+	}
+
+	// O telefone é da conta de quem está logado, não da agenda: um operador
+	// que edite as preferências troca o próprio telefone, não o do dono.
+	if err := u.DefinirTelefone(in.Telefone); err != nil {
 		return nil, err
 	}
 
@@ -98,9 +112,12 @@ func (uc *AtualizarPreferenciasUseCase) Executar(in AtualizarPreferenciasInput) 
 	if err := uc.repo.Atualizar(p); err != nil {
 		return nil, err
 	}
+	if err := uc.usuarios.Atualizar(u); err != nil {
+		return nil, err
+	}
 
 	return &AtualizarPreferenciasOutput{
-		Telefone:                     p.Telefone,
+		Telefone:                     u.Telefone,
 		AceitaAgendamentos:           p.AceitaAgendamentos,
 		DescansoMinutos:              p.DescansoMinutos,
 		DuracaoAtendimentoMinutos:    p.DuracaoAtendimentoMinutos,

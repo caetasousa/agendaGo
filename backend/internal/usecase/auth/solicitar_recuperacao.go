@@ -9,15 +9,24 @@ import (
 // SolicitarRecuperacaoUseCase inicia a recuperação de senha: gera um token de
 // uso único e dispara o email com o link de redefinição.
 type SolicitarRecuperacaoUseCase struct {
-	providers contaProvider
+	usuarios  contaUsuario
+	membros   buscadorMembro
+	providers buscadorProvider
 	clients   contaClient
 	resets    repositorioResetSenha
 	enviador  enviadorRecuperacao
 }
 
 // NovoSolicitarRecuperacaoUseCase cria uma instância de SolicitarRecuperacaoUseCase com as dependências injetadas.
-func NovoSolicitarRecuperacaoUseCase(providers contaProvider, clients contaClient, resets repositorioResetSenha, enviador enviadorRecuperacao) *SolicitarRecuperacaoUseCase {
-	return &SolicitarRecuperacaoUseCase{providers: providers, clients: clients, resets: resets, enviador: enviador}
+func NovoSolicitarRecuperacaoUseCase(
+	usuarios contaUsuario,
+	membros buscadorMembro,
+	providers buscadorProvider,
+	clients contaClient,
+	resets repositorioResetSenha,
+	enviador enviadorRecuperacao,
+) *SolicitarRecuperacaoUseCase {
+	return &SolicitarRecuperacaoUseCase{usuarios: usuarios, membros: membros, providers: providers, clients: clients, resets: resets, enviador: enviador}
 }
 
 // Executar busca uma conta (prestador ou cliente com senha) pelo email e, se
@@ -25,10 +34,14 @@ func NovoSolicitarRecuperacaoUseCase(providers contaProvider, clients contaClien
 // nem sinaliza de outra forma se o email não corresponde a nenhuma conta —
 // resposta idêntica nos dois casos, para não vazar quais emails existem.
 func (uc *SolicitarRecuperacaoUseCase) Executar(email string) error {
-	if p, err := uc.providers.BuscarPorEmail(email); err != nil {
+	if u, err := uc.usuarios.BuscarPorEmail(email); err != nil {
 		return err
-	} else if p != nil && p.Ativo {
-		if err := uc.emitir(p.ID, p.Nome, p.Email, session.TipoProvider); err != nil {
+	} else if u != nil && u.Ativo {
+		nome, err := uc.nomeDaAgenda(u.ID)
+		if err != nil {
+			return err
+		}
+		if err := uc.emitir(u.ID, nome, u.Email, session.TipoProvider); err != nil {
 			return err
 		}
 	}
@@ -42,6 +55,29 @@ func (uc *SolicitarRecuperacaoUseCase) Executar(email string) error {
 	}
 
 	return nil
+}
+
+// nomeDaAgenda devolve o nome exibido no email de recuperação. Ele vem da
+// agenda, não da conta: quem loga não tem nome próprio no modelo. Sem vínculo
+// ou sem agenda o email sai sem saudação personalizada, em vez de falhar — a
+// recuperação de senha é o pior momento para barrar alguém por um dado
+// cosmético.
+func (uc *SolicitarRecuperacaoUseCase) nomeDaAgenda(usuarioID string) (string, error) {
+	vinculo, err := uc.membros.BuscarPorUsuario(usuarioID)
+	if err != nil {
+		return "", err
+	}
+	if vinculo == nil {
+		return "", nil
+	}
+	p, err := uc.providers.BuscarPorID(vinculo.ProviderID)
+	if err != nil {
+		return "", err
+	}
+	if p == nil {
+		return "", nil
+	}
+	return p.Nome, nil
 }
 
 func (uc *SolicitarRecuperacaoUseCase) emitir(userID, nome, email string, tipo session.TipoUsuario) error {

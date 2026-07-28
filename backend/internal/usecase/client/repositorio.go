@@ -6,8 +6,8 @@ import (
 	"agendago/internal/domain/admin"
 	"agendago/internal/domain/client"
 	"agendago/internal/domain/precadastro"
-	"agendago/internal/domain/provider"
 	"agendago/internal/domain/signup"
+	"agendago/internal/domain/usuario"
 )
 
 // repositorioClient persiste e consulta clientes, incluindo a conversão de um
@@ -20,9 +20,10 @@ type repositorioClient interface {
 }
 
 // buscadorProvider verifica se o email já pertence a um prestador — o email é
-// único entre clientes e prestadores.
+// único entre clientes e prestadores. Consulta usuarios, não providers: desde
+// a separação entre conta e agenda, é lá que o email mora.
 type buscadorProvider interface {
-	BuscarPorEmail(email string) (*provider.Provider, error)
+	BuscarPorEmail(email string) (*usuario.Usuario, error)
 }
 
 // buscadorAdmin verifica se o email pertence ao administrador. O email do admin

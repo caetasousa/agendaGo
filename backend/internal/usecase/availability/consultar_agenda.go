@@ -48,14 +48,16 @@ type ConsultarAgendaOutput struct {
 type ConsultarAgendaUseCase struct {
 	excecaoRepo  repositorioDateException
 	providerRepo repositorioProvider
+	membroRepo   repositorioMembro
 }
 
 // NovoConsultarAgendaUseCase cria uma instância de ConsultarAgendaUseCase com os repositórios injetados.
 func NovoConsultarAgendaUseCase(
 	excecaoRepo repositorioDateException,
 	providerRepo repositorioProvider,
+	membroRepo repositorioMembro,
 ) *ConsultarAgendaUseCase {
-	return &ConsultarAgendaUseCase{excecaoRepo: excecaoRepo, providerRepo: providerRepo}
+	return &ConsultarAgendaUseCase{excecaoRepo: excecaoRepo, providerRepo: providerRepo, membroRepo: membroRepo}
 }
 
 // Executar resolve cada dia do período na ordem: definição própria da data →
@@ -74,6 +76,11 @@ func (uc *ConsultarAgendaUseCase) Executar(in ConsultarAgendaInput) (*ConsultarA
 		return nil, ErrProviderNaoEncontrado
 	}
 
+	donoAtivo, err := uc.membroRepo.DonoAtivo(in.ProviderID)
+	if err != nil {
+		return nil, err
+	}
+
 	excecoes, err := uc.excecaoRepo.Listar(in.ProviderID)
 	if err != nil {
 		return nil, err
@@ -87,7 +94,7 @@ func (uc *ConsultarAgendaUseCase) Executar(in ConsultarAgendaInput) (*ConsultarA
 	for d := in.De; !d.After(in.Ate); d = d.AddDate(0, 0, 1) {
 		// a tela de disponibilidade reflete o que o público vê: agenda
 		// desativada zera o expediente padrão (a UI mostra o aviso)
-		dia := DiaAgenda{Data: d, Origem: OrigemPadrao, Blocos: blocosPadrao(p, d, false)}
+		dia := DiaAgenda{Data: d, Origem: OrigemPadrao, Blocos: blocosPadrao(p, donoAtivo, d, false)}
 		if e, ok := porData[d.Format("2006-01-02")]; ok {
 			if e.Tipo == availability.TipoBloqueio {
 				dia.Origem = OrigemBloqueio
