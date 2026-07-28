@@ -25,22 +25,22 @@ func novoRouterAuth(t *testing.T) (*chi.Mux, *provider.Provider, *client.Client)
 	t.Helper()
 	hasher := security.NovoHasherArgon2id()
 
-	providerRepo := memoria.NovoProviderMemoria()
+	usuarios, membros, providers := fakesDePrestador()
 	clientRepo := memoria.NovoClientMemoria()
 	sessionRepo := memoria.NovoSessionMemoria()
 
 	senhaHash, _ := hasher.Gerar("12345678")
-	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
-	providerRepo.Salvar(p)
+	_, p := criarPrestador(usuarios, membros, providers, "provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
+	providers.Salvar(p)
 
 	c, _ := client.NovoComConta("client-1", "Maria Silva", "maria@email.com", senhaHash)
 	clientRepo.Salvar(c)
 
-	loginProvider := ucauth.NovoLoginProviderUseCase(providerRepo, sessionRepo, hasher)
+	loginProvider := ucauth.NovoLoginProviderUseCase(usuarios, membros, providers, sessionRepo, hasher)
 	loginClient := ucauth.NovoLoginClientUseCase(clientRepo, sessionRepo, hasher)
 	logout := ucauth.NovoLogoutUseCase(sessionRepo)
-	validarSessao := ucauth.NovoValidarSessaoUseCase(sessionRepo)
-	perfil := ucauth.NovoPerfilUseCase(providerRepo, clientRepo, memoria.NovoAdminMemoria())
+	validarSessao := ucauth.NovoValidarSessaoUseCase(sessionRepo, membros)
+	perfil := ucauth.NovoPerfilUseCase(usuarios, providers, clientRepo, memoria.NovoAdminMemoria())
 
 	identidadeDoContexto := func(r *http.Request) (ucauth.Identidade, bool) {
 		return middleware.IdentidadeDoContexto(r.Context())

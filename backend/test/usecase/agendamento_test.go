@@ -42,13 +42,13 @@ type ambienteAgendamento struct {
 func novoAmbienteAgendamento(t *testing.T) *ambienteAgendamento {
 	t.Helper()
 
-	providerRepo := memoria.NovoProviderMemoria()
-	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", "hash")
+	usuarios, membros, providers := fakesDePrestador()
+	_, p := criarPrestador(usuarios, membros, providers, "provider-1", "João Silva", "joao@email.com", "11999998888", senhaDeTeste)
 	p.AtivarAgenda()
 	// marcação pelo prestador nasce desativada; o ambiente habilita para os
 	// testes que exercitam esse fluxo (TestMarcarPeloPrestador)
 	p.AtivarMarcacaoPeloPrestador()
-	providerRepo.Salvar(p)
+	providers.Salvar(p)
 
 	clientRepo := memoria.NovoClientMemoria()
 	c, _ := client.NovoComConta("client-1", "Maria Souza", "maria@email.com", "hash")
@@ -61,19 +61,19 @@ func novoAmbienteAgendamento(t *testing.T) *ambienteAgendamento {
 	mailer := email.NovaMailerMemoria()
 	notificador := email.NovoNotificador(mailer, "http://localhost:5173", time.UTC, email.ExecutorSincrono)
 
-	resolvedor := ucavailability.NovoConsultarDisponibilidadeUseCase(availabilityRepo, providerRepo)
-	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointments, providerRepo, time.UTC)
-	solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointments, clientRepo, providerRepo, notificador, 24*time.Hour)
+	resolvedor := ucavailability.NovoConsultarDisponibilidadeUseCase(availabilityRepo, providers, membros)
+	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointments, providers, membros, time.UTC)
+	solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointments, clientRepo, providers, membros, notificador, 24*time.Hour)
 	preCadastros := memoria.NovoPreCadastroMemoria()
-	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitar, clientRepo, providerRepo, cancelamentos, preCadastros, notificador)
-	marcarPeloPrestador := ucappointment.NovoMarcarPeloPrestadorUseCase(solicitar, clientRepo, providerRepo)
-	transicionar := ucappointment.NovoTransicionarUseCase(appointments, providerRepo, clientRepo, cancelamentos, preCadastros, notificador, 24*time.Hour, time.UTC)
-	cancelarPorToken := ucappointment.NovoCancelarPorTokenUseCase(appointments, cancelamentos, providerRepo, clientRepo, notificador, 24*time.Hour, time.UTC)
+	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitar, clientRepo, providers, membros, cancelamentos, preCadastros, notificador)
+	marcarPeloPrestador := ucappointment.NovoMarcarPeloPrestadorUseCase(solicitar, clientRepo, providers)
+	transicionar := ucappointment.NovoTransicionarUseCase(appointments, providers, membros, clientRepo, cancelamentos, preCadastros, notificador, 24*time.Hour, time.UTC)
+	cancelarPorToken := ucappointment.NovoCancelarPorTokenUseCase(appointments, cancelamentos, providers, membros, clientRepo, notificador, 24*time.Hour, time.UTC)
 	hasher := security.NovoHasherArgon2id()
 	consultarPreCadastro := ucclient.NovoConsultarPreCadastroUseCase(preCadastros)
-	concluirPreCadastro := ucclient.NovoConcluirPreCadastroUseCase(clientRepo, providerRepo, memoria.NovoAdminMemoria(), preCadastros, hasher)
-	listar := ucappointment.NovoListarUseCase(appointments, providerRepo, clientRepo)
-	lembrar := ucappointment.NovoLembrarUseCase(appointments, providerRepo, clientRepo, notificador, time.UTC, 24*time.Hour)
+	concluirPreCadastro := ucclient.NovoConcluirPreCadastroUseCase(clientRepo, usuarios, memoria.NovoAdminMemoria(), preCadastros, hasher)
+	listar := ucappointment.NovoListarUseCase(appointments, providers, clientRepo)
+	lembrar := ucappointment.NovoLembrarUseCase(appointments, providers, membros, clientRepo, notificador, time.UTC, 24*time.Hour)
 
 	return &ambienteAgendamento{
 		consultarSlots:       consultarSlots,
@@ -90,7 +90,7 @@ func novoAmbienteAgendamento(t *testing.T) *ambienteAgendamento {
 		clients:              clientRepo,
 		cancelamentos:        cancelamentos,
 		preCadastros:         preCadastros,
-		providers:            providerRepo,
+		providers:            providers,
 		prestador:            p,
 		mailer:               mailer,
 	}

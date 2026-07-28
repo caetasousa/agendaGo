@@ -9,7 +9,6 @@ import (
 	"agendago/internal/adapter/http/middleware"
 	"agendago/internal/adapter/security"
 	"agendago/internal/domain/client"
-	"agendago/internal/domain/provider"
 	ucadmin "agendago/internal/usecase/admin"
 	ucappointment "agendago/internal/usecase/appointment"
 	ucauth "agendago/internal/usecase/auth"
@@ -24,7 +23,7 @@ func novoRouterAdmin(t *testing.T) (r *chi.Mux, providerID, clientID string) {
 	t.Helper()
 	hasher := security.NovoHasherArgon2id()
 
-	providerRepo := memoria.NovoProviderMemoria()
+	usuarios, membros, providers := fakesDePrestador()
 	clientRepo := memoria.NovoClientMemoria()
 	sessionRepo := memoria.NovoSessionMemoria()
 	adminRepo := memoria.NovoAdminMemoria()
@@ -34,24 +33,24 @@ func novoRouterAdmin(t *testing.T) (r *chi.Mux, providerID, clientID string) {
 	}
 
 	senhaHash, _ := hasher.Gerar("12345678")
-	p, _ := provider.Novo("11111111-1111-1111-1111-111111111111", "João Silva", "joao@email.com", "11999998888", senhaHash)
+	_, p := criarPrestador(usuarios, membros, providers, "11111111-1111-1111-1111-111111111111", "João Silva", "joao@email.com", "11999998888", senhaHash)
 	p.AtivarAgenda()
-	providerRepo.Salvar(p)
+	providers.Salvar(p)
 	c, _ := client.NovoComConta("22222222-2222-2222-2222-222222222222", "Maria Souza", "maria@email.com", senhaHash)
 	clientRepo.Salvar(c)
 
-	loginProvider := ucauth.NovoLoginProviderUseCase(providerRepo, sessionRepo, hasher)
+	loginProvider := ucauth.NovoLoginProviderUseCase(usuarios, membros, providers, sessionRepo, hasher)
 	loginClient := ucauth.NovoLoginClientUseCase(clientRepo, sessionRepo, hasher)
 	loginAdmin := ucauth.NovoLoginAdminUseCase(adminRepo, sessionRepo, hasher)
-	validarSessao := ucauth.NovoValidarSessaoUseCase(sessionRepo)
+	validarSessao := ucauth.NovoValidarSessaoUseCase(sessionRepo, membros)
 
 	identidadeDoContexto := func(req *http.Request) (ucauth.Identidade, bool) {
 		return middleware.IdentidadeDoContexto(req.Context())
 	}
-	moderar := ucadmin.NovoModerarUseCase(providerRepo, clientRepo, sessionRepo)
+	moderar := ucadmin.NovoModerarUseCase(providers, usuarios, membros, clientRepo, sessionRepo)
 	appointmentRepo := memoria.NovoAppointmentMemoria()
-	listarAgendamentos := ucappointment.NovoListarUseCase(appointmentRepo, providerRepo, clientRepo)
-	detalhar := ucadmin.NovoDetalharUseCase(providerRepo, clientRepo, listarAgendamentos)
+	listarAgendamentos := ucappointment.NovoListarUseCase(appointmentRepo, providers, clientRepo)
+	detalhar := ucadmin.NovoDetalharUseCase(providers, usuarios, membros, clientRepo, listarAgendamentos)
 	adminHandler := handler.NovoAdminHandler(moderar, detalhar)
 	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, loginAdmin, nil, nil, false, nil, identidadeDoContexto)
 	authMw := middleware.NovoAuth(validarSessao, false)

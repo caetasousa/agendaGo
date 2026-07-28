@@ -12,7 +12,6 @@ import (
 	"agendago/internal/adapter/http/handler"
 	"agendago/internal/adapter/http/middleware"
 	"agendago/internal/adapter/security"
-	"agendago/internal/domain/provider"
 	ucauth "agendago/internal/usecase/auth"
 	"agendago/test/repository/memoria"
 
@@ -33,26 +32,26 @@ func novoRouterComTetos(t *testing.T) *chi.Mux {
 	t.Helper()
 	hasher := security.NovoHasherArgon2id()
 
-	providerRepo := memoria.NovoProviderMemoria()
+	usuarios, membros, providers := fakesDePrestador()
 	clientRepo := memoria.NovoClientMemoria()
 	sessionRepo := memoria.NovoSessionMemoria()
 	resetRepo := memoria.NovoPasswordResetMemoria()
 
 	senhaHash, _ := hasher.Gerar("12345678")
-	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
-	providerRepo.Salvar(p)
+	_, p := criarPrestador(usuarios, membros, providers, "provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
+	providers.Salvar(p)
 
 	notificador := email.NovoNotificador(email.NovaMailerMemoria(), "http://localhost:5173", time.UTC, email.ExecutorSincrono)
 
 	limitador := handler.NovoLimitadorPorConta(tetoPorConta, time.Minute)
 	authHandler := handler.NovoAuthHandler(
-		ucauth.NovoLoginProviderUseCase(providerRepo, sessionRepo, hasher),
+		ucauth.NovoLoginProviderUseCase(usuarios, membros, providers, sessionRepo, hasher),
 		ucauth.NovoLoginClientUseCase(clientRepo, sessionRepo, hasher),
 		nil, nil, nil, false, limitador, nil,
 	)
 	passwordResetHandler := handler.NovoPasswordResetHandler(
-		ucauth.NovoSolicitarRecuperacaoUseCase(providerRepo, clientRepo, resetRepo, notificador),
-		ucauth.NovoRedefinirSenhaUseCase(providerRepo, clientRepo, resetRepo, sessionRepo, hasher),
+		ucauth.NovoSolicitarRecuperacaoUseCase(usuarios, membros, providers, clientRepo, resetRepo, notificador),
+		ucauth.NovoRedefinirSenhaUseCase(usuarios, clientRepo, resetRepo, sessionRepo, hasher),
 		limitador,
 	)
 

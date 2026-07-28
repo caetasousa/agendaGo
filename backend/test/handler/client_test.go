@@ -23,16 +23,16 @@ import (
 
 func novoClientHandler() (*handler.ClientHandler, *memoria.ClientMemoria, *memoria.PreCadastroMemoria) {
 	clients := memoria.NovoClientMemoria()
-	providers := memoria.NovoProviderMemoria()
+	usuarios, _, _ := fakesDePrestador()
 	admins := memoria.NovoAdminMemoria()
 	pendentes := memoria.NovoSignupMemoria()
 	notificador := email.NovoNotificador(email.NovaMailerMemoria(), "http://localhost:5173", time.UTC, email.ExecutorSincrono)
 	hasher := security.NovoHasherArgon2id()
-	solicitar := ucclient.NovoSolicitarCadastroUseCase(clients, providers, admins, pendentes, notificador, hasher)
-	confirmar := ucclient.NovoConfirmarCadastroUseCase(clients, providers, admins, pendentes)
+	solicitar := ucclient.NovoSolicitarCadastroUseCase(clients, usuarios, admins, pendentes, notificador, hasher)
+	confirmar := ucclient.NovoConfirmarCadastroUseCase(clients, usuarios, admins, pendentes)
 	preCadastroRepo := memoria.NovoPreCadastroMemoria()
 	consultarPreCadastro := ucclient.NovoConsultarPreCadastroUseCase(preCadastroRepo)
-	concluirPreCadastro := ucclient.NovoConcluirPreCadastroUseCase(clients, providers, admins, preCadastroRepo, hasher)
+	concluirPreCadastro := ucclient.NovoConcluirPreCadastroUseCase(clients, usuarios, admins, preCadastroRepo, hasher)
 	return handler.NovoClientHandler(solicitar, confirmar, consultarPreCadastro, concluirPreCadastro), clients, preCadastroRepo
 }
 

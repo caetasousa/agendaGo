@@ -9,7 +9,6 @@ import (
 
 	"agendago/internal/adapter/http/handler"
 	"agendago/internal/adapter/security"
-	"agendago/internal/domain/provider"
 	ucauth "agendago/internal/usecase/auth"
 	"agendago/test/repository/memoria"
 )
@@ -23,15 +22,15 @@ func TestNomeDoCookieDeSessao(t *testing.T) {
 	logar := func(t *testing.T, cookieSeguro bool) *http.Cookie {
 		t.Helper()
 		hasher := security.NovoHasherArgon2id()
-		providerRepo := memoria.NovoProviderMemoria()
+		usuarios, membros, providers := fakesDePrestador()
 		sessionRepo := memoria.NovoSessionMemoria()
 
 		senhaHash, _ := hasher.Gerar("12345678")
-		p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
-		providerRepo.Salvar(p)
+		_, p := criarPrestador(usuarios, membros, providers, "provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
+		providers.Salvar(p)
 
 		h := handler.NovoAuthHandler(
-			ucauth.NovoLoginProviderUseCase(providerRepo, sessionRepo, hasher),
+			ucauth.NovoLoginProviderUseCase(usuarios, membros, providers, sessionRepo, hasher),
 			nil, nil, nil, nil, cookieSeguro, nil, nil,
 		)
 

@@ -13,7 +13,6 @@ import (
 	"agendago/internal/adapter/http/middleware"
 	"agendago/internal/adapter/security"
 	"agendago/internal/domain/client"
-	"agendago/internal/domain/provider"
 	ucappointment "agendago/internal/usecase/appointment"
 	ucauth "agendago/internal/usecase/auth"
 	ucavailability "agendago/internal/usecase/availability"
@@ -24,32 +23,34 @@ import (
 
 // novoRouterAgendamento monta um router chi com um prestador ativo e um
 // cliente cadastrados e as rotas de agendamento, espelhando o wiring de main.go.
-// providerRepo é devolvido para os testes que precisam mutar o prestador
+// providers é devolvido para os testes que precisam mutar o prestador
 // (ex.: desativar a marcação pelo prestador em preferências) depois de montado o router.
-func novoRouterAgendamento(t *testing.T) (r *chi.Mux, providerID string, mailer *email.MailerMemoria, providerRepo *memoria.ProviderMemoria) {
+func novoRouterAgendamento(t *testing.T) (r *chi.Mux, providerID string, mailer *email.MailerMemoria, providers *memoria.ProviderMemoria) {
 	t.Helper()
 	hasher := security.NovoHasherArgon2id()
 
-	providerRepo = memoria.NovoProviderMemoria()
+	var usuarios *memoria.UsuarioMemoria
+	var membros *memoria.MembroMemoria
+	usuarios, membros, providers = fakesDePrestador()
 	clientRepo := memoria.NovoClientMemoria()
 	sessionRepo := memoria.NovoSessionMemoria()
 	availabilityRepo := memoria.NovoAvailabilityMemoria()
 	appointmentRepo := memoria.NovoAppointmentMemoria()
 
 	senhaHash, _ := hasher.Gerar("12345678")
-	p, _ := provider.Novo("11111111-1111-1111-1111-111111111111", "João Silva", "joao@email.com", "11999998888", senhaHash)
+	_, p := criarPrestador(usuarios, membros, providers, "11111111-1111-1111-1111-111111111111", "João Silva", "joao@email.com", "11999998888", senhaHash)
 	p.AtivarAgenda()
 	// marcação pelo prestador nasce desativada; habilita para os testes de
 	// marcação (o subteste do 403 desativa de novo, depois de montado o router)
 	p.AtivarMarcacaoPeloPrestador()
-	providerRepo.Salvar(p)
+	providers.Salvar(p)
 
 	c, _ := client.NovoComConta("22222222-2222-2222-2222-222222222222", "Maria Souza", "maria@email.com", senhaHash)
 	clientRepo.Salvar(c)
 
-	loginProvider := ucauth.NovoLoginProviderUseCase(providerRepo, sessionRepo, hasher)
+	loginProvider := ucauth.NovoLoginProviderUseCase(usuarios, membros, providers, sessionRepo, hasher)
 	loginClient := ucauth.NovoLoginClientUseCase(clientRepo, sessionRepo, hasher)
-	validarSessao := ucauth.NovoValidarSessaoUseCase(sessionRepo)
+	validarSessao := ucauth.NovoValidarSessaoUseCase(sessionRepo, membros)
 
 	identidadeDoContexto := func(req *http.Request) (ucauth.Identidade, bool) {
 		return middleware.IdentidadeDoContexto(req.Context())
@@ -59,14 +60,14 @@ func novoRouterAgendamento(t *testing.T) (r *chi.Mux, providerID string, mailer 
 	notificador := email.NovoNotificador(mailer, "http://localhost:5173", time.UTC, email.ExecutorSincrono)
 	cancelamentoRepo := memoria.NovoCancellationMemoria()
 	preCadastroRepo := memoria.NovoPreCadastroMemoria()
-	resolvedor := ucavailability.NovoConsultarDisponibilidadeUseCase(availabilityRepo, providerRepo)
-	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointmentRepo, providerRepo, time.UTC)
-	solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointmentRepo, clientRepo, providerRepo, notificador, 24*time.Hour)
-	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitar, clientRepo, providerRepo, cancelamentoRepo, preCadastroRepo, notificador)
-	marcarPeloPrestador := ucappointment.NovoMarcarPeloPrestadorUseCase(solicitar, clientRepo, providerRepo)
-	transicionar := ucappointment.NovoTransicionarUseCase(appointmentRepo, providerRepo, clientRepo, cancelamentoRepo, preCadastroRepo, notificador, 24*time.Hour, time.UTC)
-	cancelarPorToken := ucappointment.NovoCancelarPorTokenUseCase(appointmentRepo, cancelamentoRepo, providerRepo, clientRepo, notificador, 24*time.Hour, time.UTC)
-	listar := ucappointment.NovoListarUseCase(appointmentRepo, providerRepo, clientRepo)
+	resolvedor := ucavailability.NovoConsultarDisponibilidadeUseCase(availabilityRepo, providers, membros)
+	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointmentRepo, providers, membros, time.UTC)
+	solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointmentRepo, clientRepo, providers, membros, notificador, 24*time.Hour)
+	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitar, clientRepo, providers, membros, cancelamentoRepo, preCadastroRepo, notificador)
+	marcarPeloPrestador := ucappointment.NovoMarcarPeloPrestadorUseCase(solicitar, clientRepo, providers)
+	transicionar := ucappointment.NovoTransicionarUseCase(appointmentRepo, providers, membros, clientRepo, cancelamentoRepo, preCadastroRepo, notificador, 24*time.Hour, time.UTC)
+	cancelarPorToken := ucappointment.NovoCancelarPorTokenUseCase(appointmentRepo, cancelamentoRepo, providers, membros, clientRepo, notificador, 24*time.Hour, time.UTC)
+	listar := ucappointment.NovoListarUseCase(appointmentRepo, providers, clientRepo)
 
 	appointmentHandler := handler.NovoAppointmentHandler(consultarSlots, solicitar, solicitarConvidado, marcarPeloPrestador, transicionar, cancelarPorToken, listar, identidadeDoContexto)
 	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, nil, nil, nil, false, nil, identidadeDoContexto)
@@ -101,7 +102,7 @@ func novoRouterAgendamento(t *testing.T) (r *chi.Mux, providerID string, mailer 
 		router.Post("/agendamentos/{id}/nao-compareceu", appointmentHandler.MarcarNaoCompareceu)
 	})
 
-	return router, p.ID, mailer, providerRepo
+	return router, p.ID, mailer, providers
 }
 
 // dataFutura devolve uma segunda-feira ao menos 30 dias à frente, para os
@@ -469,10 +470,10 @@ func TestHandlerMarcarPeloPrestador(t *testing.T) {
 	})
 
 	t.Run("prestador com a funcionalidade desativada em preferências leva 403", func(t *testing.T) {
-		r, _, _, providerRepo := novoRouterAgendamento(t)
-		p, _ := providerRepo.BuscarPorID("11111111-1111-1111-1111-111111111111")
+		r, _, _, providers := novoRouterAgendamento(t)
+		p, _ := providers.BuscarPorID("11111111-1111-1111-1111-111111111111")
 		p.DesativarMarcacaoPeloPrestador()
-		providerRepo.Salvar(p)
+		providers.Salvar(p)
 
 		cookiePrestador := loginEObterCookie(t, r, "/auth/provider/login", "joao@email.com", "12345678")
 		corpo := map[string]any{

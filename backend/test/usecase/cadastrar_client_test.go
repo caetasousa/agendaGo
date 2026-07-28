@@ -9,7 +9,6 @@ import (
 	"agendago/internal/adapter/security"
 	"agendago/internal/domain/admin"
 	"agendago/internal/domain/client"
-	"agendago/internal/domain/provider"
 	ucclient "agendago/internal/usecase/client"
 	"agendago/test/repository/memoria"
 )
@@ -20,6 +19,8 @@ type ambienteCadastro struct {
 	solicitar *ucclient.SolicitarCadastroUseCase
 	confirmar *ucclient.ConfirmarCadastroUseCase
 	clients   *memoria.ClientMemoria
+	usuarios  *memoria.UsuarioMemoria
+	membros   *memoria.MembroMemoria
 	providers *memoria.ProviderMemoria
 	admins    *memoria.AdminMemoria
 	mailer    *email.MailerMemoria
@@ -27,7 +28,7 @@ type ambienteCadastro struct {
 
 func novoAmbienteCadastro() *ambienteCadastro {
 	clients := memoria.NovoClientMemoria()
-	providers := memoria.NovoProviderMemoria()
+	usuarios, membros, providers := fakesDePrestador()
 	admins := memoria.NovoAdminMemoria()
 	pendentes := memoria.NovoSignupMemoria()
 	mailer := email.NovaMailerMemoria()
@@ -35,9 +36,11 @@ func novoAmbienteCadastro() *ambienteCadastro {
 	hasher := security.NovoHasherArgon2id()
 
 	return &ambienteCadastro{
-		solicitar: ucclient.NovoSolicitarCadastroUseCase(clients, providers, admins, pendentes, notificador, hasher),
-		confirmar: ucclient.NovoConfirmarCadastroUseCase(clients, providers, admins, pendentes),
+		solicitar: ucclient.NovoSolicitarCadastroUseCase(clients, usuarios, admins, pendentes, notificador, hasher),
+		confirmar: ucclient.NovoConfirmarCadastroUseCase(clients, usuarios, admins, pendentes),
 		clients:   clients,
+		usuarios:  usuarios,
+		membros:   membros,
 		providers: providers,
 		admins:    admins,
 		mailer:    mailer,
@@ -171,8 +174,7 @@ func TestSolicitarCadastro(t *testing.T) {
 
 	t.Run("email que já é de um prestador envia aviso, não cria pendente", func(t *testing.T) {
 		amb := novoAmbienteCadastro()
-		p, _ := provider.Novo("p-1", "João", "joao@email.com", "11999998888", "hash")
-		amb.providers.Salvar(p)
+		criarPrestador(amb.usuarios, amb.membros, amb.providers, "p-1", "João", "joao@email.com", "11999998888", senhaDeTeste)
 
 		if err := amb.solicitar.Executar(inputCadastro("joao@email.com")); err != nil {
 			t.Fatalf("esperava sucesso (resposta genérica), got: %v", err)

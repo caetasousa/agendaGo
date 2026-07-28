@@ -13,7 +13,6 @@ import (
 	"agendago/internal/adapter/http/middleware"
 	"agendago/internal/adapter/security"
 	"agendago/internal/domain/client"
-	"agendago/internal/domain/provider"
 	ucauth "agendago/internal/usecase/auth"
 	ucprovider "agendago/internal/usecase/provider"
 	"agendago/test/repository/memoria"
@@ -28,16 +27,16 @@ func identidadeAusente(r *http.Request) (ucauth.Identidade, bool) {
 }
 
 func novoHandler() *handler.ProviderHandler {
-	repo := memoria.NovoProviderMemoria()
+	usuarios, membros, providers := fakesDePrestador()
 	clients := memoria.NovoClientMemoria()
 	admins := memoria.NovoAdminMemoria()
 	pendentes := memoria.NovoSignupMemoria()
 	notificador := email.NovoNotificador(email.NovaMailerMemoria(), "http://localhost:5173", time.UTC, email.ExecutorSincrono)
-	solicitar := ucprovider.NovoSolicitarCadastroUseCase(repo, clients, admins, pendentes, notificador, security.NovoHasherArgon2id())
-	confirmar := ucprovider.NovoConfirmarCadastroUseCase(repo, clients, admins, pendentes)
-	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(repo)
-	listar := ucprovider.NovoListarUseCase(repo)
-	buscarResumo := ucprovider.NovoBuscarResumoUseCase(repo)
+	solicitar := ucprovider.NovoSolicitarCadastroUseCase(usuarios, clients, admins, pendentes, notificador, security.NovoHasherArgon2id())
+	confirmar := ucprovider.NovoConfirmarCadastroUseCase(providers, usuarios, membros, clients, admins, pendentes)
+	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios)
+	listar := ucprovider.NovoListarUseCase(providers)
+	buscarResumo := ucprovider.NovoBuscarResumoUseCase(providers, membros)
 	return handler.NovoProviderHandler(solicitar, confirmar, atualizarPreferencias, listar, buscarResumo, identidadeAusente)
 }
 
@@ -58,27 +57,27 @@ func novoRouterPreferencias(t *testing.T) (r *chi.Mux, providerID string) {
 	t.Helper()
 	hasher := security.NovoHasherArgon2id()
 
-	providerRepo := memoria.NovoProviderMemoria()
+	usuarios, membros, providers := fakesDePrestador()
 	clientRepo := memoria.NovoClientMemoria()
 	sessionRepo := memoria.NovoSessionMemoria()
 
 	senhaHash, _ := hasher.Gerar("12345678")
-	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
-	providerRepo.Salvar(p)
+	_, p := criarPrestador(usuarios, membros, providers, "provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
+	providers.Salvar(p)
 
 	c, _ := client.NovoComConta("client-1", "Maria Silva", "maria@email.com", senhaHash)
 	clientRepo.Salvar(c)
 
-	loginProvider := ucauth.NovoLoginProviderUseCase(providerRepo, sessionRepo, hasher)
+	loginProvider := ucauth.NovoLoginProviderUseCase(usuarios, membros, providers, sessionRepo, hasher)
 	loginClient := ucauth.NovoLoginClientUseCase(clientRepo, sessionRepo, hasher)
-	validarSessao := ucauth.NovoValidarSessaoUseCase(sessionRepo)
+	validarSessao := ucauth.NovoValidarSessaoUseCase(sessionRepo, membros)
 
 	identidadeDoContexto := func(req *http.Request) (ucauth.Identidade, bool) {
 		return middleware.IdentidadeDoContexto(req.Context())
 	}
-	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(providerRepo)
-	listar := ucprovider.NovoListarUseCase(providerRepo)
-	buscarResumo := ucprovider.NovoBuscarResumoUseCase(providerRepo)
+	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios)
+	listar := ucprovider.NovoListarUseCase(providers)
+	buscarResumo := ucprovider.NovoBuscarResumoUseCase(providers, membros)
 	providerHandler := handler.NovoProviderHandler(nil, nil, atualizarPreferencias, listar, buscarResumo, identidadeDoContexto)
 	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, nil, nil, nil, false, nil, identidadeDoContexto)
 	authMw := middleware.NovoAuth(validarSessao, false)

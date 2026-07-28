@@ -11,7 +11,6 @@ import (
 	"agendago/internal/adapter/email"
 	"agendago/internal/adapter/http/handler"
 	"agendago/internal/adapter/security"
-	"agendago/internal/domain/provider"
 	ucauth "agendago/internal/usecase/auth"
 	"agendago/test/repository/memoria"
 
@@ -24,20 +23,20 @@ func novoRouterPasswordReset(t *testing.T) (r *chi.Mux, mailer *email.MailerMemo
 	t.Helper()
 	hasher := security.NovoHasherArgon2id()
 
-	providerRepo := memoria.NovoProviderMemoria()
+	usuarios, membros, providers := fakesDePrestador()
 	clientRepo := memoria.NovoClientMemoria()
 	resetRepo := memoria.NovoPasswordResetMemoria()
 	sessionRepo := memoria.NovoSessionMemoria()
 
 	senhaHash, _ := hasher.Gerar("12345678")
-	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
-	providerRepo.Salvar(p)
+	_, p := criarPrestador(usuarios, membros, providers, "provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
+	providers.Salvar(p)
 
 	mailer = email.NovaMailerMemoria()
 	notificador := email.NovoNotificador(mailer, "http://localhost:5173", time.UTC, email.ExecutorSincrono)
 
-	solicitar := ucauth.NovoSolicitarRecuperacaoUseCase(providerRepo, clientRepo, resetRepo, notificador)
-	redefinir := ucauth.NovoRedefinirSenhaUseCase(providerRepo, clientRepo, resetRepo, sessionRepo, hasher)
+	solicitar := ucauth.NovoSolicitarRecuperacaoUseCase(usuarios, membros, providers, clientRepo, resetRepo, notificador)
+	redefinir := ucauth.NovoRedefinirSenhaUseCase(usuarios, clientRepo, resetRepo, sessionRepo, hasher)
 	passwordResetHandler := handler.NovoPasswordResetHandler(solicitar, redefinir, nil)
 
 	router := chi.NewRouter()

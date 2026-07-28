@@ -6,8 +6,8 @@ import (
 
 	"agendago/internal/adapter/security"
 	"agendago/internal/domain/client"
-	"agendago/internal/domain/provider"
 	"agendago/internal/domain/socialidentity"
+	"agendago/internal/domain/usuario"
 	ucauth "agendago/internal/usecase/auth"
 	"agendago/test/repository/memoria"
 )
@@ -35,6 +35,8 @@ func (f *oidcFake) TrocarCodigo(ctx context.Context, code, nonceEsperado string)
 type ambienteLoginSocial struct {
 	uc          *ucauth.LoginSocialUseCase
 	clients     *memoria.ClientMemoria
+	usuarios    *memoria.UsuarioMemoria
+	membros     *memoria.MembroMemoria
 	providers   *memoria.ProviderMemoria
 	admins      *memoria.AdminMemoria
 	identidades *memoria.SocialIdentityMemoria
@@ -43,13 +45,18 @@ type ambienteLoginSocial struct {
 func novoAmbienteLoginSocial(fake *oidcFake) *ambienteLoginSocial {
 	hasher := security.NovoHasherArgon2id()
 	clients := memoria.NovoClientMemoria()
-	providers := memoria.NovoProviderMemoria()
+	usuarios, membros, providers := fakesDePrestador()
 	admins := memoria.NovoAdminMemoria()
 	identidades := memoria.NovoSocialIdentityMemoria()
 	states := memoria.NovoOAuthStateMemoria()
 	sessoes := memoria.NovoSessionMemoria()
-	uc := ucauth.NovoLoginSocialUseCase(fake, clients, providers, admins, clients, providers, identidades, states, sessoes, hasher)
-	return &ambienteLoginSocial{uc: uc, clients: clients, providers: providers, admins: admins, identidades: identidades}
+	uc := ucauth.NovoLoginSocialUseCase(
+		fake,
+		clients, usuarios, membros, providers, admins,
+		clients, usuarios, providers, membros,
+		identidades, states, sessoes, hasher,
+	)
+	return &ambienteLoginSocial{uc: uc, clients: clients, usuarios: usuarios, membros: membros, providers: providers, admins: admins, identidades: identidades}
 }
 
 func iniciarEObterState(t *testing.T, uc *ucauth.LoginSocialUseCase, publico ucauth.PublicoLoginSocial) (string, string) {
@@ -82,7 +89,7 @@ func TestLoginSocialComEmailDoAdminEhRejeitado(t *testing.T) {
 			if c, _ := amb.clients.BuscarPorEmail(emailAdmin); c != nil {
 				t.Error("não deveria criar cliente com o email do admin")
 			}
-			if p, _ := amb.providers.BuscarPorEmail(emailAdmin); p != nil {
+			if p, _ := amb.usuarios.BuscarPorEmail(emailAdmin); p != nil {
 				t.Error("não deveria criar prestador com o email do admin")
 			}
 			if v, _ := amb.identidades.BuscarPorProvedorSub(socialidentity.Google, "google-sub-admin"); v != nil {
@@ -213,15 +220,13 @@ func TestLoginSocialClient(t *testing.T) {
 	})
 
 	t.Run("email já cadastrado como prestador rejeita login social de cliente", func(t *testing.T) {
-		hasher := security.NovoHasherArgon2id()
-		senhaHash, _ := hasher.Gerar("12345678")
-		prestadorExistente, _ := provider.Novo("provider-existente", "Prestador", "cross@email.com", "11999998888", senhaHash)
+		prestadorExistente, _ := usuario.Novo("provider-existente", "cross@email.com", "11999998888", "hash")
 
 		fake := &oidcFake{identidade: &socialidentity.IdentidadeOIDC{
 			Sub: "google-sub-cross-1", Email: "cross@email.com", EmailVerificado: true, Nome: "Cross",
 		}}
 		amb := novoAmbienteLoginSocial(fake)
-		amb.providers.Salvar(prestadorExistente)
+		amb.usuarios.Salvar(prestadorExistente)
 
 		state, nonce := iniciarEObterState(t, amb.uc, ucauth.PublicoClient)
 		_, err := amb.uc.Concluir(context.Background(), "code", state, state, nonce)
@@ -296,7 +301,7 @@ func TestLoginSocialClient(t *testing.T) {
 		if c, _ := amb.clients.BuscarPorEmail("tipo-fixo@email.com"); c != nil {
 			t.Error("esperava que nenhum cliente fosse criado — o state foi emitido para provider")
 		}
-		p, _ := amb.providers.BuscarPorEmail("tipo-fixo@email.com")
+		p, _ := amb.usuarios.BuscarPorEmail("tipo-fixo@email.com")
 		if p == nil || p.ID != out.UserID {
 			t.Error("esperava que a conta criada fosse um prestador, conforme o state emitido em Iniciar(PublicoProvider)")
 		}
@@ -316,7 +321,7 @@ func TestLoginSocialProvider(t *testing.T) {
 			t.Fatalf("esperava sucesso, got: %v", err)
 		}
 
-		p, _ := amb.providers.BuscarPorEmail("prestador@email.com")
+		p, _ := amb.usuarios.BuscarPorEmail("prestador@email.com")
 		if p == nil {
 			t.Fatal("esperava prestador criado")
 		}
@@ -326,7 +331,11 @@ func TestLoginSocialProvider(t *testing.T) {
 		if p.Telefone != ucauth.TelefonePendente {
 			t.Errorf("esperava telefone pendente (%q), got: %q", ucauth.TelefonePendente, p.Telefone)
 		}
-		if p.AceitaAgendamentos {
+		agenda, _ := amb.membros.BuscarPorUsuario(p.ID)
+		if agenda == nil {
+			t.Fatal("esperava vínculo de dono criado junto da conta")
+		}
+		if ag, _ := amb.providers.BuscarPorID(agenda.ProviderID); ag == nil || ag.AceitaAgendamentos {
 			t.Error("esperava agenda desativada por padrão — prestador social ainda não confirmou o telefone")
 		}
 
@@ -347,9 +356,9 @@ func TestLoginSocialProvider(t *testing.T) {
 			t.Fatalf("primeiro login: esperava sucesso, got: %v", err)
 		}
 
-		p, _ := amb.providers.BuscarPorEmail("banido@email.com")
+		p, _ := amb.usuarios.BuscarPorEmail("banido@email.com")
 		p.Banir()
-		amb.providers.Atualizar(p)
+		amb.usuarios.Atualizar(p)
 
 		state2, nonce2 := iniciarEObterState(t, amb.uc, ucauth.PublicoProvider)
 		_, err := amb.uc.Concluir(context.Background(), "code", state2, state2, nonce2)
@@ -375,7 +384,7 @@ func TestLoginSocialProvider(t *testing.T) {
 			t.Errorf("esperava ErrEmailJaCadastradoOutroTipo, got: %v", err)
 		}
 
-		p, _ := amb.providers.BuscarPorEmail("cross2@email.com")
+		p, _ := amb.usuarios.BuscarPorEmail("cross2@email.com")
 		if p != nil {
 			t.Error("esperava nenhum prestador duplicado criado para email já cadastrado como cliente")
 		}
@@ -410,8 +419,7 @@ func TestLoginSocialUnificado(t *testing.T) {
 			Sub: "sub-uni-2", Email: "prestador@email.com", EmailVerificado: true, Nome: "Prestador Uni",
 		}}
 		amb := novoAmbienteLoginSocial(fake)
-		p, _ := provider.Novo("p-uni", "Prestador Uni", "prestador@email.com", "11999998888", "hash")
-		amb.providers.Salvar(p)
+		criarPrestador(amb.usuarios, amb.membros, amb.providers, "p-uni", "Prestador Uni", "prestador@email.com", "11999998888", "hash")
 
 		state, nonce := iniciarEObterState(t, amb.uc, ucauth.PublicoLogin)
 		out, err := amb.uc.Concluir(context.Background(), "code", state, state, nonce)
@@ -439,7 +447,7 @@ func TestLoginSocialUnificado(t *testing.T) {
 		if c, _ := amb.clients.BuscarPorEmail("ninguem@email.com"); c != nil {
 			t.Error("não deveria ter criado cliente")
 		}
-		if p, _ := amb.providers.BuscarPorEmail("ninguem@email.com"); p != nil {
+		if p, _ := amb.usuarios.BuscarPorEmail("ninguem@email.com"); p != nil {
 			t.Error("não deveria ter criado prestador")
 		}
 	})
@@ -480,7 +488,7 @@ func TestLoginSocialUnificado(t *testing.T) {
 		if segundo.UserID != primeiro.UserID {
 			t.Errorf("esperava o mesmo usuário do vínculo, got: %s e %s", primeiro.UserID, segundo.UserID)
 		}
-		if p, _ := amb.providers.BuscarPorEmail("vinculo@email.com"); p != nil {
+		if p, _ := amb.usuarios.BuscarPorEmail("vinculo@email.com"); p != nil {
 			t.Error("não deveria existir prestador: o vínculo é de cliente")
 		}
 	})

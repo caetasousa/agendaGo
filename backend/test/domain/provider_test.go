@@ -9,7 +9,7 @@ import (
 
 func TestNovo(t *testing.T) {
 	t.Run("cria provider com dados válidos e agenda desativada por padrão", func(t *testing.T) {
-		p, err := provider.Novo("1", "João Silva", "joao@email.com", "11999998888", "12345678")
+		p, err := provider.Novo("1", "João Silva")
 		if err != nil {
 			t.Fatalf("esperava sucesso, got: %v", err)
 		}
@@ -25,7 +25,7 @@ func TestNovo(t *testing.T) {
 	})
 
 	t.Run("inicia com o expediente comercial sugerido (08-12, 14-18)", func(t *testing.T) {
-		p, _ := provider.Novo("1", "João Silva", "joao@email.com", "11999998888", "12345678")
+		p, _ := provider.Novo("1", "João Silva")
 		if len(p.HorariosPadrao) != 2 {
 			t.Fatalf("esperava 2 blocos padrão, got: %d", len(p.HorariosPadrao))
 		}
@@ -35,30 +35,17 @@ func TestNovo(t *testing.T) {
 	})
 
 	t.Run("retorna erro quando nome é vazio", func(t *testing.T) {
-		_, err := provider.Novo("1", "", "joao@email.com", "11999998888", "12345678")
+		_, err := provider.Novo("1", "")
 		if err != provider.ErrNomeObrigatorio {
 			t.Errorf("esperava ErrNomeObrigatorio, got: %v", err)
 		}
 	})
 
-	t.Run("retorna erro quando email é vazio", func(t *testing.T) {
-		_, err := provider.Novo("1", "João Silva", "", "11999998888", "12345678")
-		if err != provider.ErrEmailObrigatorio {
-			t.Errorf("esperava ErrEmailObrigatorio, got: %v", err)
-		}
-	})
-
-	t.Run("retorna erro quando hash de senha é vazio", func(t *testing.T) {
-		_, err := provider.Novo("1", "João Silva", "joao@email.com", "11999998888", "")
-		if err != provider.ErrSenhaObrigatoria {
-			t.Errorf("esperava ErrSenhaObrigatoria, got: %v", err)
-		}
-	})
 }
 
 func TestAgenda(t *testing.T) {
 	t.Run("ativa a agenda do provider", func(t *testing.T) {
-		p, _ := provider.Novo("1", "João Silva", "joao@email.com", "11999998888", "12345678")
+		p, _ := provider.Novo("1", "João Silva")
 		p.AtivarAgenda()
 		if !p.AceitaAgendamentos {
 			t.Error("agenda deveria estar ativa")
@@ -66,7 +53,7 @@ func TestAgenda(t *testing.T) {
 	})
 
 	t.Run("desativa a agenda do provider", func(t *testing.T) {
-		p, _ := provider.Novo("1", "João Silva", "joao@email.com", "11999998888", "12345678")
+		p, _ := provider.Novo("1", "João Silva")
 		p.AtivarAgenda()
 		p.DesativarAgenda()
 		if p.AceitaAgendamentos {
@@ -77,7 +64,7 @@ func TestAgenda(t *testing.T) {
 
 func TestDefinirDescanso(t *testing.T) {
 	t.Run("define o tempo de descanso entre atendimentos", func(t *testing.T) {
-		p, _ := provider.Novo("1", "João Silva", "joao@email.com", "11999998888", "12345678")
+		p, _ := provider.Novo("1", "João Silva")
 		if err := p.DefinirDescanso(15); err != nil {
 			t.Fatalf("esperava sucesso, got: %v", err)
 		}
@@ -87,7 +74,7 @@ func TestDefinirDescanso(t *testing.T) {
 	})
 
 	t.Run("retorna erro quando descanso é negativo", func(t *testing.T) {
-		p, _ := provider.Novo("1", "João Silva", "joao@email.com", "11999998888", "12345678")
+		p, _ := provider.Novo("1", "João Silva")
 		if err := p.DefinirDescanso(-1); err != provider.ErrDescansoInvalido {
 			t.Errorf("esperava ErrDescansoInvalido, got: %v", err)
 		}
@@ -96,7 +83,7 @@ func TestDefinirDescanso(t *testing.T) {
 
 func TestDefinirHorariosPadrao(t *testing.T) {
 	t.Run("substitui o expediente padrão do prestador", func(t *testing.T) {
-		p, _ := provider.Novo("1", "João Silva", "joao@email.com", "11999998888", "12345678")
+		p, _ := provider.Novo("1", "João Silva")
 		bloco, _ := availability.NovoTimeBlock(9*60, 12*60)
 
 		if err := p.DefinirHorariosPadrao([]availability.TimeBlock{bloco}); err != nil {
@@ -108,7 +95,7 @@ func TestDefinirHorariosPadrao(t *testing.T) {
 	})
 
 	t.Run("aceita lista vazia (nenhum horário padrão)", func(t *testing.T) {
-		p, _ := provider.Novo("1", "João Silva", "joao@email.com", "11999998888", "12345678")
+		p, _ := provider.Novo("1", "João Silva")
 
 		if err := p.DefinirHorariosPadrao(nil); err != nil {
 			t.Fatalf("esperava sucesso, got: %v", err)
@@ -119,7 +106,7 @@ func TestDefinirHorariosPadrao(t *testing.T) {
 	})
 
 	t.Run("mescla blocos adjacentes e retorna erro para sobreposição real", func(t *testing.T) {
-		p, _ := provider.Novo("1", "João Silva", "joao@email.com", "11999998888", "12345678")
+		p, _ := provider.Novo("1", "João Silva")
 		manha, _ := availability.NovoTimeBlock(8*60, 12*60)
 		tarde, _ := availability.NovoTimeBlock(12*60, 18*60)
 
@@ -139,7 +126,7 @@ func TestDefinirHorariosPadrao(t *testing.T) {
 
 func TestDefinirDuracaoAtendimento(t *testing.T) {
 	t.Run("inicia com 60 minutos e aceita nova duração válida", func(t *testing.T) {
-		p, _ := provider.Novo("1", "João Silva", "joao@email.com", "11999998888", "12345678")
+		p, _ := provider.Novo("1", "João Silva")
 		if p.DuracaoAtendimentoMinutos != 60 {
 			t.Errorf("esperava duração inicial de 60, got: %d", p.DuracaoAtendimentoMinutos)
 		}
@@ -152,52 +139,12 @@ func TestDefinirDuracaoAtendimento(t *testing.T) {
 	})
 
 	t.Run("rejeita duração fora de [15, 1440]", func(t *testing.T) {
-		p, _ := provider.Novo("1", "João Silva", "joao@email.com", "11999998888", "12345678")
+		p, _ := provider.Novo("1", "João Silva")
 		if err := p.DefinirDuracaoAtendimento(10); err != provider.ErrDuracaoInvalida {
 			t.Errorf("esperava ErrDuracaoInvalida, got: %v", err)
 		}
 		if err := p.DefinirDuracaoAtendimento(1500); err != provider.ErrDuracaoInvalida {
 			t.Errorf("esperava ErrDuracaoInvalida, got: %v", err)
-		}
-	})
-}
-
-func TestBanirReativarProvider(t *testing.T) {
-	p, _ := provider.Novo("1", "João Silva", "joao@email.com", "11999998888", "12345678")
-	if !p.Ativo {
-		t.Fatal("prestador deve nascer ativo")
-	}
-	p.Banir()
-	if p.Ativo {
-		t.Error("esperava prestador inativo após banir")
-	}
-	p.Reativar()
-	if !p.Ativo {
-		t.Error("esperava prestador ativo após reativar")
-	}
-}
-
-func TestNovoTelefoneInvalido(t *testing.T) {
-	if _, err := provider.Novo("1", "João Silva", "joao@email.com", "123", "12345678"); err != provider.ErrTelefoneObrigatorio {
-		t.Errorf("esperava ErrTelefoneObrigatorio para telefone curto, got: %v", err)
-	}
-}
-
-func TestDefinirTelefone(t *testing.T) {
-	t.Run("atualiza o telefone com valor válido", func(t *testing.T) {
-		p, _ := provider.Novo("1", "João Silva", "joao@email.com", "11999998888", "12345678")
-		if err := p.DefinirTelefone("11988887777"); err != nil {
-			t.Fatalf("esperava sucesso, got: %v", err)
-		}
-		if p.Telefone != "11988887777" {
-			t.Errorf("esperava telefone atualizado, got: %s", p.Telefone)
-		}
-	})
-
-	t.Run("rejeita telefone curto", func(t *testing.T) {
-		p, _ := provider.Novo("1", "João Silva", "joao@email.com", "11999998888", "12345678")
-		if err := p.DefinirTelefone("123"); err != provider.ErrTelefoneObrigatorio {
-			t.Errorf("esperava ErrTelefoneObrigatorio, got: %v", err)
 		}
 	})
 }

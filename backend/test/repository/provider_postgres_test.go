@@ -9,6 +9,7 @@ package repository_test
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -24,8 +25,9 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
-// migrationsOrdenadas copia as migrations para um diretório temporário com um
-// prefixo numérico com zero-padding (001_, 002_, …) e devolve esses caminhos.
+// migrationsOrdenadas copia as migrations até versaoMax (inclusive) para um
+// diretório temporário com um prefixo numérico com zero-padding (001_, 002_,
+// …) e devolve esses caminhos.
 //
 // O Postgres executa os init scripts em ordem alfabética do NOME do arquivo
 // dentro do container — não na ordem em que os passamos. Com os nomes
@@ -33,11 +35,20 @@ import (
 // rodaria antes do CREATE. O prefixo com zero-padding faz a ordem alfabética
 // coincidir com a ordem de versão. (O Flyway real, no compose, já ordena por
 // versão numérica — o problema é só do runner de teste.)
-func migrationsOrdenadas(t *testing.T) []string {
+//
+// versaoMax existe para os testes de migração, que precisam semear o banco no
+// estado anterior a uma versão e só então aplicá-la.
+func migrationsOrdenadas(t *testing.T, versaoMax int) []string {
 	t.Helper()
-	caminhos, err := filepath.Glob("../../migrations/V*.sql")
+	todos, err := filepath.Glob("../../migrations/V*.sql")
 	if err != nil {
 		t.Fatalf("resolver caminhos das migrations: %v", err)
+	}
+	caminhos := make([]string, 0, len(todos))
+	for _, c := range todos {
+		if versaoMigration(t, c) <= versaoMax {
+			caminhos = append(caminhos, c)
+		}
 	}
 	sort.Slice(caminhos, func(i, j int) bool {
 		return versaoMigration(t, caminhos[i]) < versaoMigration(t, caminhos[j])
@@ -79,13 +90,21 @@ func versaoMigration(t *testing.T, caminho string) int {
 // no fim do teste.
 func novoPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
+	return novoPoolAte(t, math.MaxInt)
+}
+
+// novoPoolAte é o novoPool parado numa versão de migration. Serve aos testes
+// de migração, que semeiam o banco no estado anterior e aplicam a versão sob
+// teste na mão.
+func novoPoolAte(t *testing.T, versaoMax int) *pgxpool.Pool {
+	t.Helper()
 	ctx := context.Background()
 
 	container, err := tcpostgres.Run(ctx, "postgres:16-alpine",
 		tcpostgres.WithDatabase("agendago_test"),
 		tcpostgres.WithUsername("test"),
 		tcpostgres.WithPassword("test"),
-		tcpostgres.WithInitScripts(migrationsOrdenadas(t)...),
+		tcpostgres.WithInitScripts(migrationsOrdenadas(t, versaoMax)...),
 		// BasicWaitStrategies espera o log "ready to accept connections"
 		// aparecer duas vezes (o Postgres reinicia após o primeiro startup) e
 		// só então a porta ser servida. Esperar só a porta pega o servidor no
@@ -114,13 +133,13 @@ func novoPool(t *testing.T) *pgxpool.Pool {
 func TestProviderPostgres(t *testing.T) {
 	repo := repository.NovoProviderPostgres(novoPool(t))
 
-	t.Run("salva e busca prestador por email", func(t *testing.T) {
-		p, _ := provider.Novo("11111111-1111-1111-1111-111111111111", "João Silva", "joao@email.com", "11999998888", "12345678")
+	t.Run("salva e busca a agenda por id", func(t *testing.T) {
+		p, _ := provider.Novo("11111111-1111-1111-1111-111111111111", "João Silva")
 		if err := repo.Salvar(p); err != nil {
 			t.Fatalf("esperava sucesso ao salvar, got: %v", err)
 		}
 
-		encontrado, err := repo.BuscarPorEmail("joao@email.com")
+		encontrado, err := repo.BuscarPorID(p.ID)
 		if err != nil {
 			t.Fatalf("esperava sucesso na busca, got: %v", err)
 		}
@@ -141,30 +160,8 @@ func TestProviderPostgres(t *testing.T) {
 		}
 	})
 
-	t.Run("retorna (nil, nil) quando email não existe", func(t *testing.T) {
-		encontrado, err := repo.BuscarPorEmail("inexistente@email.com")
-		if err != nil {
-			t.Fatalf("não esperava erro para email inexistente, got: %v", err)
-		}
-		if encontrado != nil {
-			t.Errorf("esperava nil para email inexistente, got: %v", encontrado)
-		}
-	})
-
-	t.Run("falha ao salvar email duplicado (constraint UNIQUE)", func(t *testing.T) {
-		p1, _ := provider.Novo("22222222-2222-2222-2222-222222222222", "Ana", "ana@email.com", "11999998888", "12345678")
-		p2, _ := provider.Novo("33333333-3333-3333-3333-333333333333", "Ana Duplicada", "ana@email.com", "11999998888", "12345678")
-
-		if err := repo.Salvar(p1); err != nil {
-			t.Fatalf("esperava sucesso no primeiro salvar, got: %v", err)
-		}
-		if err := repo.Salvar(p2); err == nil {
-			t.Error("esperava erro ao salvar email duplicado")
-		}
-	})
-
 	t.Run("salva e busca prestador por ID", func(t *testing.T) {
-		p, _ := provider.Novo("88888888-8888-8888-8888-888888888888", "Carlos Souza", "carlos@email.com", "11999998888", "12345678")
+		p, _ := provider.Novo("88888888-8888-8888-8888-888888888888", "Carlos Souza")
 		p.PermiteMarcacaoPeloPrestador = true
 		if err := repo.Salvar(p); err != nil {
 			t.Fatalf("esperava sucesso ao salvar, got: %v", err)
@@ -176,9 +173,6 @@ func TestProviderPostgres(t *testing.T) {
 		}
 		if encontrado == nil {
 			t.Fatal("esperava encontrar o prestador salvo")
-		}
-		if encontrado.Email != "carlos@email.com" {
-			t.Errorf("esperava email 'carlos@email.com', got: %s", encontrado.Email)
 		}
 		if !encontrado.PermiteMarcacaoPeloPrestador {
 			t.Error("esperava PermiteMarcacaoPeloPrestador preservado como true após salvar e buscar")
@@ -196,7 +190,7 @@ func TestProviderPostgres(t *testing.T) {
 	})
 
 	t.Run("Atualizar persiste as preferências e reflete no BuscarPorID", func(t *testing.T) {
-		p, _ := provider.Novo("44444444-4444-4444-4444-444444444444", "Diana Prince", "diana@email.com", "11999998888", "12345678")
+		p, _ := provider.Novo("44444444-4444-4444-4444-444444444444", "Diana Prince")
 		if err := repo.Salvar(p); err != nil {
 			t.Fatalf("esperava sucesso ao salvar, got: %v", err)
 		}
@@ -225,7 +219,7 @@ func TestProviderPostgres(t *testing.T) {
 	})
 
 	t.Run("Atualizar persiste PermiteMarcacaoPeloPrestador desativado", func(t *testing.T) {
-		p, _ := provider.Novo("33333333-3333-3333-3333-333333333333", "Fábio Lima", "fabio@email.com", "11999998888", "12345678")
+		p, _ := provider.Novo("33333333-3333-3333-3333-333333333333", "Fábio Lima")
 		if err := repo.Salvar(p); err != nil {
 			t.Fatalf("esperava sucesso ao salvar, got: %v", err)
 		}
@@ -245,7 +239,7 @@ func TestProviderPostgres(t *testing.T) {
 	})
 
 	t.Run("Atualizar substitui o expediente padrão (delete-all + insert)", func(t *testing.T) {
-		p, _ := provider.Novo("55555555-5555-5555-5555-555555555555", "Eva Souza", "eva@email.com", "11999998888", "12345678")
+		p, _ := provider.Novo("55555555-5555-5555-5555-555555555555", "Eva Souza")
 		if err := repo.Salvar(p); err != nil {
 			t.Fatalf("esperava sucesso ao salvar, got: %v", err)
 		}

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"agendago/internal/domain/appointment"
-	"agendago/internal/domain/provider"
 	"agendago/internal/pkg/paging"
 	ucappointment "agendago/internal/usecase/appointment"
 	ucprovider "agendago/internal/usecase/provider"
@@ -19,18 +18,20 @@ import (
 // informa quanto existe, e o offset caminha sem repetir nem pular item.
 
 func TestPaginacaoDaVitrine(t *testing.T) {
-	repo := memoria.NovoProviderMemoria()
+	usuarios, membros, providers := fakesDePrestador()
 	for i := 0; i < 5; i++ {
 		// nome com índice para a ordenação ser previsível (ordem alfabética)
-		p, _ := provider.Novo(fmt.Sprintf("p-%d", i), fmt.Sprintf("Prestador %d", i), fmt.Sprintf("p%d@email.com", i), "11999998888", "hash")
+		_, p := criarPrestador(usuarios, membros, providers,
+			fmt.Sprintf("p-%d", i), fmt.Sprintf("Prestador %d", i), fmt.Sprintf("p%d@email.com", i), "11999998888", "hash")
 		p.AtivarAgenda()
-		repo.Salvar(p)
+		providers.Salvar(p)
 	}
-	banido, _ := provider.Novo("p-banido", "Prestador Banido", "banido@email.com", "11999998888", "hash")
-	banido.Banir()
-	repo.Salvar(banido)
+	// Banido some da vitrine — e o banimento é da CONTA, não da agenda.
+	uBanido, _ := criarPrestador(usuarios, membros, providers, "p-banido", "Prestador Banido", "banido@email.com", "11999998888", "hash")
+	uBanido.Banir()
+	usuarios.Atualizar(uBanido)
 
-	uc := ucprovider.NovoListarUseCase(repo)
+	uc := ucprovider.NovoListarUseCase(providers)
 
 	t.Run("respeita o limite e informa o total de ativos", func(t *testing.T) {
 		out, err := uc.Executar(paging.Normalizar(2, 0))
@@ -73,8 +74,9 @@ func TestPaginacaoDaVitrine(t *testing.T) {
 }
 
 func TestPaginacaoDosAgendamentos(t *testing.T) {
-	repo := memoria.NovoAppointmentMemoria()
-	providerRepo := memoria.NovoProviderMemoria()
+	appointments := memoria.NovoAppointmentMemoria()
+	usuarios, membros, providers := fakesDePrestador()
+	criarPrestador(usuarios, membros, providers, "provider-1", "Prestador", "prestador@email.com", "11999998888", "hash")
 	clientRepo := memoria.NovoClientMemoria()
 
 	base := time.Date(2026, 3, 10, 0, 0, 0, 0, time.UTC)
@@ -87,10 +89,10 @@ func TestPaginacaoDosAgendamentos(t *testing.T) {
 		if err != nil {
 			t.Fatalf("esperava criar agendamento, got: %v", err)
 		}
-		repo.SalvarSeLivre(a, agora)
+		appointments.SalvarSeLivre(a, agora)
 	}
 
-	uc := ucappointment.NovoListarUseCase(repo, providerRepo, clientRepo)
+	uc := ucappointment.NovoListarUseCase(appointments, providers, clientRepo)
 
 	t.Run("primeira página traz os mais recentes e o total completo", func(t *testing.T) {
 		out, err := uc.DoPrestador(ucappointment.ListarInput{

@@ -34,8 +34,8 @@ func novoAmbienteRecuperacao(t *testing.T) *ambienteRecuperacao {
 	hasher := security.NovoHasherArgon2id()
 	senhaHash, _ := hasher.Gerar("senha-antiga")
 
-	providers := memoria.NovoProviderMemoria()
-	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
+	usuarios, membros, providers := fakesDePrestador()
+	_, p := criarPrestador(usuarios, membros, providers, "provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
 	providers.Salvar(p)
 
 	clients := memoria.NovoClientMemoria()
@@ -50,9 +50,9 @@ func novoAmbienteRecuperacao(t *testing.T) *ambienteRecuperacao {
 	notificador := email.NovoNotificador(mailer, "http://localhost:5173", time.UTC, email.ExecutorSincrono)
 
 	return &ambienteRecuperacao{
-		solicitar: ucauth.NovoSolicitarRecuperacaoUseCase(providers, clients, resets, notificador),
-		redefinir: ucauth.NovoRedefinirSenhaUseCase(providers, clients, resets, sessoes, hasher),
-		login:     ucauth.NovoLoginProviderUseCase(providers, sessoes, hasher),
+		solicitar: ucauth.NovoSolicitarRecuperacaoUseCase(usuarios, membros, providers, clients, resets, notificador),
+		redefinir: ucauth.NovoRedefinirSenhaUseCase(usuarios, clients, resets, sessoes, hasher),
+		login:     ucauth.NovoLoginProviderUseCase(usuarios, membros, providers, sessoes, hasher),
 		providers: providers,
 		clients:   clients,
 		sessoes:   sessoes,

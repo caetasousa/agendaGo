@@ -68,13 +68,15 @@ func TestSemearAdmin(t *testing.T) {
 func TestModerar(t *testing.T) {
 	type ambiente struct {
 		uc        *ucadmin.ModerarUseCase
+		usuarios  *memoria.UsuarioMemoria
+		membros   *memoria.MembroMemoria
 		providers *memoria.ProviderMemoria
 		clients   *memoria.ClientMemoria
 		sessoes   *memoria.SessionMemoria
 	}
 	novoAmbiente := func() ambiente {
-		providers := memoria.NovoProviderMemoria()
-		p, _ := provider.Novo("p-1", "João Prestador", "joao@email.com", "11999998888", "hash")
+		usuarios, membros, providers := fakesDePrestador()
+		_, p := criarPrestador(usuarios, membros, providers, "p-1", "João Prestador", "joao@email.com", "11999998888", "hash")
 		p.AtivarAgenda()
 		providers.Salvar(p)
 
@@ -84,7 +86,9 @@ func TestModerar(t *testing.T) {
 
 		sessoes := memoria.NovoSessionMemoria()
 		return ambiente{
-			uc:        ucadmin.NovoModerarUseCase(providers, clients, sessoes),
+			uc:        ucadmin.NovoModerarUseCase(providers, usuarios, membros, clients, sessoes),
+			usuarios:  usuarios,
+			membros:   membros,
 			providers: providers,
 			clients:   clients,
 			sessoes:   sessoes,
@@ -107,16 +111,14 @@ func TestModerar(t *testing.T) {
 
 	t.Run("banir e reativar prestador reflete no login e na listagem", func(t *testing.T) {
 		amb := novoAmbiente()
-		uc, providers := amb.uc, amb.providers
+		uc, usuarios, membros, providers := amb.uc, amb.usuarios, amb.membros, amb.providers
 		sessionRepo := memoria.NovoSessionMemoria()
 		hasher := security.NovoHasherArgon2id()
 
-		// re-cria o prestador com senha real para testar o login
+		// dá senha real à conta já criada, para testar o login de verdade
 		senhaHash, _ := hasher.Gerar("12345678")
-		p, _ := provider.Novo("p-1", "João Prestador", "joao@email.com", "11999998888", senhaHash)
-		p.AtivarAgenda()
-		providers.Salvar(p)
-		login := ucauth.NovoLoginProviderUseCase(providers, sessionRepo, hasher)
+		usuarios.AtualizarSenha("p-1", senhaHash)
+		login := ucauth.NovoLoginProviderUseCase(usuarios, membros, providers, sessionRepo, hasher)
 
 		if err := uc.BanirPrestador("p-1"); err != nil {
 			t.Fatalf("esperava banir, got: %v", err)
@@ -208,8 +210,8 @@ func TestDetalhar(t *testing.T) {
 	// novoAmbiente monta o DetalharUseCase sobre repositórios em memória, com um
 	// prestador ativo e um convidado que agendou um horário com ele.
 	novoAmbiente := func() (*ucadmin.DetalharUseCase, *provider.Provider, *client.Client) {
-		providers := memoria.NovoProviderMemoria()
-		p, _ := provider.Novo("p-1", "João Prestador", "joao@email.com", "11999998888", "hash")
+		usuarios, membros, providers := fakesDePrestador()
+		_, p := criarPrestador(usuarios, membros, providers, "p-1", "João Prestador", "joao@email.com", "11999998888", senhaDeTeste)
 		p.AtivarAgenda()
 		providers.Salvar(p)
 
@@ -219,10 +221,10 @@ func TestDetalhar(t *testing.T) {
 
 		availabilityRepo := memoria.NovoAvailabilityMemoria()
 		appointments := memoria.NovoAppointmentMemoria()
-		resolvedor := ucavailability.NovoConsultarDisponibilidadeUseCase(availabilityRepo, providers)
-		consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointments, providers, time.UTC)
+		resolvedor := ucavailability.NovoConsultarDisponibilidadeUseCase(availabilityRepo, providers, membros)
+		consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointments, providers, membros, time.UTC)
 		notificador := email.NovoNotificador(email.NovaMailerMemoria(), "http://localhost:5173", time.UTC, email.ExecutorSincrono)
-		solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointments, clients, providers, notificador, 24*time.Hour)
+		solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointments, clients, providers, membros, notificador, 24*time.Hour)
 		listar := ucappointment.NovoListarUseCase(appointments, providers, clients)
 
 		if _, err := solicitar.Executar(ucappointment.SolicitarInput{
@@ -231,7 +233,7 @@ func TestDetalhar(t *testing.T) {
 			t.Fatalf("agendamento de base falhou: %v", err)
 		}
 
-		return ucadmin.NovoDetalharUseCase(providers, clients, listar), p, convidado
+		return ucadmin.NovoDetalharUseCase(providers, usuarios, membros, clients, listar), p, convidado
 	}
 
 	t.Run("detalha o prestador com dados cadastrais e agendamentos recebidos", func(t *testing.T) {

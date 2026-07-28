@@ -3,34 +3,38 @@ package usecase_test
 import (
 	"testing"
 
-	"agendago/internal/domain/provider"
 	ucprovider "agendago/internal/usecase/provider"
 	"agendago/test/repository/memoria"
 )
 
 func TestVitrine(t *testing.T) {
 	// ambiente com um prestador ativo ofertando, um com agenda fechada e um banido
-	novoRepo := func(t *testing.T) *memoria.ProviderMemoria {
+	novoRepo := func(t *testing.T) (*memoria.ProviderMemoria, *memoria.MembroMemoria) {
 		t.Helper()
-		repo := memoria.NovoProviderMemoria()
+		usuarios, membros, providers := fakesDePrestador()
 
-		ativo, _ := provider.Novo("p-ativo", "Ana Ativa", "ana@email.com", "11999998888", "hash")
+		_, ativo := criarPrestador(usuarios, membros, providers, "p-ativo", "Ana Ativa", "ana@email.com", "11999998888", "hash")
 		ativo.AtivarAgenda()
-		repo.Salvar(ativo)
+		providers.Salvar(ativo)
 
-		fechado, _ := provider.Novo("p-fechado", "Fabio Fechado", "fabio@email.com", "11999998888", "hash")
-		repo.Salvar(fechado)
+		criarPrestador(usuarios, membros, providers, "p-fechado", "Fabio Fechado", "fabio@email.com", "11999998888", "hash")
 
-		banido, _ := provider.Novo("p-banido", "Bruno Banido", "bruno@email.com", "11999998888", "hash")
+		// Banido: a agenda oferta, mas a CONTA está banida — é o banimento que
+		// tem que ganhar, e ele mora em usuarios desde a V14.
+		uBanido, banido := criarPrestador(usuarios, membros, providers, "p-banido", "Bruno Banido", "bruno@email.com", "11999998888", "hash")
 		banido.AtivarAgenda()
-		banido.Banir()
-		repo.Salvar(banido)
+		providers.Salvar(banido)
+		uBanido.Banir()
+		usuarios.Atualizar(uBanido)
 
-		return repo
+		return providers, membros
 	}
 
 	t.Run("lista só prestadores não banidos, com o status da agenda", func(t *testing.T) {
-		uc := ucprovider.NovoListarUseCase(novoRepo(t))
+		uc := func() *ucprovider.ListarUseCase {
+			providers, _ := novoRepo(t)
+			return ucprovider.NovoListarUseCase(providers)
+		}()
 
 		out, err := uc.Executar(paginaPadrao)
 		if err != nil {
@@ -55,7 +59,10 @@ func TestVitrine(t *testing.T) {
 	})
 
 	t.Run("busca o resumo público pelo id, com a duração do atendimento", func(t *testing.T) {
-		uc := ucprovider.NovoBuscarResumoUseCase(novoRepo(t))
+		uc := func() *ucprovider.BuscarResumoUseCase {
+			providers, membros := novoRepo(t)
+			return ucprovider.NovoBuscarResumoUseCase(providers, membros)
+		}()
 
 		resumo, err := uc.Executar("p-ativo")
 		if err != nil {
@@ -70,7 +77,10 @@ func TestVitrine(t *testing.T) {
 	})
 
 	t.Run("banido no link direto aparece como não ofertando, sem vazar o motivo", func(t *testing.T) {
-		uc := ucprovider.NovoBuscarResumoUseCase(novoRepo(t))
+		uc := func() *ucprovider.BuscarResumoUseCase {
+			providers, membros := novoRepo(t)
+			return ucprovider.NovoBuscarResumoUseCase(providers, membros)
+		}()
 
 		resumo, err := uc.Executar("p-banido")
 		if err != nil {
@@ -82,7 +92,10 @@ func TestVitrine(t *testing.T) {
 	})
 
 	t.Run("id inexistente retorna ErrProviderNaoEncontrado", func(t *testing.T) {
-		uc := ucprovider.NovoBuscarResumoUseCase(novoRepo(t))
+		uc := func() *ucprovider.BuscarResumoUseCase {
+			providers, membros := novoRepo(t)
+			return ucprovider.NovoBuscarResumoUseCase(providers, membros)
+		}()
 		if _, err := uc.Executar("fantasma"); err != ucprovider.ErrProviderNaoEncontrado {
 			t.Errorf("esperava ErrProviderNaoEncontrado, got: %v", err)
 		}

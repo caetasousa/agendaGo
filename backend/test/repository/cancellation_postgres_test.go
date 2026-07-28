@@ -22,7 +22,7 @@ func TestCancellationPostgres(t *testing.T) {
 
 	providerID := "cccccccc-0000-0000-0000-000000000001"
 	clientID := "cccccccc-0000-0000-0000-000000000002"
-	p, _ := provider.Novo(providerID, "Prestador Cancelamento", "prestador-cancel@email.com", "11999998888", "hash")
+	p, _ := provider.Novo(providerID, "Prestador Cancelamento")
 	if err := providerRepo.Salvar(p); err != nil {
 		t.Fatalf("salvar prestador: %v", err)
 	}

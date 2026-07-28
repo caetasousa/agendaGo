@@ -18,6 +18,8 @@ import (
 type ambienteCadastroProvider struct {
 	solicitar *ucprovider.SolicitarCadastroUseCase
 	confirmar *ucprovider.ConfirmarCadastroUseCase
+	usuarios  *memoria.UsuarioMemoria
+	membros   *memoria.MembroMemoria
 	providers *memoria.ProviderMemoria
 	clients   *memoria.ClientMemoria
 	admins    *memoria.AdminMemoria
@@ -25,7 +27,7 @@ type ambienteCadastroProvider struct {
 }
 
 func novoAmbienteCadastroProvider() *ambienteCadastroProvider {
-	providers := memoria.NovoProviderMemoria()
+	usuarios, membros, providers := fakesDePrestador()
 	clients := memoria.NovoClientMemoria()
 	admins := memoria.NovoAdminMemoria()
 	pendentes := memoria.NovoSignupMemoria()
@@ -34,8 +36,10 @@ func novoAmbienteCadastroProvider() *ambienteCadastroProvider {
 	hasher := security.NovoHasherArgon2id()
 
 	return &ambienteCadastroProvider{
-		solicitar: ucprovider.NovoSolicitarCadastroUseCase(providers, clients, admins, pendentes, notificador, hasher),
-		confirmar: ucprovider.NovoConfirmarCadastroUseCase(providers, clients, admins, pendentes),
+		solicitar: ucprovider.NovoSolicitarCadastroUseCase(usuarios, clients, admins, pendentes, notificador, hasher),
+		confirmar: ucprovider.NovoConfirmarCadastroUseCase(providers, usuarios, membros, clients, admins, pendentes),
+		usuarios:  usuarios,
+		membros:   membros,
 		providers: providers,
 		clients:   clients,
 		admins:    admins,
@@ -58,7 +62,7 @@ func TestSolicitarCadastroProviderComEmailDoAdminNaoCriaConta(t *testing.T) {
 	if enviados := len(amb.mailer.Enviadas()); enviados != 0 {
 		t.Errorf("não deveria enviar email para o email do admin, enviados: %d", enviados)
 	}
-	if p, _ := amb.providers.BuscarPorEmail(emailAdmin); p != nil {
+	if p, _ := amb.usuarios.BuscarPorEmail(emailAdmin); p != nil {
 		t.Error("não deveria existir prestador com o email do admin")
 	}
 }
@@ -96,7 +100,7 @@ func TestSolicitarCadastroProvider(t *testing.T) {
 		if err := amb.solicitar.Executar(inputCadastroProvider("joao@email.com")); err != nil {
 			t.Fatalf("esperava sucesso, got: %v", err)
 		}
-		if p, _ := amb.providers.BuscarPorEmail("joao@email.com"); p != nil {
+		if p, _ := amb.usuarios.BuscarPorEmail("joao@email.com"); p != nil {
 			t.Error("conta não deveria existir antes da confirmação")
 		}
 		if len(amb.mailer.Enviadas()) != 1 {
@@ -150,7 +154,7 @@ func TestSolicitarCadastroProvider(t *testing.T) {
 		tok := tokenDoEmailCadastroProvider(t, amb.mailer)
 		amb.confirmar.Executar(tok)
 
-		p, _ := amb.providers.BuscarPorEmail("joao@email.com")
+		p, _ := amb.usuarios.BuscarPorEmail("joao@email.com")
 		if p.SenhaHash == "12345678" {
 			t.Error("senha não deveria ser persistida em texto puro")
 		}
@@ -170,12 +174,17 @@ func TestConfirmarCadastroProvider(t *testing.T) {
 		if err != nil {
 			t.Fatalf("esperava sucesso, got: %v", err)
 		}
-		p, _ := amb.providers.BuscarPorEmail("joao@email.com")
-		if p == nil {
-			t.Fatal("esperava prestador criado")
+		u, _ := amb.usuarios.BuscarPorEmail("joao@email.com")
+		if u == nil {
+			t.Fatal("esperava a conta do prestador criada")
 		}
-		if out.ID != p.ID || out.Nome != p.Nome || out.Email != p.Email {
-			t.Errorf("output %+v não confere com o prestador criado %+v", out, p)
+		// A conta existe, e o vínculo aponta para a agenda que o output devolve.
+		vinculo, _ := amb.membros.BuscarPorUsuario(u.ID)
+		if vinculo == nil {
+			t.Fatal("esperava o vínculo de dono criado junto da conta")
+		}
+		if out.ID != vinculo.ProviderID || out.Email != u.Email {
+			t.Errorf("output %+v não confere com a conta %+v e o vínculo %+v", out, u, vinculo)
 		}
 	})
 
@@ -203,15 +212,15 @@ func TestConfirmarCadastroProvider(t *testing.T) {
 		// mesmo repositório de pendentes para os dois lados: o que se testa é
 		// que o Tipo gravado no banco (não o endpoint chamado) decide a conta
 		pendentes := memoria.NovoSignupMemoria()
-		providers := memoria.NovoProviderMemoria()
+		usuarios, membros, providers := fakesDePrestador()
 		clients := memoria.NovoClientMemoria()
 		admins := memoria.NovoAdminMemoria()
 		mailer := email.NovaMailerMemoria()
 		notificador := email.NovoNotificador(mailer, "http://localhost:5173", time.UTC, email.ExecutorSincrono)
 		hasher := security.NovoHasherArgon2id()
 
-		solicitarCliente := ucclient.NovoSolicitarCadastroUseCase(clients, providers, admins, pendentes, notificador, hasher)
-		confirmarProvider := ucprovider.NovoConfirmarCadastroUseCase(providers, clients, admins, pendentes)
+		solicitarCliente := ucclient.NovoSolicitarCadastroUseCase(clients, usuarios, admins, pendentes, notificador, hasher)
+		confirmarProvider := ucprovider.NovoConfirmarCadastroUseCase(providers, usuarios, membros, clients, admins, pendentes)
 
 		solicitarCliente.Executar(ucclient.SolicitarCadastroInput{
 			Nome: "Maria", Email: "maria@email.com", Telefone: "11999998888", Senha: "12345678",

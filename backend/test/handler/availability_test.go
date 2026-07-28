@@ -11,7 +11,6 @@ import (
 	"agendago/internal/adapter/http/middleware"
 	"agendago/internal/adapter/security"
 	"agendago/internal/domain/client"
-	"agendago/internal/domain/provider"
 	ucauth "agendago/internal/usecase/auth"
 	ucavailability "agendago/internal/usecase/availability"
 	"agendago/test/repository/memoria"
@@ -26,28 +25,28 @@ func novoRouterAvailability(t *testing.T) *chi.Mux {
 	t.Helper()
 	hasher := security.NovoHasherArgon2id()
 
-	providerRepo := memoria.NovoProviderMemoria()
+	usuarios, membros, providers := fakesDePrestador()
 	clientRepo := memoria.NovoClientMemoria()
 	sessionRepo := memoria.NovoSessionMemoria()
 	availabilityRepo := memoria.NovoAvailabilityMemoria()
 
 	senhaHash, _ := hasher.Gerar("12345678")
-	p, _ := provider.Novo("provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
+	_, p := criarPrestador(usuarios, membros, providers, "provider-1", "João Silva", "joao@email.com", "11999998888", senhaHash)
 	p.AtivarAgenda()
-	providerRepo.Salvar(p)
+	providers.Salvar(p)
 
 	c, _ := client.NovoComConta("client-1", "Maria Silva", "maria@email.com", senhaHash)
 	clientRepo.Salvar(c)
 
-	loginProvider := ucauth.NovoLoginProviderUseCase(providerRepo, sessionRepo, hasher)
+	loginProvider := ucauth.NovoLoginProviderUseCase(usuarios, membros, providers, sessionRepo, hasher)
 	loginClient := ucauth.NovoLoginClientUseCase(clientRepo, sessionRepo, hasher)
-	validarSessao := ucauth.NovoValidarSessaoUseCase(sessionRepo)
+	validarSessao := ucauth.NovoValidarSessaoUseCase(sessionRepo, membros)
 
 	identidadeDoContexto := func(req *http.Request) (ucauth.Identidade, bool) {
 		return middleware.IdentidadeDoContexto(req.Context())
 	}
 
-	consultarAgenda := ucavailability.NovoConsultarAgendaUseCase(availabilityRepo, providerRepo)
+	consultarAgenda := ucavailability.NovoConsultarAgendaUseCase(availabilityRepo, providers, membros)
 	definirDia := ucavailability.NovoDefinirDiaUseCase(availabilityRepo)
 	removerDia := ucavailability.NovoRemoverDiaUseCase(availabilityRepo)
 

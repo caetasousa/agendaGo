@@ -9,6 +9,7 @@ import (
 	"agendago/internal/domain/admin"
 	"agendago/internal/domain/client"
 	"agendago/internal/domain/provider"
+	"agendago/internal/domain/usuario"
 )
 
 func TestAdminPostgres(t *testing.T) {
@@ -59,24 +60,29 @@ func TestAdminPostgres(t *testing.T) {
 func TestModeracaoPostgres(t *testing.T) {
 	pool := novoPool(t)
 	providerRepo := repository.NovoProviderPostgres(pool)
+	usuarioRepo := repository.NovoUsuarioPostgres(pool)
 	clientRepo := repository.NovoClientPostgres(pool)
 
-	t.Run("prestador nasce ativo e o banimento persiste", func(t *testing.T) {
-		p, _ := provider.Novo("cccccccc-1111-1111-1111-111111111111", "Prestador Mod", "mod-prov@email.com", "11999998888", "hash")
+	// O banimento é da CONTA, não da agenda: desde a V14 ele mora em usuarios.
+	t.Run("prestador nasce ativo e o banimento persiste na conta", func(t *testing.T) {
+		const id = "cccccccc-1111-1111-1111-111111111111"
+		p, _ := provider.Novo(id, "Prestador Mod")
 		providerRepo.Salvar(p)
+		u, _ := usuario.Novo(id, "moderado@email.com", "11999998888", "hash-da-senha")
+		usuarioRepo.Salvar(u)
 
-		encontrado, _ := providerRepo.BuscarPorID(p.ID)
+		encontrado, _ := usuarioRepo.BuscarPorID(id)
 		if !encontrado.Ativo {
-			t.Fatal("prestador deveria nascer ativo")
+			t.Fatal("conta do prestador deveria nascer ativa")
 		}
 
 		encontrado.Banir()
-		if err := providerRepo.Atualizar(encontrado); err != nil {
+		if err := usuarioRepo.Atualizar(encontrado); err != nil {
 			t.Fatalf("esperava atualizar, got: %v", err)
 		}
-		relido, _ := providerRepo.BuscarPorID(p.ID)
+		relido, _ := usuarioRepo.BuscarPorID(id)
 		if relido.Ativo {
-			t.Error("esperava prestador inativo persistido")
+			t.Error("esperava conta inativa persistida")
 		}
 	})
 
