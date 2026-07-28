@@ -21,6 +21,13 @@ on:
   workflow_run:
     workflows: [CI]
     types: [completed]
+    # O filtro precisa estar aqui, no gatilho, e não só no `if` do job: o
+    # GitHub cria a execução primeiro e só depois avalia o `if`, então filtrar
+    # no job deixava um run "skipped" na aba Actions a cada push na main —
+    # ruído que escondia as execuções que importam. `branches` no `workflow_run`
+    # casa com o branch do CI que terminou, e o Dependabot sempre usa o prefixo
+    # `dependabot/`, então nenhuma execução chega a ser criada fora dos PRs dele.
+    branches: ['dependabot/**']
 
 permissions:
   contents: write
@@ -29,8 +36,10 @@ permissions:
 jobs:
   mesclar:
     name: Mescla se for patch/minor e o CI passou
-    # As três condições juntas: o CI passou inteiro, era a execução de um pull
-    # request (não um push na main) e quem abriu foi o Dependabot.
+    # O `branches` do gatilho já garante que só chega aqui execução de branch
+    # `dependabot/`. Estas três seguem como rede de segurança do que o filtro de
+    # branch não cobre: o CI pode ter falhado, e um humano pode abrir um PR de
+    # um branch com esse prefixo.
     if: >
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'pull_request' &&
