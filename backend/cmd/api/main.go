@@ -48,6 +48,15 @@ func main() {
 	// Configurado antes de tudo, para todo log já sair no formato certo.
 	logging.Configurar(config.EhProducao())
 
+	// coletor de erros (SENTRY_DSN vazio desliga). Depois do logger, porque
+	// encadeia no handler que ele acabou de instalar; antes de tudo mais, para
+	// que uma falha no boot já seja registrada.
+	if err := config.IniciarRastreamentoErro(); err != nil {
+		slog.Error("erro ao iniciar o rastreamento de erro", slog.String("erro", err.Error()))
+		os.Exit(1)
+	}
+	defer config.FecharRastreamentoErro()
+
 	// contexto de vida da aplicação: cancelado em SIGINT/SIGTERM, usado pelo
 	// desligamento gracioso do servidor HTTP e do worker de lembretes
 	ctx, parar := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

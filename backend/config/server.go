@@ -142,6 +142,12 @@ func NovoRouter() *chi.Mux {
 	r.Use(middleware.RequestID)
 	r.Use(appmiddleware.IPReal)
 	r.Use(logging.Middleware)
+	// Antes do Recoverer, e só quando há coletor configurado: o panic precisa
+	// ser capturado com a pilha original e relançado, para o Recoverer ainda
+	// produzir o 500 de sempre.
+	if RastreamentoErroAtivo() {
+		r.Use(MiddlewareRastreamentoErro)
+	}
 	r.Use(middleware.Recoverer)
 	r.Use(appmiddleware.LimitarCorpo(maxBytesCorpo))
 	r.Use(cors.Handler(cors.Options{

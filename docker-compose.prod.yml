@@ -143,6 +143,8 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GOOGLE_REDIRECT_URL: ${GOOGLE_REDIRECT_URL}
+      # Coletor de erros (Sentry/GlitchTip). Vazio desliga.
+      SENTRY_DSN: ${SENTRY_DSN:-}
     depends_on:
       flyway:
         condition: service_completed_successfully
