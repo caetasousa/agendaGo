@@ -498,11 +498,13 @@ jobs:
           ssh -4 -o ConnectTimeout=15 -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" 'mkdir -p ~/agendago/scripts'
           scp -4 -o ConnectTimeout=15 -i ~/.ssh/id_deploy -P "$PORTA" \
             docker-compose.prod.yml Caddyfile "$USUARIO@$HOST:~/agendago/"
-          # O script de backup também é versionado: assim ele chega na VPS
-          # revisado, em vez de virar um arquivo solto que ninguém sabe de onde veio.
+          # Os scripts de operação também são versionados: assim chegam na VPS
+          # revisados, em vez de virarem arquivos soltos que ninguém sabe de onde
+          # vieram. backup.sh roda por cron; testar-restore.sh é manual, e é o que
+          # prova que o backup volta — verificar integridade do dump não prova.
           scp -4 -o ConnectTimeout=15 -i ~/.ssh/id_deploy -P "$PORTA" \
-            scripts/backup.sh "$USUARIO@$HOST:~/agendago/scripts/"
-          ssh -4 -o ConnectTimeout=15 -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" 'chmod +x ~/agendago/scripts/backup.sh'
+            scripts/backup.sh scripts/testar-restore.sh "$USUARIO@$HOST:~/agendago/scripts/"
+          ssh -4 -o ConnectTimeout=15 -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" 'chmod +x ~/agendago/scripts/backup.sh ~/agendago/scripts/testar-restore.sh'
 
       # Fixa a tag no SHA deste commit: o servidor sobe exatamente o artefato
       # que passou nos testes, não um `latest` que pode ter mudado no meio.

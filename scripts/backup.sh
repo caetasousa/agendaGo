@@ -15,6 +15,8 @@ set -euo pipefail
 PASTA_STACK="${PASTA_STACK:-$HOME/agendago}"
 PASTA_BACKUP="${PASTA_BACKUP:-$HOME/backups}"
 RETENCAO_DIAS="${RETENCAO_DIAS:-7}"
+# URL_HEARTBEAT (opcional): endereço pingado ao final de uma execução bem
+# sucedida, para um monitor externo alertar quando o ping parar de chegar.
 
 log() { printf '%s  %s\n' "$(date '+%F %T')" "$*"; }
 
@@ -89,4 +91,23 @@ removidos=$(find "$PASTA_BACKUP" -maxdepth 1 \( -name 'agendago-*.sql.gz' -o -na
 	-mtime "+$RETENCAO_DIAS" -print -delete | wc -l)
 if [ "$removidos" -gt 0 ]; then
 	log "rotação: $removidos arquivo(s) com mais de $RETENCAO_DIAS dias removido(s)"
+fi
+
+# Heartbeat para um monitor externo (opcional, via URL_HEARTBEAT).
+#
+# O alerta nasce da AUSÊNCIA do ping, não da presença de um erro — é o que
+# resolve o problema registrado em docs/producao.md: "cron esquecido não avisa".
+# Um cron desativado, uma VPS desligada e um dump que falhou produzem o mesmo
+# silêncio, e todos os três merecem alerta.
+#
+# Por isso o ping fica na última linha: com `set -e`, qualquer falha acima
+# encerra o script antes de chegar aqui. Falhar o ping em si não reprova o
+# backup — o arquivo já está gravado, e derrubar o script agora só produziria
+# um erro no log sem nada a corrigir no banco.
+if [ -n "${URL_HEARTBEAT:-}" ]; then
+	if curl -fsS --max-time 10 --retry 3 "$URL_HEARTBEAT" >/dev/null 2>&1; then
+		log "heartbeat enviado"
+	else
+		log "AVISO: heartbeat não pôde ser enviado (o backup em si deu certo)"
+	fi
 fi
