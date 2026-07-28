@@ -441,8 +441,7 @@ Consequências que valem saber:
 - **Hoje todo mundo tem exatamente um vínculo, como `dono`.** A migração V14
   converteu cada prestador existente em conta + agenda + vínculo, reusando o
   mesmo id — por isso nenhuma sessão caiu no deploy.
-- **A UI de convidar alguém ainda não existe.** O modelo está pronto; a tela é
-  trabalho de outra fase.
+- **Convidar alguém já é possível** pela tela de Equipe no painel — ver abaixo.
 
 ### Papéis: o que cada um pode
 
@@ -463,10 +462,39 @@ coisas dão errado. Sem ele, um papel novo e mais restrito nasceria com acesso a
 todas as rotas e só o perderia onde alguém lembrasse de checar; com ele, o
 padrão é negar.
 
+### Convidar alguém para a equipe
+
+O dono convida por email; a pessoa recebe um link, escolhe a própria senha e
+passa a operar a agenda. **O convite CRIA a conta** — quem entra por ele nunca
+se cadastra sozinha, e por isso nasce com exatamente um vínculo. É o que mantém
+a resolução da agenda determinística: ela loga e cai na agenda que a convidou,
+não numa agenda própria.
+
+| Etapa | O que acontece |
+|---|---|
+| Dono convida | token de uso único, válido por 7 dias, e um email com o link |
+| Reconvidar o mesmo email | substitui o convite anterior — dois links válidos só confundiriam |
+| Pessoa abre o link | vê de quem é a agenda; consultar **não** gasta o convite |
+| Pessoa aceita | cria conta + vínculo de operadora. **Nenhuma agenda nova** |
+| Dono remove o acesso | apaga o vínculo e derruba as sessões dela na hora |
+
+**Email que já tem conta é recusado**, seja de prestador ou de cliente, com uma
+mensagem que não diz qual dos dois — quem convida precisa saber que o endereço
+não serve, não descobrir que tipo de conta a pessoa tem. Os motivos são
+concretos:
+
+- **Já é prestador:** a pessoa já é dona da própria agenda. Um segundo vínculo
+  *pareceria* funcionar e não funcionaria — a resolução devolve o vínculo mais
+  antigo, e ela continuaria caindo na agenda dela. O que destrava esse caso é a
+  escolha de agenda ativa, que ainda não existe.
+- **Já é cliente:** o email é único entre clientes e prestadores, e é essa
+  invariante que faz o login unificado funcionar. Duplicar tiraria dela o acesso
+  à própria conta de cliente.
+
 > [!NOTE]
-> **Ainda não existe rota exclusiva do dono.** `PodeAdministrarConta` e o
-> middleware correspondente estão prontos e testados, mas nada em produção os
-> usa — a primeira rota a precisar deles será a de convidar um membro.
+> **Não se convida alguém como dono.** Uma agenda tem um dono só, definido no
+> cadastro; transferir a propriedade é outra operação, com outras consequências,
+> e o domínio recusa explicitamente essa tentativa.
 
 > [!NOTE]
 > **`clients` ficou de fora, de propósito.** Cliente não tem agenda nem segunda
@@ -486,6 +514,7 @@ padrão é negar.
 | Conceito | Local | Conteúdo |
 |---|---|---|
 | Conta (quem loga) | `internal/domain/usuario/` | `email`, `senha_hash`, `telefone`, `ativo` (moderação) |
+| Convite para a equipe | `internal/domain/convite/` | token de uso único, email, agenda e papel oferecido; recusa convidar como dono |
 | Vínculo conta↔agenda | `internal/domain/membro/` | `Papel` (`dono` \| `operador`), `PodeGerenciarAgenda`, `PodeAdministrarConta` |
 | Agenda do prestador | `internal/domain/provider/` | `nome`, `aceita_agendamentos`, `descanso_minutos`, `duracao_atendimento_minutos`, `HorariosPadrao` |
 | Cliente | `internal/domain/client/` | conta ou convidado, `telefone` (contato), `ativo` (moderação) |

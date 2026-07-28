@@ -143,6 +143,12 @@ Ele entra pela [mesma tela de login](http://localhost:5173/login) e cai no paine
 | `GET` | [`/providers/me/agendamentos`](http://localhost:8080/swagger/index.html#/appointments/get_providers_me_agendamentos) | Listar agendamentos recebidos (paginado) |
 | `GET` | [`/providers/me/slots`](http://localhost:8080/swagger/index.html#/appointments/get_providers_me_slots) | Slots livres da própria agenda (inclusive fechada ao público) |
 | `POST` | [`/providers/me/agendamentos`](http://localhost:8080/swagger/index.html#/appointments/post_providers_me_agendamentos) | Marcar para um cliente que ligou |
+| `GET` | [`/providers/me/membros`](http://localhost:8080/swagger/index.html#/membros/get_providers_me_membros) | Listar quem opera a agenda e os convites pendentes |
+| `POST` | [`/providers/me/membros`](http://localhost:8080/swagger/index.html#/membros/post_providers_me_membros) | Convidar alguém para operar a agenda (só o dono) |
+| `DELETE` | [`/providers/me/membros/{id}`](http://localhost:8080/swagger/index.html#/membros/delete_providers_me_membros__id_) | Remover o acesso de alguém (só o dono) |
+| `DELETE` | [`/providers/me/convites/{email}`](http://localhost:8080/swagger/index.html#/membros/delete_providers_me_convites__email_) | Cancelar um convite pendente (só o dono) |
+| `GET` | [`/membros/convite`](http://localhost:8080/swagger/index.html#/membros/get_membros_convite) | Consultar um convite pelo token (público) |
+| `POST` | [`/membros/aceitar-convite`](http://localhost:8080/swagger/index.html#/membros/post_membros_aceitar_convite) | Aceitar o convite e criar o acesso (público) |
 | `POST` | [`/agendamentos/{id}/confirmar`](http://localhost:8080/swagger/index.html#/appointments/post_agendamentos__id__confirmar) | Confirmar uma solicitação |
 | `POST` | [`/agendamentos/{id}/recusar`](http://localhost:8080/swagger/index.html#/appointments/post_agendamentos__id__recusar) | Recusar uma solicitação |
 | `POST` | [`/agendamentos/{id}/realizado`](http://localhost:8080/swagger/index.html#/appointments/post_agendamentos__id__realizado) | Marcar atendimento como realizado |

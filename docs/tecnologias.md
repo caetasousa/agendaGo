@@ -407,6 +407,14 @@ O gatilho para trocar de desenho é o primeiro requisito que peça **permissão
 por recurso** em vez de por papel. Enquanto a pergunta couber em "que papel esta
 pessoa tem nesta agenda", este modelo é o mais simples que funciona.
 
+O convite de membro foi desenhado em torno da segunda dessas limitações: ele
+**cria a conta** em vez de vincular uma existente, justamente para que quem
+entra por ele tenha um único vínculo. Enquanto a escolha de agenda ativa não
+existir, aceitar convidar quem já tem conta seria entregar um convite
+silenciosamente inútil — a pessoa continuaria caindo na agenda mais antiga
+dela. Recusar é a resposta honesta, e o dia em que o seletor existir, essa
+recusa cai junto.
+
 **Para estudar:**
 - [NIST — Role-Based Access Control (RBAC)](https://csrc.nist.gov/projects/role-based-access-control) (o modelo canônico e seus níveis)
 - [Google Zanzibar](https://research.google/pubs/pub48190/) (o extremo oposto: autorização por relação, para quando papel não basta)
