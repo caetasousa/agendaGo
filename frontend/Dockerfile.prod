@@ -1,6 +1,10 @@
 # Imagem de produção do frontend: compila com o adapter-node e roda o servidor
 # Node autônomo gerado em build/. Em dev o compose continua usando npm run dev.
-FROM node:22-alpine AS build
+# Node 24: LTS ativo. Imagem de produção não roda em versão fora do LTS, que deixa
+# de receber correção de segurança e vira CVE sem conserto na varredura do Trivy.
+# Os dois estágios usam a MESMA versão de propósito — compilar numa e rodar em
+# outra esconde incompatibilidade de runtime até a hora errada.
+FROM node:24-alpine AS build
 
 WORKDIR /app
 
@@ -20,7 +24,7 @@ ENV PUBLIC_API_URL=${PUBLIC_API_URL}
 
 RUN npm run build
 
-FROM node:22-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 ENV NODE_ENV=production

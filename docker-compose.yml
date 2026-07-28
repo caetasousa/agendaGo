@@ -86,7 +86,9 @@ services:
       - "1025:1025" # SMTP: alvo dos emails enviados pela API em dev
 
   web:
-    image: node:22-alpine
+    # Mesma versão do runtime de produção (frontend/Dockerfile.prod): desenvolver
+    # numa major e publicar em outra esconde incompatibilidade até o deploy.
+    image: node:24-alpine
     container_name: agendago_web
     working_dir: /app
     command: sh -c "npm install && npm run dev -- --host --port 5173"

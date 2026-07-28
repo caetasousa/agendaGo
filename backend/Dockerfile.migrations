@@ -9,4 +9,15 @@
 # está no Alpine 3.23 e é reconstruída com frequência — zero CRITICAL.
 FROM flyway/flyway:13-alpine
 
+# Atualiza os pacotes do sistema por cima da base. A imagem oficial do Flyway é
+# reconstruída em ritmo próprio, e entre uma reconstrução e outra ela acumula
+# correção já publicada pelo Alpine — aqui isso valia 5 dos 20 HIGH que o Trivy
+# acusava (libexpat, p11-kit). Os 15 restantes vivem nos JARs do próprio Flyway
+# (netty, jackson, mssql-jdbc) e só somem quando o upstream republicar: não há
+# tag mais nova que a 13 para onde subir, e reempacotar as dependências Java de
+# uma ferramenta de terceiro custaria mais do que o risco justifica — o
+# container roda por segundos, sem porta exposta, e só fala com o Postgres
+# interno do compose.
+RUN apk upgrade --no-cache
+
 COPY migrations /flyway/sql

@@ -18,7 +18,12 @@ COPY . .
 RUN swag init -g cmd/api/main.go -o docs && \
     CGO_ENABLED=0 go build -tags timetzdata -ldflags="-s -w" -o /bin/api ./cmd/api
 
-FROM alpine:3.21
+# Base mantida numa versão de Alpine ainda em suporte: as correções de openssl e
+# busybox não são publicadas para versão EOL, então uma base velha acumula CVE sem
+# conserto possível no lugar — foi exatamente o que aconteceu com a imagem de
+# migrations (ver Dockerfile.migrations). Como o portão do CI só trava em CRITICAL,
+# nada força esta linha a subir: conferir a aba Security a cada release do Alpine.
+FROM alpine:3.24
 
 # certificados TLS (chamadas HTTPS de saída) e usuário sem privilégios
 RUN apk add --no-cache ca-certificates && \
