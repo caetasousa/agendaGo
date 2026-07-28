@@ -11,6 +11,7 @@ import (
 	"agendago/internal/adapter/http/dto"
 	"agendago/internal/domain/availability"
 	"agendago/internal/domain/provider"
+	"agendago/internal/domain/usuario"
 	"agendago/internal/pkg/logging"
 	ucauth "agendago/internal/usecase/auth"
 	ucprovider "agendago/internal/usecase/provider"
@@ -166,7 +167,8 @@ func (h *ProviderHandler) AtualizarPreferencias(w http.ResponseWriter, r *http.R
 	}
 
 	output, err := h.atualizarPreferencias.Executar(ucprovider.AtualizarPreferenciasInput{
-		ProviderID:                   id.UserID,
+		UsuarioID:                    id.UserID,
+		ProviderID:                   id.ProviderID,
 		Telefone:                     req.Telefone,
 		AceitaAgendamentos:           req.AceitaAgendamentos,
 		DescansoMinutos:              req.DescansoMinutos,
@@ -178,7 +180,7 @@ func (h *ProviderHandler) AtualizarPreferencias(w http.ResponseWriter, r *http.R
 		switch {
 		case errors.Is(err, provider.ErrDescansoInvalido),
 			errors.Is(err, provider.ErrDuracaoInvalida),
-			errors.Is(err, provider.ErrTelefoneObrigatorio),
+			errors.Is(err, usuario.ErrTelefoneObrigatorio),
 			errors.Is(err, availability.ErrFimAntesDoInicio),
 			errors.Is(err, availability.ErrForaDoDia),
 			errors.Is(err, availability.ErrGranularidadeInvalida),

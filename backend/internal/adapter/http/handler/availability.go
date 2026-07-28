@@ -76,7 +76,7 @@ func (h *AvailabilityHandler) ConsultarAgenda(w http.ResponseWriter, r *http.Req
 	}
 
 	out, err := h.consultarAgenda.Executar(ucavailability.ConsultarAgendaInput{
-		ProviderID: id.UserID,
+		ProviderID: id.ProviderID,
 		De:         de,
 		Ate:        ate,
 	})
@@ -148,7 +148,7 @@ func (h *AvailabilityHandler) DefinirDia(w http.ResponseWriter, r *http.Request)
 	}
 
 	out, err := h.definirDia.Executar(ucavailability.DefinirDiaInput{
-		ProviderID: id.UserID,
+		ProviderID: id.ProviderID,
 		Data:       data,
 		Tipo:       availability.TipoExcecao(req.Tipo),
 		Blocos:     blocos,
@@ -189,7 +189,7 @@ func (h *AvailabilityHandler) RemoverDia(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := h.removerDia.Executar(ucavailability.RemoverDiaInput{ProviderID: id.UserID, Data: data}); err != nil {
+	if err := h.removerDia.Executar(ucavailability.RemoverDiaInput{ProviderID: id.ProviderID, Data: data}); err != nil {
 		responderErroDisponibilidade(w, r, err)
 		return
 	}

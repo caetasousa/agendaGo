@@ -9,6 +9,7 @@ import (
 	"agendago/internal/adapter/http/dto"
 	domappointment "agendago/internal/domain/appointment"
 	domclient "agendago/internal/domain/client"
+	"agendago/internal/domain/session"
 	ucappointment "agendago/internal/usecase/appointment"
 	ucauth "agendago/internal/usecase/auth"
 
@@ -123,7 +124,7 @@ func (h *AppointmentHandler) ConsultarSlotsDoPrestador(w http.ResponseWriter, r 
 	}
 
 	out, err := h.consultarSlots.Executar(ucappointment.ConsultarSlotsInput{
-		ProviderID:           id.UserID,
+		ProviderID:           id.ProviderID,
 		De:                   de,
 		Ate:                  ate,
 		Agora:                time.Now(),
@@ -320,7 +321,7 @@ func (h *AppointmentHandler) MarcarPeloPrestador(w http.ResponseWriter, r *http.
 	}
 
 	out, err := h.marcarPeloPrestador.Executar(ucappointment.MarcarPeloPrestadorInput{
-		ProviderID:    id.UserID,
+		ProviderID:    id.ProviderID,
 		Data:          data,
 		InicioMinutos: req.InicioMinutos,
 		Nome:          req.Nome,
@@ -379,6 +380,23 @@ func (h *AppointmentHandler) ListarDoCliente(w http.ResponseWriter, r *http.Requ
 	h.listarAgendamentos(w, r, h.listar.DoCliente, false)
 }
 
+// idDoAtorNaAgenda devolve o id com que o usuário autenticado aparece nos
+// usecases que atendem cliente e prestador pelo mesmo caminho. Para o cliente
+// é a própria conta; para o prestador é a AGENDA, porque é ela que
+// appointments.provider_id referencia — não a conta de quem operou.
+//
+// ⚠️ Enquanto cada pessoa tiver um único vínculo, os dois valores coincidem
+// (a migração V14 reusou o id), então trocar isto não faz teste nenhum mudar
+// de cor. O erro só apareceria quando existisse o segundo vínculo, na forma de
+// alguém vendo a agenda errada — por isso a distinção fica explícita aqui em
+// vez de espalhada pelos call sites.
+func idDoAtorNaAgenda(id ucauth.Identidade) string {
+	if id.Tipo == session.TipoProvider {
+		return id.ProviderID
+	}
+	return id.UserID
+}
+
 func (h *AppointmentHandler) listarAgendamentos(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -392,7 +410,7 @@ func (h *AppointmentHandler) listarAgendamentos(
 	}
 
 	pag := paginaDaQuery(r)
-	out, err := listar(ucappointment.ListarInput{UsuarioID: id.UserID, Pagina: pag, Agora: time.Now()})
+	out, err := listar(ucappointment.ListarInput{UsuarioID: idDoAtorNaAgenda(id), Pagina: pag, Agora: time.Now()})
 	if err != nil {
 		responderErroAgendamento(w, r, err)
 		return
@@ -558,7 +576,7 @@ func (h *AppointmentHandler) transicionarAgendamento(
 
 	err := transicao(ucappointment.TransicionarInput{
 		AgendamentoID: chi.URLParam(r, "id"),
-		UsuarioID:     id.UserID,
+		UsuarioID:     idDoAtorNaAgenda(id),
 		Tipo:          id.Tipo,
 		Agora:         time.Now(),
 	})
