@@ -632,11 +632,28 @@ on:
   workflow_run:
     workflows: [CI]
     types: [completed]
+    branches: ['dependabot/**']
 ```
 
 Efeito colateral bem-vindo: **não exige branch protection** com checks
 obrigatórios. Como neste projeto se commita direto na `main`, exigir PR para
 tudo atrapalharia o fluxo normal em troca de nada.
+
+#### Por que o filtro de branch fica no gatilho, e não no `if`
+
+As condições do job (`conclusion`, `event`, `actor`) já barravam tudo que não
+fosse PR do Dependabot, mas barravam **tarde demais**: o GitHub cria a execução
+antes de avaliar o `if`, então cada push na `main` deixava um run *skipped* do
+auto-merge na aba Actions. Nada errado acontecia — só que a aba passava a ter
+duas linhas por commit, e a que nunca faz nada se confunde com falha de verdade
+na hora de procurar um deploy quebrado.
+
+O `branches` no `workflow_run` filtra pelo branch do CI que terminou. Como o
+Dependabot sempre nomeia o branch com o prefixo `dependabot/`, um push na `main`
+deixa de casar com o gatilho e **nenhuma execução chega a ser criada**. As
+condições do job continuam lá como rede de segurança: o filtro de branch não
+diz nada sobre o CI ter passado, nem impede um humano de abrir um PR de um
+branch com esse prefixo.
 
 > [!NOTE]
 > A decisão de mesclar sai do **título** do PR, que o Dependabot escreve em
