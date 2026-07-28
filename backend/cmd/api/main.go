@@ -269,6 +269,11 @@ func main() {
 		r.Use(authMw.Autenticar)
 		limitarPorSessao(r, config.RateLimitAutenticadoPorMinuto())
 		r.Use(middleware.ExigirProvider)
+		// Todas as rotas daqui operam a AGENDA, e por isso passam pelo papel do
+		// usuário nela. Hoje os dois papéis podem, então nada muda — o ganho é
+		// que um papel novo e mais restrito nasce sem acesso, em vez de nascer
+		// com acesso a tudo e depender de alguém lembrar de barrá-lo.
+		r.Use(middleware.ExigirGestaoDaAgenda)
 		r.Put("/providers/me/preferencias", providerHandler.AtualizarPreferencias)
 		r.Get("/providers/me/agenda", availabilityHandler.ConsultarAgenda)
 		r.Put("/providers/me/dias/{data}", availabilityHandler.DefinirDia)
