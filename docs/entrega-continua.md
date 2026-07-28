@@ -399,6 +399,60 @@ imagem atualizada também são coisas diferentes.
 > (seção 5): ele acompanha a tag da base e avisa quando a linha avança, em vez
 > de a descoberta vir de uma varredura vermelha meses depois.
 
+### Caso 5 — onde os alertas abertos realmente estavam
+
+A aba Security acumulando alertas levou à hipótese óbvia: as bases das imagens
+de API e web estavam velhas (`alpine:3.21`, de dezembro de 2024, e
+`node:22-alpine`), e um bump limparia boa parte. **A medição desmentiu isso.**
+
+| Imagem | Base | HIGH+CRITICAL |
+|---|---|---|
+| `agendago-api` | `alpine:3.21` → `3.24` | 0 → **0** |
+| `agendago-web` | `node:22-alpine` → `24-alpine` | 0 → **0** |
+| `agendago-migrations` | `flyway/flyway:13-alpine` | **20** |
+
+O Alpine já estava limpo nas duas versões. E a imagem web fica em zero **apesar
+de** `node:24-alpine` sozinho acusar 5 HIGH: eles moram no npm, que o
+`Dockerfile.prod` remove do runtime (Caso 2). A mitigação de lá continua
+pagando dividendos aqui.
+
+Ou seja: **todo o volume estava numa imagem só** — justamente a que o Caso 4
+havia declarado resolvida. E "resolvida" ali significava *zero CRITICAL*, não
+zero alerta.
+
+Dos 20, cinco eram pacotes de sistema (`libexpat`, `p11-kit`) que a base do
+Flyway ainda não tinha incorporado. Um `apk upgrade --no-cache` por cima da
+imagem oficial resolve esses — o oposto do Caso 4, onde o mesmo comando não
+trazia nada porque a distribuição estava EOL:
+
+| | |
+|---|---|
+| HIGH antes | 20 |
+| HIGH depois do `apk upgrade` | **15** |
+| Flyway continua funcional | `Flyway OSS Edition 13.0.0` |
+
+Os 15 restantes são bibliotecas Java empacotadas dentro do próprio Flyway —
+`netty-codec-http` (6), `netty-handler` (3), `jackson-databind` (2),
+`netty-codec-compression` (2), `jackson-core` (1), `mssql-jdbc` (1). O Trivy
+mostra "correção disponível" para todas, e para nenhuma a correção é nossa:
+`13-alpine` já é a tag mais recente publicada, e reempacotar as dependências de
+uma ferramenta de terceiro custa mais do que o risco cobra — o container roda
+por segundos, sem porta exposta, falando só com o Postgres interno do compose.
+
+**Duas lições:**
+
+1. **Meça antes de consertar.** A hipótese de que bases velhas explicavam os
+   alertas era plausível, coerente com o histórico do projeto — e errada. Trinta
+   segundos de `trivy image` teriam poupado a conclusão apressada.
+2. **"Zero CRITICAL" não é "zero alerta".** O portão do CI trava em CRITICAL, e
+   é fácil ler o verde dele como imagem limpa. Os HIGH continuam se acumulando
+   na aba Security, exatamente como projetado — mas quem lê o portão precisa
+   saber que essa é a intenção, não um descuido.
+
+E o bump de `alpine:3.24`/`node:24-alpine` ficou, mesmo sem ganho imediato: o
+Alpine 3.21 perde suporte em novembro de 2026 e o Node 22 sai do LTS ativo.
+Trocar antes do vencimento é manutenção; trocar depois é o Caso 4 de novo.
+
 ---
 
 ## 4️⃣ Ficou vermelho. E agora?

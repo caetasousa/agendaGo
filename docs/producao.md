@@ -746,8 +746,29 @@ cron, por exemplo `30 4 * * *`. O padrão é `0 3 * * *`.
 > Como o crontab passa a ser gerenciado pelo CI, **editar a linha do agendaGo à
 > mão na VPS não adianta** — o próximo deploy a reescreve. Mude pela variável.
 
-Variáveis opcionais do script: `PASTA_BACKUP` (padrão `~/backups`) e
-`RETENCAO_DIAS` (padrão `7`).
+Variáveis opcionais do script: `PASTA_BACKUP` (padrão `~/backups`),
+`RETENCAO_DIAS` (padrão `7`) e `URL_HEARTBEAT` (sem padrão — ver abaixo).
+
+### Quem avisa que o backup parou
+
+O script termina pingando `URL_HEARTBEAT`, se ela estiver definida. **O alerta
+nasce da ausência do ping**, não da presença de um erro — e é isso que resolve o
+problema do "cron esquecido não avisa": um cron desativado, uma VPS desligada e
+um dump que falhou produzem exatamente o mesmo silêncio, e os três merecem
+alerta.
+
+Por isso o ping é a última linha do script: com `set -e`, qualquer falha acima
+encerra a execução antes de chegar nele. Falhar o ping em si **não** reprova o
+backup — o arquivo já está gravado, e derrubar o script nesse ponto só produziria
+um erro sem nada a corrigir.
+
+Serve qualquer monitor de *heartbeat* (Uptime Kuma no modo "push", Healthchecks.io,
+Better Stack). Configure a janela esperada com folga sobre o horário do cron.
+
+> [!IMPORTANT]
+> O monitor precisa rodar **fora da VPS**. Se ele mora na mesma máquina, a queda
+> da máquina leva junto quem deveria avisar — vale para o heartbeat do backup e
+> para a sonda de `/ready`.
 
 ### Por que full, e não incremental
 
@@ -817,25 +838,34 @@ fora da VPS chegou íntegra.
 ### Testar a restauração
 
 > [!IMPORTANT]
-> **Backup nunca restaurado é só um arquivo com esperança dentro.** Rode isto ao
-> menos uma vez, e sempre que mudar algo no processo:
+> **Backup nunca restaurado é só um arquivo com esperança dentro.** Verificar a
+> integridade do dump prova que o arquivo não saiu truncado — não prova que ele
+> volta. São coisas diferentes, e só a segunda importa no dia em que importa.
+
+O `scripts/testar-restore.sh` faz isso sozinho, e também é versionado e
+sincronizado pelo CI:
 
 ```bash
-docker run -d --name pg-teste \
-  -e POSTGRES_PASSWORD=teste -e POSTGRES_USER=agendago -e POSTGRES_DB=agendago \
-  postgres:16-alpine
-
-gzip -dc ~/backups/agendago-AAAA-MM-DD-HHMM.sql.gz \
-  | docker exec -i pg-teste psql -U agendago -d agendago
-
-docker exec pg-teste psql -U agendago -d agendago -c "\dt"
-docker exec pg-teste psql -U agendago -d agendago -c "select count(*) from providers;"
-
-docker rm -f pg-teste
+~/agendago/scripts/testar-restore.sh              # o backup mais recente
+~/agendago/scripts/testar-restore.sh caminho.gz   # um arquivo específico
 ```
 
-Restaura num Postgres descartável, sem tocar na produção. Você deve ver as
-**15 tabelas** e as contagens compatíveis com o que existe no ar.
+Ele confere o `.sha256`, sobe um Postgres descartável, restaura com
+`ON_ERROR_STOP=1`, verifica que as tabelas do domínio existem e que o histórico
+do Flyway veio junto, e destrói o container ao final. Saída de um restore são:
+
+```
+2026-07-28 09:14:02  testando o restore de agendago-2026-07-28-030001.sql.gz
+2026-07-28 09:14:02  hash confere
+2026-07-28 09:14:09  restaurando
+2026-07-28 09:14:10  ok: restore íntegro — 13 migrations, 4 prestador(es), 27 agendamento(s)
+```
+
+Nada disso toca a produção: o container é próprio, sem porta publicada, e some no
+fim. O `ON_ERROR_STOP=1` não é detalhe — sem ele o `psql` segue depois de um erro
+e ainda termina com status 0, o que faria um restore quebrado passar por bom.
+
+Rode ao menos uma vez, e sempre que mudar algo no processo de backup.
 
 ⚠️ **Backup de VM do provedor não substitui isto.** Ele restaura a máquina
 inteira — serve para desastre, não para "recuperar o banco de ontem" nem para

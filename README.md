@@ -91,7 +91,8 @@ Ele entra pela [mesma tela de login](http://localhost:5173/login) e cai no paine
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| `GET` | [`/health`](http://localhost:8080/swagger/index.html#/infra/get_health) | Status do servidor |
+| `GET` | [`/health`](http://localhost:8080/swagger/index.html#/infra/get_health) | Liveness: o processo está no ar (não checa dependência) |
+| `GET` | [`/ready`](http://localhost:8080/swagger/index.html#/infra/get_ready) | Readiness: a API consegue atender (faz ping no banco); 503 se não |
 | `POST` | [`/providers`](http://localhost:8080/swagger/index.html#/providers/post_providers) | Solicitar cadastro de prestador (envia email de confirmação) |
 | `POST` | [`/providers/confirmar-cadastro`](http://localhost:8080/swagger/index.html#/providers/post_providers_confirmar_cadastro) | Confirmar cadastro de prestador pelo token do email |
 | `POST` | [`/clients`](http://localhost:8080/swagger/index.html#/clients/post_clients) | Solicitar cadastro de cliente (envia email de confirmação) |
