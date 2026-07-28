@@ -36,6 +36,7 @@ import (
 	ucauth "agendago/internal/usecase/auth"
 	ucavailability "agendago/internal/usecase/availability"
 	ucclient "agendago/internal/usecase/client"
+	ucmembro "agendago/internal/usecase/membro"
 	ucprovider "agendago/internal/usecase/provider"
 
 	"github.com/go-chi/chi/v5"
@@ -85,6 +86,7 @@ func main() {
 	preCadastroRepo := repository.NovoPreCadastroPostgres(pool)
 	socialIdentityRepo := repository.NovoSocialIdentityPostgres(pool)
 	oauthStateRepo := repository.NovoOAuthStatePostgres(pool)
+	conviteRepo := repository.NovoConvitePostgres(pool)
 
 	// segurança
 	hasher := security.NovoHasherArgon2id()
@@ -139,6 +141,12 @@ func main() {
 	perfil := ucauth.NovoPerfilUseCase(usuarioRepo, providerRepo, clientRepo, adminRepo)
 	solicitarRecuperacao := ucauth.NovoSolicitarRecuperacaoUseCase(usuarioRepo, membroRepo, providerRepo, clientRepo, passwordResetRepo, notificador)
 	redefinirSenha := ucauth.NovoRedefinirSenhaUseCase(usuarioRepo, clientRepo, passwordResetRepo, sessionRepo, hasher)
+	convidarMembro := ucmembro.NovoConvidarUseCase(conviteRepo, usuarioRepo, clientRepo, adminRepo, providerRepo, notificador)
+	cancelarConvite := ucmembro.NovoCancelarConviteUseCase(conviteRepo)
+	consultarConvite := ucmembro.NovoConsultarConviteUseCase(conviteRepo, providerRepo)
+	aceitarConvite := ucmembro.NovoAceitarConviteUseCase(conviteRepo, usuarioRepo, membroRepo, providerRepo, hasher)
+	listarEquipe := ucmembro.NovoListarEquipeUseCase(membroRepo, usuarioRepo, conviteRepo)
+	removerMembro := ucmembro.NovoRemoverMembroUseCase(membroRepo, membroRepo, sessionRepo)
 	moderar := ucadmin.NovoModerarUseCase(providerRepo, usuarioRepo, membroRepo, clientRepo, sessionRepo)
 	consultarAgenda := ucavailability.NovoConsultarAgendaUseCase(availabilityRepo, providerRepo, membroRepo)
 	definirDia := ucavailability.NovoDefinirDiaUseCase(availabilityRepo)
@@ -161,6 +169,7 @@ func main() {
 		return middleware.IdentidadeDoContexto(r.Context())
 	}
 	providerHandler := handler.NovoProviderHandler(solicitarCadastroProvider, confirmarCadastroProvider, atualizarPreferencias, listarPrestadores, buscarPrestador, identidadeDoContexto)
+	membroHandler := handler.NovoMembroHandler(convidarMembro, cancelarConvite, consultarConvite, aceitarConvite, listarEquipe, removerMembro, identidadeDoContexto)
 	clientHandler := handler.NovoClientHandler(solicitarCadastroClient, confirmarCadastroClient, consultarPreCadastro, concluirPreCadastro)
 	// teto de tentativas por conta, compartilhado entre login e recuperação de
 	// senha: o mesmo contador, com chaves de prefixo diferente
@@ -230,6 +239,11 @@ func main() {
 		r.Post("/clients/confirmar-cadastro", clientHandler.ConfirmarCadastro)
 		r.Get("/clients/pre-cadastro/{token}", clientHandler.ConsultarPreCadastro)
 		r.Post("/clients/pre-cadastro/{token}", clientHandler.ConcluirPreCadastro)
+		// Convite: público porque quem foi convidado ainda não tem conta — é
+		// justamente o aceite que a cria. O token de uso único é a proteção, e
+		// o teto por IP deste grupo cobre a força bruta.
+		r.Get("/membros/convite", membroHandler.ConsultarConvite)
+		r.Post("/membros/aceitar-convite", membroHandler.AceitarConvite)
 	})
 	// logins têm teto por IP: mitiga brute-force e rajadas de Argon2id (CPU).
 	// O teto por CONTA, que pega quem troca de IP a cada tentativa, está dentro
@@ -283,6 +297,22 @@ func main() {
 		// própria agenda (mesmo fechada ao público) e o registro da reserva
 		r.Get("/providers/me/slots", appointmentHandler.ConsultarSlotsDoPrestador)
 		r.Post("/providers/me/agendamentos", appointmentHandler.MarcarPeloPrestador)
+		// Ver quem tem acesso é parte de operar a agenda; mudar quem tem acesso
+		// não é — por isso o POST e os DELETE ficam no grupo do dono, abaixo.
+		r.Get("/providers/me/membros", membroHandler.ListarEquipe)
+	})
+	// Administração da equipe: só o dono. É a primeira rota a exigir isso —
+	// mudar quem tem acesso à agenda é decisão de quem responde por ela, não de
+	// quem apenas a opera no dia a dia.
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.SemCache)
+		r.Use(authMw.Autenticar)
+		limitarPorSessao(r, config.RateLimitAutenticadoPorMinuto())
+		r.Use(middleware.ExigirProvider)
+		r.Use(middleware.ExigirAdministracaoDaConta)
+		r.Post("/providers/me/membros", membroHandler.Convidar)
+		r.Delete("/providers/me/membros/{id}", membroHandler.Remover)
+		r.Delete("/providers/me/convites/{email}", membroHandler.CancelarConvite)
 	})
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.SemCache)
