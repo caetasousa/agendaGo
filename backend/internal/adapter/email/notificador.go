@@ -155,6 +155,27 @@ func (n *Notificador) enviarConfirmacaoCadastro(email, nome, token, tipo string,
 	n.enviar(email, nome, "Confirme seu cadastro — agendaGo", "confirmacao_cadastro.html", dados)
 }
 
+// EnviarConviteMembro manda o link com que a pessoa convidada cria o próprio
+// acesso à agenda de outra. Implementa a interface enviadorConvite de
+// usecase/membro.
+//
+// O destinatário ainda não tem conta, então não há nome para saudá-lo: quem
+// aparece no email é a agenda que convidou, que é o que dá contexto a alguém
+// que não estava esperando a mensagem.
+func (n *Notificador) EnviarConviteMembro(email, nomeAgenda, token string, expiraEm time.Time) {
+	link := fmt.Sprintf("%s/convite?token=%s", n.urlFrontend, token)
+	dados := struct {
+		NomeAgenda   string
+		Link         string
+		ExpiraEmDias int
+	}{
+		NomeAgenda:   nomeAgenda,
+		Link:         link,
+		ExpiraEmDias: int(time.Until(expiraEm).Hours() / 24),
+	}
+	n.enviar(email, email, "Convite para operar uma agenda — agendaGo", "convite_membro.html", dados)
+}
+
 // EnviarAvisoContaExistente avisa que o email já tem conta, no lugar do link de
 // confirmação — enviado quando alguém tenta se cadastrar com um email já
 // registrado, sem que a resposta HTTP revele isso.
