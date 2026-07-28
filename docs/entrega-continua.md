@@ -431,27 +431,87 @@ trazia nada porque a distribuição estava EOL:
 | HIGH depois do `apk upgrade` | **15** |
 | Flyway continua funcional | `Flyway OSS Edition 13.0.0` |
 
-Os 15 restantes são bibliotecas Java empacotadas dentro do próprio Flyway —
-`netty-codec-http` (6), `netty-handler` (3), `jackson-databind` (2),
-`netty-codec-compression` (2), `jackson-core` (1), `mssql-jdbc` (1). O Trivy
-mostra "correção disponível" para todas, e para nenhuma a correção é nossa:
-`13-alpine` já é a tag mais recente publicada, e reempacotar as dependências de
-uma ferramenta de terceiro custa mais do que o risco cobra — o container roda
-por segundos, sem porta exposta, falando só com o Postgres interno do compose.
+Sobraram 15 HIGH e 24 MEDIUM, todos em bibliotecas Java. E foi só olhar **onde**
+elas moravam para a resposta aparecer:
 
-**Duas lições:**
+```
+flyway/drivers/couchbase/core-io-3.12.0.jar        → netty, jackson
+flyway/drivers/databricks-jdbc-3.4.1.jar           → jackson, lz4
+flyway/drivers/mssql-jdbc-12.10.2.jre11.jar        → mssql-jdbc
+flyway/lib/netty/netty-codec-http-4.2.15.Final.jar → netty
+```
+
+**Couchbase. Databricks. SQL Server.** O agendaGo fala com PostgreSQL e nada
+mais. A imagem oficial do Flyway embarca **290 MB de drivers** para vinte e
+tantos bancos, e cada um deles traz a própria árvore de dependências Java junto.
+
+Ou seja: não havia correção por *atualização* porque as bibliotecas estavam
+certas onde estavam — o errado era elas estarem ali. Isto é o **Caso 2 de novo**,
+com outro figurino: a correção é remover, não atualizar. Não existe versão
+corrigida de uma dependência que não deveria fazer parte da imagem.
+
+| | HIGH | MEDIUM |
+|---|:---:|:---:|
+| Imagem oficial | 20 | — |
+| Após `apk upgrade` | 15 | 24 |
+| Após remover os drivers não usados | **0** | **0** |
+
+> [!CAUTION]
+> **Não dá para remover tudo que não se usa.** O primeiro corte tirou os 290 MB
+> inteiros, deixando só o `postgresql-*.jar` — e o Flyway não subiu:
+>
+> ```
+> Caused by: java.lang.ClassNotFoundException:
+>   com.datastax.oss.driver.api.core.cql.Statement
+> ```
+>
+> Ele resolve os plugins de banco por `ServiceLoader` e os carrega **avidamente**:
+> sem o driver do Cassandra no classpath, o boot morre — mesmo sem nenhum uso de
+> Cassandra. O corte que funciona é cirúrgico, e o único teste que vale é rodar
+> `flyway migrate` contra um Postgres de verdade: 13 migrations, 15 tabelas.
+
+**Três lições:**
 
 1. **Meça antes de consertar.** A hipótese de que bases velhas explicavam os
    alertas era plausível, coerente com o histórico do projeto — e errada. Trinta
    segundos de `trivy image` teriam poupado a conclusão apressada.
-2. **"Zero CRITICAL" não é "zero alerta".** O portão do CI trava em CRITICAL, e
-   é fácil ler o verde dele como imagem limpa. Os HIGH continuam se acumulando
-   na aba Security, exatamente como projetado — mas quem lê o portão precisa
-   saber que essa é a intenção, não um descuido.
+2. **Leia o caminho do achado, não só o nome do pacote.** "netty tem CVE" leva a
+   procurar netty atualizado. `flyway/drivers/couchbase/...` leva à pergunta
+   certa: *por que existe um driver de Couchbase nesta imagem?*
+3. **"Zero CRITICAL" não é "zero alerta".** O portão do CI trava em CRITICAL, e
+   é fácil ler o verde dele como imagem limpa. Os HIGH seguem acumulando na aba
+   Security, exatamente como projetado — mas quem lê o portão precisa saber que
+   essa é a intenção, não um descuido.
 
 E o bump de `alpine:3.24`/`node:24-alpine` ficou, mesmo sem ganho imediato: o
 Alpine 3.21 perde suporte em novembro de 2026 e o Node 22 sai do LTS ativo.
 Trocar antes do vencimento é manutenção; trocar depois é o Caso 4 de novo.
+
+### Caso 6 — `x/crypto/openpgp` no binário da API: alcançabilidade de novo
+
+Sobra um alerta fora do Flyway, em severidade **Note**: *"the golang.org/x/crypto/openpgp
+package is unmaintained, unsafe by design"*, apontado no próprio binário da API.
+
+Só que o pacote não é usado:
+
+```console
+$ go mod why golang.org/x/crypto/openpgp
+(main module does not need package golang.org/x/crypto/openpgp)
+
+$ go tool nm bin/api | grep -c openpgp
+0
+```
+
+Zero símbolos linkados. O `x/crypto` entra por `argon2id`, `go-mail` e
+`validator`, e o Go só linka os **pacotes** efetivamente alcançados — mas o Trivy
+lê o *buildinfo* embutido no binário, que lista **módulos**, e casa o aviso no
+nível do módulo inteiro.
+
+É o [Caso 3](#caso-3--a-stdlib-do-go-nem-todo-vermelho-é-culpa-do-seu-código)
+pelo avesso: lá o govulncheck evitou o alarme falso justamente por fazer análise
+de alcançabilidade. Ferramentas diferentes, granularidades diferentes — e o
+`govulncheck` do pipeline segue verde neste caso, o que é a segunda opinião que
+importa. Nada a corrigir.
 
 ---
 
