@@ -35,8 +35,7 @@
 	}
 
 	const rotulo = 'block text-xs font-semibold tracking-wide text-mute uppercase';
-	const campo =
-		'mt-1.5 w-full rounded-lg border border-hairline-strong bg-surface px-3 py-2 text-sm text-ink';
+	const campo = 'campo-linha mt-1.5';
 </script>
 
 {#if data.erro || !data.convite}
@@ -57,7 +56,7 @@
 		<button
 			type="button"
 			onclick={() => goto('/login')}
-			class="mt-6 w-full rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-surface"
+			class="mt-6 w-full flex h-11 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-on transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
 		>
 			Ir para o login
 		</button>
@@ -73,8 +72,9 @@
 		</p>
 
 		{#if erro}
-			<p class="mb-4 rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger" role="alert">
-				{erro}
+			<p class="mb-4 flex items-start gap-2 rounded-md border border-accent-red/40 bg-accent-red/10 p-3 text-sm" role="alert">
+				<span class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent-red"></span>
+				<span class="text-body">{erro}</span>
 			</p>
 		{/if}
 
@@ -87,20 +87,20 @@
 				<label for="senha" class={rotulo}>Senha</label>
 				<input id="senha" type="password" bind:value={senha} required minlength="8" class={campo} />
 				{#if senhaCurta}
-					<p class="mt-1 text-xs text-danger">A senha precisa de ao menos 8 caracteres.</p>
+					<p class="mt-1 text-xs text-accent-red">A senha precisa de ao menos 8 caracteres.</p>
 				{/if}
 			</div>
 			<div>
 				<label for="confirmar-senha" class={rotulo}>Confirmar senha</label>
 				<input id="confirmar-senha" type="password" bind:value={confirmarSenha} required class={campo} />
 				{#if senhasDiferentes}
-					<p class="mt-1 text-xs text-danger">As senhas não coincidem.</p>
+					<p class="mt-1 text-xs text-accent-red">As senhas não coincidem.</p>
 				{/if}
 			</div>
 			<button
 				type="submit"
 				disabled={!podeEnviar}
-				class="mt-2 w-full rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-surface disabled:opacity-50"
+				class="mt-2 w-full flex h-11 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-on transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
 			>
 				{enviando ? 'Criando…' : 'Criar meu acesso'}
 			</button>

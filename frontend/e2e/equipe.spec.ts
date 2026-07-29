@@ -118,3 +118,66 @@ test('link de convite inválido explica o que fazer', async ({ page }) => {
 	await expect(page.getByText('Convite inválido')).toBeVisible();
 	await expect(page.getByText(/peça um novo a quem convidou/i)).toBeVisible();
 });
+
+// Botão com texto de baixo contraste passa despercebido por qualquer asserção
+// de conteúdo: o texto ESTÁ no DOM, e o Playwright clica nele normalmente. Foi
+// assim que "Enviar convite" e "Criar meu acesso" foram parar invisíveis — as
+// classes de cor usadas (`text-surface`, `bg-ink`) não existiam no tema, e o
+// texto caiu numa cor herdada quase igual à do fundo.
+//
+// Comparar as duas cores por igualdade não basta: o primeiro bug era branco
+// sobre branco, mas cinza-claro sobre branco é igualmente ilegível e passaria.
+// Daí a razão de contraste da WCAG, com o piso de 4.5:1 para texto normal.
+async function razaoDeContraste(locator: import('@playwright/test').Locator): Promise<number> {
+	return locator.evaluate((el) => {
+		const canal = (c: number) => {
+			const v = c / 255;
+			return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+		};
+		const luminancia = (rgb: string) => {
+			const [r, g, b] = rgb.match(/\d+/g)!.map(Number);
+			return 0.2126 * canal(r) + 0.7152 * canal(g) + 0.0722 * canal(b);
+		};
+
+		const cor = getComputedStyle(el).color;
+		let no: HTMLElement | null = el as HTMLElement;
+		let fundo = 'rgba(0, 0, 0, 0)';
+		while (no && (fundo === 'rgba(0, 0, 0, 0)' || fundo === 'transparent')) {
+			fundo = getComputedStyle(no).backgroundColor;
+			no = no.parentElement;
+		}
+
+		const a = luminancia(cor);
+		const b = luminancia(fundo);
+		const [claro, escuro] = a > b ? [a, b] : [b, a];
+		return (claro + 0.05) / (escuro + 0.05);
+	});
+}
+
+const CONTRASTE_MINIMO = 4.5;
+
+test('os botões do convite têm texto legível', async ({ page, request }) => {
+	await prepararDona(page, request);
+
+	const enviar = page.getByRole('button', { name: 'Enviar convite' });
+	await expect(enviar).toBeVisible();
+	expect(await razaoDeContraste(enviar), 'texto do botão sem contraste com o fundo').toBeGreaterThanOrEqual(
+		CONTRASTE_MINIMO
+	);
+
+	// E na página pública, que é a primeira coisa que a pessoa convidada vê.
+	const emailConvidada = emailUnico('legibilidade');
+	await page.fill('#email-convite', emailConvidada);
+	await enviar.click();
+	await expect(page.getByText(`Convite enviado para ${emailConvidada}`)).toBeVisible();
+
+	const token = await tokenDeConvite(request, emailConvidada);
+	await sair(page);
+	await page.goto(`/convite?token=${token}`);
+
+	const criar = page.getByRole('button', { name: 'Criar meu acesso' });
+	await expect(criar).toBeVisible();
+	expect(await razaoDeContraste(criar), 'texto do botão sem contraste com o fundo').toBeGreaterThanOrEqual(
+		CONTRASTE_MINIMO
+	);
+});

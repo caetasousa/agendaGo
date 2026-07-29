@@ -75,13 +75,15 @@
 <PageHeader titulo="Equipe" descricao="Quem pode operar esta agenda além de você." />
 
 {#if erro}
-	<p class="mb-4 rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger" role="alert">
-		{erro}
+	<p class="mb-4 flex items-start gap-2 rounded-md border border-accent-red/40 bg-accent-red/10 p-3 text-sm" role="alert">
+		<span class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent-red"></span>
+		<span class="text-body">{erro}</span>
 	</p>
 {/if}
 {#if sucesso}
-	<p class="mb-4 rounded-lg border border-ok/30 bg-ok/10 px-4 py-3 text-sm text-ok" role="status">
-		{sucesso}
+	<p class="mb-4 flex items-start gap-2 rounded-md border border-accent-green/40 bg-accent-green/10 p-3 text-sm" role="status">
+		<span class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent-green"></span>
+		<span class="text-body">{sucesso}</span>
 	</p>
 {/if}
 
@@ -102,13 +104,13 @@
 						bind:value={email}
 						required
 						placeholder="recepcao@email.com"
-						class="mt-1.5 w-full rounded-lg border border-hairline-strong bg-surface px-3 py-2 text-sm text-ink"
+						class="campo-linha mt-1.5"
 					/>
 				</div>
 				<button
 					type="submit"
 					disabled={enviando || email.trim() === '' || emailInvalido}
-					class="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-surface disabled:opacity-50"
+					class="flex h-11 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-on transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
 				>
 					{enviando ? 'Enviando…' : 'Enviar convite'}
 				</button>
@@ -126,14 +128,14 @@
 						{membro.ehDono ? 'Dona da agenda' : 'Operadora'}
 					</span>
 					{#if !membro.ativo}
-						<span class="text-xs text-danger">conta desativada</span>
+						<span class="text-xs text-accent-red">conta desativada</span>
 					{/if}
 					{#if data.ehDono && !membro.ehDono}
 						<button
 							type="button"
 							onclick={() => remover(membro.id, membro.email)}
 							disabled={removendo === membro.id}
-							class="text-xs font-semibold text-danger underline-offset-2 hover:underline disabled:opacity-50"
+							class="text-xs font-semibold text-accent-red underline-offset-2 hover:underline disabled:opacity-50"
 						>
 							Remover acesso
 						</button>
@@ -157,7 +159,7 @@
 								type="button"
 								onclick={() => cancelar(convite.email)}
 								disabled={removendo === convite.email}
-								class="text-xs font-semibold text-danger underline-offset-2 hover:underline disabled:opacity-50"
+								class="text-xs font-semibold text-accent-red underline-offset-2 hover:underline disabled:opacity-50"
 							>
 								Cancelar
 							</button>
