@@ -49,7 +49,7 @@ func novoAmbienteConvite(t *testing.T) *ambienteConvite {
 		consultar:  ucmembro.NovoConsultarConviteUseCase(convites, providers),
 		aceitar:    ucmembro.NovoAceitarConviteUseCase(convites, usuarios, membros, providers, hasher),
 		listar:     ucmembro.NovoListarEquipeUseCase(membros, usuarios, convites),
-		remover:    ucmembro.NovoRemoverMembroUseCase(membros, membros, sessoes),
+		remover:    ucmembro.NovoRemoverMembroUseCase(membros, membros, usuarios, sessoes),
 		usuarios:   usuarios,
 		membros:    membros,
 		providers:  providers,
@@ -322,6 +322,51 @@ func TestEquipeDaAgenda(t *testing.T) {
 		depois, _ := amb.listar.Executar(amb.providerID)
 		if len(depois.Membros) != 1 || !depois.Membros[0].EhDono {
 			t.Errorf("esperava só a dona restando, got: %+v", depois.Membros)
+		}
+	})
+
+	// Sem isso a pessoa vira uma conta fantasma: não consegue mais logar (o
+	// login exige vínculo) e ainda ocupa o email para sempre, porque o convite
+	// recusa qualquer endereço que já tenha conta. Ela nunca poderia voltar.
+	t.Run("remover o último vínculo apaga a conta e libera o email", func(t *testing.T) {
+		amb := novoAmbienteConvite(t)
+		convidarEAceitar := func(email string) string {
+			t.Helper()
+			if err := amb.convidar.Executar(ucmembro.ConvidarInput{
+				ProviderID: amb.providerID, Email: email, Papel: membro.PapelOperador,
+			}); err != nil {
+				t.Fatalf("convidar: %v", err)
+			}
+			out, err := amb.aceitar.Executar(ucmembro.AceitarInput{
+				Token: tokenDoConvite(t, amb.mailer), Telefone: "11888887777", Senha: "12345678",
+			})
+			if err != nil {
+				t.Fatalf("aceitar: %v", err)
+			}
+			return out.UsuarioID
+		}
+
+		usuarioID := convidarEAceitar("recepcao@email.com")
+		equipe, _ := amb.listar.Executar(amb.providerID)
+		var idVinculo string
+		for _, m := range equipe.Membros {
+			if !m.EhDono {
+				idVinculo = m.ID
+			}
+		}
+
+		if err := amb.remover.Executar(ucmembro.RemoverInput{ProviderID: amb.providerID, MembroID: idVinculo}); err != nil {
+			t.Fatalf("remover: %v", err)
+		}
+
+		if u, _ := amb.usuarios.BuscarPorID(usuarioID); u != nil {
+			t.Error("esperava a conta apagada junto com o último vínculo")
+		}
+		// O email volta a estar livre: a pessoa pode ser convidada de novo.
+		if err := amb.convidar.Executar(ucmembro.ConvidarInput{
+			ProviderID: amb.providerID, Email: "recepcao@email.com", Papel: membro.PapelOperador,
+		}); err != nil {
+			t.Errorf("esperava poder reconvidar o mesmo email, got: %v", err)
 		}
 	})
 

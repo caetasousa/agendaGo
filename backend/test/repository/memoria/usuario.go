@@ -54,6 +54,15 @@ func (r *UsuarioMemoria) Atualizar(u *usuario.Usuario) error {
 	return nil
 }
 
+// Remover apaga a conta, espelhando o contrato do Postgres — que não erra
+// quando o id não existe.
+func (r *UsuarioMemoria) Remover(id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.dados, id)
+	return nil
+}
+
 // AtualizarSenha troca o hash do usuário. Não faz nada quando o id não existe,
 // como o UPDATE do Postgres, que não erra em zero linhas afetadas.
 func (r *UsuarioMemoria) AtualizarSenha(id, senhaHash string) error {

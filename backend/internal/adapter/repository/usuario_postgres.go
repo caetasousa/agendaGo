@@ -72,6 +72,15 @@ func (r *UsuarioPostgres) Atualizar(u *usuario.Usuario) error {
 	return err
 }
 
+// Remover apaga a conta. Chamado quando alguém perde o último vínculo com uma
+// agenda: sem vínculo a conta não consegue mais logar, e mantê-la só ocuparia
+// o email para sempre. O ON DELETE CASCADE de provider_membros cuida de
+// eventuais vínculos remanescentes.
+func (r *UsuarioPostgres) Remover(id string) error {
+	_, err := r.pool.Exec(context.Background(), `DELETE FROM usuarios WHERE id = $1`, id)
+	return err
+}
+
 // AtualizarSenha persiste um novo hash de senha — usado na redefinição via
 // recuperação de senha. Método dedicado para não passar pelo Atualizar
 // genérico, que não toca a coluna senha_hash.

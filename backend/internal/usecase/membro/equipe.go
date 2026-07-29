@@ -96,16 +96,31 @@ type RemoverInput struct {
 type RemoverMembroUseCase struct {
 	membros   repositorioMembro
 	removedor removedorMembro
+	usuarios  removedorUsuario
 	sessoes   revogadorSessoes
 }
 
 // NovoRemoverMembroUseCase cria uma instância de RemoverMembroUseCase com as dependências injetadas.
-func NovoRemoverMembroUseCase(membros repositorioMembro, removedor removedorMembro, sessoes revogadorSessoes) *RemoverMembroUseCase {
-	return &RemoverMembroUseCase{membros: membros, removedor: removedor, sessoes: sessoes}
+func NovoRemoverMembroUseCase(
+	membros repositorioMembro,
+	removedor removedorMembro,
+	usuarios removedorUsuario,
+	sessoes revogadorSessoes,
+) *RemoverMembroUseCase {
+	return &RemoverMembroUseCase{membros: membros, removedor: removedor, usuarios: usuarios, sessoes: sessoes}
 }
 
-// Executar apaga o vínculo e derruba as sessões da pessoa removida — sem isso
-// ela continuaria operando a agenda até a sessão expirar sozinha.
+// Executar apaga o vínculo, derruba as sessões da pessoa removida e — se
+// aquele era o único vínculo dela — apaga também a conta.
+//
+// Apagar a conta não é excesso: quem entrou por convite tem conta pela única
+// razão de operar aquela agenda. Sem o vínculo ela não conseguiria mais entrar
+// (o login exige um vínculo), e a conta órfã ainda ocuparia o email para
+// sempre, impedindo que a pessoa fosse convidada de novo — o convite recusa
+// qualquer email que já tenha conta.
+//
+// Quem tem outro vínculo mantém a conta: perdeu o acesso a ESTA agenda, não ao
+// sistema.
 //
 // Retorna ErrMembroNaoEncontrado quando o vínculo não é desta agenda, e
 // ErrNaoRemoveDono ao tentar remover o dono: uma agenda sem dono ficaria sem
@@ -126,7 +141,18 @@ func (uc *RemoverMembroUseCase) Executar(in RemoverInput) error {
 		if err := uc.removedor.Remover(v.ID); err != nil {
 			return err
 		}
-		return uc.sessoes.RemoverDoUsuario(v.UsuarioID)
+		if err := uc.sessoes.RemoverDoUsuario(v.UsuarioID); err != nil {
+			return err
+		}
+
+		restante, err := uc.membros.BuscarPorUsuario(v.UsuarioID)
+		if err != nil {
+			return err
+		}
+		if restante == nil {
+			return uc.usuarios.Remover(v.UsuarioID)
+		}
+		return nil
 	}
 	return ErrMembroNaoEncontrado
 }

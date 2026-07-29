@@ -77,6 +77,12 @@ type removedorMembro interface {
 	Remover(id string) error
 }
 
+// removedorUsuario apaga a conta de quem ficou sem nenhum vínculo. Ver o
+// comentário de RemoverMembroUseCase.Executar para o porquê.
+type removedorUsuario interface {
+	Remover(id string) error
+}
+
 // buscadorProvider resolve a agenda para exibir o nome dela no convite.
 type buscadorProvider interface {
 	BuscarPorID(id string) (*provider.Provider, error)

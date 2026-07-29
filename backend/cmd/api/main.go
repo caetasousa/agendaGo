@@ -146,7 +146,7 @@ func main() {
 	consultarConvite := ucmembro.NovoConsultarConviteUseCase(conviteRepo, providerRepo)
 	aceitarConvite := ucmembro.NovoAceitarConviteUseCase(conviteRepo, usuarioRepo, membroRepo, providerRepo, hasher)
 	listarEquipe := ucmembro.NovoListarEquipeUseCase(membroRepo, usuarioRepo, conviteRepo)
-	removerMembro := ucmembro.NovoRemoverMembroUseCase(membroRepo, membroRepo, sessionRepo)
+	removerMembro := ucmembro.NovoRemoverMembroUseCase(membroRepo, membroRepo, usuarioRepo, sessionRepo)
 	moderar := ucadmin.NovoModerarUseCase(providerRepo, usuarioRepo, membroRepo, clientRepo, sessionRepo)
 	consultarAgenda := ucavailability.NovoConsultarAgendaUseCase(availabilityRepo, providerRepo, membroRepo)
 	definirDia := ucavailability.NovoDefinirDiaUseCase(availabilityRepo)
