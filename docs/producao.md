@@ -479,6 +479,56 @@ falha com `server does not support SMTP AUTH` se as credenciais continuarem lá.
 
 ---
 
+## 8️⃣ Rastreamento de erro (opcional)
+
+Sem isto, "está dando erro" vira uma caçada no `docker logs`. Com isto, você
+recebe o erro agrupado, com pilha e frequência. **Vazio desliga** — a API sobe
+normal sem configurar nada.
+
+### O que é o DSN
+
+É o endereço que identifica o seu projeto no coletor. Não é usuário e senha:
+é uma URL única, no formato
+
+```
+https://<chave>@<host>/<id-do-projeto>
+```
+
+Ele autoriza **escrever** eventos no seu projeto, não ler. Mesmo assim, trate
+como as demais variáveis do `.env`: quem tiver o DSN pode encher seu projeto de
+eventos falsos.
+
+### Onde conseguir um
+
+| Opção | Como | Quando escolher |
+|---|---|---|
+| **Sentry.io** | conta grátis em [sentry.io](https://sentry.io) → *Create Project* → plataforma **Go** → o DSN aparece na tela de setup | é o caminho mais curto; o plano grátis cobre um projeto pequeno |
+| **GlitchTip hospedado** | conta em [glitchtip.com](https://glitchtip.com) → mesmo fluxo | protocolo idêntico, projeto open-source, plano grátis mais generoso |
+| **GlitchTip próprio** | `docker compose` na sua infra | só se você quiser o dado na sua casa — puxa Postgres, Redis e workers, e não cabe junto do agendaGo numa VPS de 1 vCPU |
+
+Achou depois? Em qualquer um dos dois: *Settings → Projects → [projeto] →
+Client Keys (DSN)*.
+
+### Ligar
+
+```bash
+# no .env da VPS
+SENTRY_DSN=https://sua-chave@o0.ingest.sentry.io/000000
+```
+
+E redeploy. Em desenvolvimento o `docker-compose.yml` também repassa a
+variável, então dá para testar local do mesmo jeito.
+
+> [!WARNING]
+> **DSN errado não avisa.** O `sentry.Init` valida o **formato**, não se o
+> endereço existe: um DSN bem-formado mas apontando para o projeto errado (ou
+> para um host que não responde) deixa a API subir normalmente e **nunca
+> entrega evento nenhum**. Confirme provocando um erro de propósito e vendo se
+> ele aparece no painel — o que **realmente** aborta o boot é um DSN
+> malformado, e aí a mensagem é clara.
+
+---
+
 # 🤖 Deploy automático (CI → VPS)
 
 O job `implantar` do `.github/workflows/ci.yml` fecha o ciclo:
