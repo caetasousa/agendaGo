@@ -13,6 +13,11 @@
 	let sucesso = $state<string | null>(null);
 	let removendo = $state<string | null>(null);
 
+	// Confirmação de remoção. `confirm()` do navegador não segue o visual do
+	// projeto e some no meio da tela — a disponibilidade já resolve isso com um
+	// modal próprio, e este segue a mesma estrutura.
+	let aRemover = $state<{ id: string; email: string } | null>(null);
+
 	const emailInvalido = $derived(email.trim() !== '' && !email.includes('@'));
 
 	async function convidar(evento: SubmitEvent) {
@@ -34,7 +39,7 @@
 	}
 
 	async function remover(id: string, quem: string) {
-		if (!confirm(`Remover o acesso de ${quem} a esta agenda?`)) return;
+		aRemover = null;
 		erro = null;
 		sucesso = null;
 		removendo = id;
@@ -133,7 +138,7 @@
 					{#if data.ehDono && !membro.ehDono}
 						<button
 							type="button"
-							onclick={() => remover(membro.id, membro.email)}
+							onclick={() => (aRemover = { id: membro.id, email: membro.email })}
 							disabled={removendo === membro.id}
 							class="text-xs font-semibold text-accent-red underline-offset-2 hover:underline disabled:opacity-50"
 						>
@@ -170,3 +175,47 @@
 		</section>
 	{/if}
 </div>
+
+{#if aRemover}
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+		role="presentation"
+		onmousedown={(e) => {
+			if (e.target === e.currentTarget) aRemover = null;
+		}}
+	>
+		<div
+			role="dialog"
+			aria-modal="true"
+			aria-label="Remover acesso"
+			class="w-full max-w-md rounded-xl border border-hairline-strong bg-surface-card p-6"
+		>
+			<h3 class="text-lg font-semibold text-ink">Remover acesso</h3>
+			<p class="mt-2 text-sm text-mute">
+				<strong class="text-ink">{aRemover.email}</strong> deixa de operar esta agenda agora, e as
+				sessões dela caem na hora.
+			</p>
+			<p class="mt-2 text-sm text-mute">
+				Como esta é a única agenda dela, a conta é apagada junto — o email volta a ficar livre, e
+				você pode convidá-la de novo quando quiser. Os agendamentos que ela registrou continuam na
+				agenda.
+			</p>
+			<div class="mt-6 flex justify-end gap-3">
+				<button
+					type="button"
+					onclick={() => (aRemover = null)}
+					class="flex h-11 items-center justify-center rounded-lg border border-hairline-strong px-4 text-sm font-medium text-ink transition hover:border-ink"
+				>
+					Cancelar
+				</button>
+				<button
+					type="button"
+					onclick={() => remover(aRemover!.id, aRemover!.email)}
+					class="flex h-11 items-center justify-center rounded-lg bg-accent-red px-4 text-sm font-medium text-primary-on transition hover:opacity-90"
+				>
+					Remover acesso
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}

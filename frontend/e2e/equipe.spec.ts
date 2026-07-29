@@ -94,6 +94,47 @@ test('operadora não administra a equipe — só o dono convida e remove', async
 	await expect(page.getByRole('button', { name: 'Remover acesso' })).toHaveCount(0);
 });
 
+test('remover acesso pede confirmação num modal e apaga a conta órfã', async ({ page, request }) => {
+	await prepararDona(page, request);
+	const emailOperadora = emailUnico('removida');
+
+	await page.fill('#email-convite', emailOperadora);
+	await page.getByRole('button', { name: 'Enviar convite' }).click();
+	await expect(page.getByText(`Convite enviado para ${emailOperadora}`)).toBeVisible();
+
+	const token = await tokenDeConvite(request, emailOperadora);
+	const paginaConvidada = await page.context().newPage();
+	await paginaConvidada.goto(`/convite?token=${token}`);
+	await paginaConvidada.fill('#telefone', '(11) 98888-7777');
+	await paginaConvidada.fill('#senha', SENHA_PADRAO);
+	await paginaConvidada.fill('#confirmar-senha', SENHA_PADRAO);
+	await paginaConvidada.click('button:has-text("Criar meu acesso")');
+	await expect(paginaConvidada.getByText('Acesso criado')).toBeVisible();
+	await paginaConvidada.close();
+
+	await page.reload();
+	await page.getByRole('button', { name: 'Remover acesso' }).click();
+
+	// Modal do projeto, não o confirm() do navegador: dá para ler o que vai
+	// acontecer e desistir.
+	const modal = page.getByRole('dialog', { name: 'Remover acesso' });
+	await expect(modal).toBeVisible();
+	await expect(modal.getByText(/a conta é apagada junto/i)).toBeVisible();
+
+	await modal.getByRole('button', { name: 'Cancelar' }).click();
+	await expect(modal).toHaveCount(0);
+	await expect(page.getByText(emailOperadora)).toBeVisible();
+
+	await page.getByRole('button', { name: 'Remover acesso' }).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Remover acesso' }).click();
+	await expect(page.getByText(`${emailOperadora} não tem mais acesso`)).toBeVisible();
+
+	// A conta foi apagada, então o email volta a estar livre para um novo convite.
+	await page.fill('#email-convite', emailOperadora);
+	await page.getByRole('button', { name: 'Enviar convite' }).click();
+	await expect(page.getByText(`Convite enviado para ${emailOperadora}`)).toBeVisible();
+});
+
 test('convite para email que já tem conta é recusado', async ({ page, request }) => {
 	await prepararDona(page, request);
 
