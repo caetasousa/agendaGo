@@ -65,13 +65,6 @@ services:
       SMTP_STARTTLS: ${SMTP_STARTTLS:-false}
       EMAIL_REMETENTE: ${EMAIL_REMETENTE:-nao-responda@agendago.dev}
       EMAIL_REMETENTE_NOME: ${EMAIL_REMETENTE_NOME:-agendaGo}
-      # Coletor de erros (Sentry/GlitchTip). Vazio desliga.
-      #
-      # Estava só no compose de produção: sem esta linha, preencher SENTRY_DSN
-      # no .env não surtia efeito nenhum em desenvolvimento, porque a variável
-      # nunca chegava ao container — e o jeito de descobrir era provocar um
-      # erro e ver que nada aparecia no coletor.
-      SENTRY_DSN: ${SENTRY_DSN:-}
       EMAIL_REPLY_TO: ${EMAIL_REPLY_TO}
       # Login social com Google: vazio desliga o recurso
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
