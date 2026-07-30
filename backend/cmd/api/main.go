@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"agendago/config"
-	_ "agendago/docs"
 	"agendago/internal/adapter/email"
 	"agendago/internal/adapter/http/handler"
 	"agendago/internal/adapter/http/middleware"

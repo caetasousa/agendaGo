@@ -12,7 +12,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 // Porta devolve o endereço em que o servidor HTTP escuta
@@ -132,8 +131,8 @@ const maxBytesCorpo = 1 << 20 // 1 MiB
 
 // NovoRouter cria um roteador chi com middlewares de request ID, IP real
 // (atrás do proxy), log estruturado de acesso, recuperação de panics, limite
-// de corpo e CORS; a doc do swagger só é montada fora de produção. A ordem
-// importa: RequestID primeiro (para o log e os handlers terem o id); IPReal
+// de corpo e CORS; a doc do swagger entra só nos builds com `-tags=swagger`.
+// A ordem importa: RequestID primeiro (para o log e os handlers terem o id); IPReal
 // antes do log e do rate limit por IP (para verem o cliente, não o proxy); o
 // log de acesso por fora do Recoverer (para registrar também os 500 que o
 // Recoverer produz).
@@ -156,13 +155,9 @@ func NovoRouter() *chi.Mux {
 		AllowedHeaders:   []string{"Content-Type"},
 		AllowCredentials: true,
 	}))
-	// A doc interativa é ferramenta de desenvolvimento: publica a superfície
-	// inteira da API (rotas, formatos, exemplos) para quem alcançar a porta.
-	// Em produção a rota nem chega a existir — o 404 do Caddy passa a ser a
-	// segunda linha de defesa, não a única, e a API continua protegida se for
-	// servida por outro proxy ou alcançada de dentro da rede interna.
-	if !EhProducao() {
-		r.Get("/swagger/*", httpSwagger.WrapHandler)
-	}
+	// A doc interativa só existe quando o binário é compilado com
+	// `-tags=swagger` — ver swagger_desligado.go, que explica por que isso é
+	// decisão de compilação e não de ambiente.
+	montarSwagger(r)
 	return r
 }
