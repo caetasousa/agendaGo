@@ -505,23 +505,6 @@ O log de acesso omite as duas rotas (`internal/pkg/logging/logging.go`): são co
 - [Kubernetes — Liveness, Readiness e Startup Probes](https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/) (a distinção canônica, útil mesmo fora do Kubernetes)
 - [Docker — HEALTHCHECK](https://docs.docker.com/reference/dockerfile/#healthcheck)
 
-### Rastreamento de erro: Sentry (ou GlitchTip)
-
-Log e rastreamento de erro **não são a mesma coisa**. O log responde "o que aconteceu no servidor" e é lido em ordem cronológica; o rastreador responde "qual erro está acontecendo, com que frequência, desde quando, em qual linha" — ele **agrupa ocorrências idênticas** e guarda a pilha. Sem ele, "está dando erro" vira uma caçada no `docker logs`.
-
-Configurado em `config/observabilidade.go`, ligado por `SENTRY_DSN`; vazio desliga, mesmo padrão de `EmailAtivo()` e `OAuthGoogleAtivo()`. O [GlitchTip](https://glitchtip.com) fala o mesmo protocolo e é auto-hospedável, então o SDK serve para os dois.
-
-Duas decisões de desenho:
-
-- **Intercepta no `slog`, não espalhado pelo código.** Um `slog.Handler` que encapsula o handler original encaminha tudo que sai em nível ERROR. Isso alcança de uma vez os pontos que hoje só logam e seguem — falha de envio de email (que é melhor-esforço por definição), erro de worker, banco indisponível no `/ready` — sem precisar lembrar de instrumentar cada um.
-- **PII nunca sobe.** `BeforeSend` descarta corpo, cabeçalhos, query e usuário do evento. O contexto útil (rota casada, método, `request_id`) vai por tag, montada à mão — mesma disciplina que `logging.Rota` já aplicava ao log de acesso: o token que viaja em `/agendamentos/cancelar/{token}` não pode vazar para um terceiro justamente no caminho de erro.
-
-DSN preenchido mas inválido **aborta o boot**: pedir o recurso e não recebê-lo em silêncio é pior do que não pedir.
-
-**Para estudar:**
-- [Sentry — Go SDK](https://docs.sentry.io/platforms/go/) (init, scopes, hubs, `BeforeSend`)
-- [Go — slog.Handler](https://pkg.go.dev/log/slog#Handler) e o [guia de escrita de handlers](https://github.com/golang/example/blob/master/slog-handler-guide/README.md)
-
 ---
 
 ## 5. Frontend
