@@ -1,10 +1,32 @@
 name: CI
 
+# Commit que só mexe em documentação não roda a esteira. São ~14 minutos de
+# runner para compilar, testar e varrer exatamente o mesmo código de antes.
+#
+# É seguro porque nenhum `.md` é entrada de build: não há markdown importado
+# pelo frontend nem pelo backend, e `docs/` só tem texto. `docs/**` acompanha
+# `**.md` para o caso de entrar uma imagem ou diagrama ali.
+#
+# O filtro é por PUSH, não por arquivo isolado: basta um arquivo fora da lista
+# no mesmo push para a esteira rodar inteira. Um commit que mexe em código e em
+# documentação junto continua sendo verificado.
+#
+# Consequência a conhecer: push só de documentação também não implanta. Está
+# certo — não há o que implantar, já que o deploy sincroniza
+# docker-compose.prod.yml, Caddyfile e scripts/, nenhum deles markdown. Se ainda
+# assim for preciso reimplantar, o `workflow_dispatch` abaixo faz isso sem
+# exigir commit novo.
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   # Permite republicar as imagens e reimplantar sem precisar de um commit
   # novo (útil para reaplicar um deploy que falhou por causa do servidor).
   workflow_dispatch:
@@ -170,8 +192,30 @@ jobs:
   # govulncheck e o npm audit não enxergam. Uma perna por imagem: as TRÊS que
   # vão para produção, inclusive a de migrations — ela roda na VPS com acesso
   # ao banco e antes ficava de fora da varredura.
+  # Fonte única da lista de imagens. Antes ela existia duplicada, literalmente,
+  # nos dois jobs abaixo — e acrescentar uma quarta imagem exigia lembrar dos
+  # dois lugares. Esquecer um significa publicar sem varrer, ou varrer sem
+  # publicar: os dois silenciosos.
+  #
+  # É um job só para isso porque `strategy.matrix` é resolvida antes de qualquer
+  # passo rodar, então nenhum job consegue ler a lista de um arquivo para uso
+  # próprio. E o GitHub Actions não suporta âncora de YAML, que resolveria isto
+  # sem job nenhum.
+  imagens:
+    name: Matriz de imagens
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matriz: ${{ steps.definir.outputs.matriz }}
+    steps:
+      - name: define quais imagens a esteira constrói
+        id: definir
+        run: |
+          echo 'matriz={"include":[{"imagem":"agendago-api","contexto":"./backend","dockerfile":"./backend/Dockerfile.prod"},{"imagem":"agendago-web","contexto":"./frontend","dockerfile":"./frontend/Dockerfile.prod"},{"imagem":"agendago-migrations","contexto":"./backend","dockerfile":"./backend/Dockerfile.migrations"}]}' >> "$GITHUB_OUTPUT"
+
   seguranca-imagens:
     name: Vulnerabilidades (imagens)
+    needs: imagens
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -181,17 +225,7 @@ jobs:
     strategy:
       # Uma imagem reprovada não deve esconder o resultado das outras duas.
       fail-fast: false
-      matrix:
-        include:
-          - imagem: agendago-api
-            contexto: ./backend
-            dockerfile: ./backend/Dockerfile.prod
-          - imagem: agendago-web
-            contexto: ./frontend
-            dockerfile: ./frontend/Dockerfile.prod
-          - imagem: agendago-migrations
-            contexto: ./backend
-            dockerfile: ./backend/Dockerfile.migrations
+      matrix: ${{ fromJSON(needs.imagens.outputs.matriz) }}
     steps:
       - uses: actions/checkout@v5
 
@@ -359,24 +393,14 @@ jobs:
     # A varredura semanal (schedule) não pode disparar deploy: ela roda sem
     # commit novo, e reimplantar produção sozinho toda segunda não é o objetivo.
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
-    needs: [backend, frontend, e2e, seguranca-codigo, seguranca-imagens]
+    needs: [imagens, backend, frontend, e2e, seguranca-codigo, seguranca-imagens]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
       packages: write
     strategy:
-      matrix:
-        include:
-          - imagem: agendago-api
-            contexto: ./backend
-            dockerfile: ./backend/Dockerfile.prod
-          - imagem: agendago-web
-            contexto: ./frontend
-            dockerfile: ./frontend/Dockerfile.prod
-          - imagem: agendago-migrations
-            contexto: ./backend
-            dockerfile: ./backend/Dockerfile.migrations
+      matrix: ${{ fromJSON(needs.imagens.outputs.matriz) }}
     steps:
       - uses: actions/checkout@v5
 
