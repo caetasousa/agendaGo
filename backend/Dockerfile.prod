@@ -1,22 +1,23 @@
 # Imagem de produção da API: build multi-stage que gera um binário estático,
 # sem hot reload nem toolchain na imagem final. O Dockerfile (sem sufixo)
 # continua sendo o de desenvolvimento (air + swag em watch).
+#
+# Note que aqui NÃO há swag: a doc interativa fica atrás da build tag `swagger`
+# e não entra nesta imagem. Antes ela entrava — eram 10 MB de assets da UI e da
+# spec, 37% do binário, para servir uma rota que produção nunca expôs.
 FROM golang:1.26-alpine AS build
 
 WORKDIR /app
-
-RUN go install github.com/swaggo/swag/cmd/swag@v1.16.6
 
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
 
-# regenera a doc do Swagger e compila estático (sem CGO) para a imagem mínima.
-# timetzdata embute o banco de fusos no binário — a imagem final não tem tzdata
-# e o app carrega America/Sao_Paulo no boot.
-RUN swag init -g cmd/api/main.go -o docs && \
-    CGO_ENABLED=0 go build -tags timetzdata -ldflags="-s -w" -o /bin/api ./cmd/api
+# Compila estático (sem CGO) para a imagem mínima. timetzdata embute o banco de
+# fusos no binário — a imagem final não tem tzdata e o app carrega
+# America/Sao_Paulo no boot. Sem a tag `swagger`, de propósito.
+RUN CGO_ENABLED=0 go build -tags timetzdata -ldflags="-s -w" -o /bin/api ./cmd/api
 
 # Base mantida numa versão de Alpine ainda em suporte: as correções de openssl e
 # busybox não são publicadas para versão EOL, então uma base velha acumula CVE sem

@@ -51,15 +51,10 @@ jobs:
           go-version: '1.26'
           cache-dependency-path: backend/go.sum
 
-      # main.go importa o pacote agendago/docs (spec do Swagger), gerado por
-      # swag e fora do versionamento. Precisa ser gerado antes de compilar,
-      # como o Dockerfile faz no boot.
-      - name: gera docs do swagger
-        working-directory: backend
-        run: |
-          go install github.com/swaggo/swag/cmd/swag@v1.16.6
-          swag init -g cmd/api/main.go -o docs
-
+      # Sem gerar a doc do Swagger: ela fica atrás da build tag `swagger` e não
+      # entra no binário de produção, então o build e o vet padrão não precisam
+      # dela. Quem exercita esse caminho é o job E2E, que sobe o compose de
+      # desenvolvimento — lá o swag roda e o air compila com a tag.
       - name: go vet
         working-directory: backend
         run: go vet ./...
@@ -136,19 +131,16 @@ jobs:
           go-version: '1.26'
           cache-dependency-path: backend/go.sum
 
-      # Mesmo motivo do job `backend`: main.go importa agendago/docs, gerado
-      # por swag e fora do versionamento. Sem gerar antes, o govulncheck não
-      # consegue carregar os pacotes e falha antes de analisar qualquer coisa.
-      - name: gera docs do swagger
-        working-directory: backend
-        run: |
-          go install github.com/swaggo/swag/cmd/swag@v1.16.6
-          swag init -g cmd/api/main.go -o docs
-
-      # Versão fixa, como a do swag: com @latest uma release nova do
-      # govulncheck pode reprovar um commit que não mexeu em nada, e o build de
-      # ontem deixa de ser reproduzível hoje. A varredura semanal já garante
-      # que CVEs novas apareçam sem depender de atualizar a ferramenta.
+      # Versão fixa: com @latest uma release nova do govulncheck pode reprovar
+      # um commit que não mexeu em nada, e o build de ontem deixa de ser
+      # reproduzível hoje. A varredura semanal já garante que CVEs novas
+      # apareçam sem depender de atualizar a ferramenta.
+      #
+      # A análise é do que o binário de produção alcança, e a doc do Swagger
+      # não está nele (build tag `swagger`) — logo o swaggo não é varrido aqui.
+      # É o comportamento certo: CVE em ferramenta que não vai para produção não
+      # é risco de produção. O Dependabot continua vendo a dependência no
+      # go.mod e abrindo PR para ela.
       - name: govulncheck (backend)
         working-directory: backend
         run: |

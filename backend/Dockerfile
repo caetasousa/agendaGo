@@ -1,3 +1,6 @@
+# Imagem de DESENVOLVIMENTO: hot reload com air e a doc interativa do Swagger.
+# As duas coisas ficam só aqui — a imagem de produção é a Dockerfile.prod, que
+# não instala swag e compila sem a build tag que liga a doc.
 FROM golang:1.26-alpine
 
 WORKDIR /app
