@@ -378,7 +378,7 @@ Se falhou: DNS errado ou porta 80 bloqueada. Na Hostinger, confira também o
 curl -s https://SEU_DOMINIO/api/health         # {"status":"ok"}
 curl -sI http://SEU_DOMINIO/ | head -1         # 308 Permanent Redirect
 curl -sI https://SEU_DOMINIO/ | grep -i strict-transport
-curl -so /dev/null -w '%{http_code}\n' https://SEU_DOMINIO/api/swagger/index.html   # 404
+curl -so /dev/null -w '%{http_code}\n' https://SEU_DOMINIO/api/swagger/index.html   # 404 (a doc não é compilada em produção)
 ```
 
 > [!WARNING]

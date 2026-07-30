@@ -113,6 +113,14 @@ type Servidor struct {
 }
 
 // NovoServidor cria um Servidor HTTP com timeouts configurados.
+//
+// ⚠️ `Handler` precisa continuar sendo informado explicitamente. Deixá-lo nil
+// faz o http.Server cair no http.DefaultServeMux — e o DefaultServeMux já vem
+// com `/debug/pprof/*` registrado, porque o `init()` de net/http/pprof faz
+// isso, e ele entra no binário como dependência transitiva de
+// chi/v5/middleware (que oferece middleware.Profiler). Ou seja: os endpoints de
+// debug existem no processo, com dump de heap e de goroutines; o que os torna
+// inalcançáveis é esta linha, e nada além dela.
 func NovoServidor(r *chi.Mux) *Servidor {
 	return &Servidor{
 		Server: http.Server{

@@ -148,7 +148,13 @@ Validação declarativa via struct tags — em vez de escrever `if` para cada ca
 
 Gera a especificação OpenAPI a partir de comentários no código (`@Summary`, `@Router` etc., visíveis em `internal/adapter/http/handler/provider.go`). A documentação nunca fica desatualizada em relação ao handler, porque é gerada dele.
 
-É **ferramenta de desenvolvimento**: a UI publica a superfície inteira da API para quem alcançar a porta. Por isso `config.NovoRouter` só monta `/swagger/*` fora de produção — em produção a rota não existe, e o 404 do Caddy vira segunda linha de defesa em vez de única (a API pode ser servida por outro proxy, ou alcançada de dentro da rede do compose). O teste `test/config/server_test.go` trava esse comportamento.
+É **ferramenta de desenvolvimento**, e fica atrás de uma **build tag**: só entra no binário compilado com `-tags=swagger`. Ver `config/swagger_ligado.go` e `config/swagger_desligado.go` — o segundo é o padrão, e o que vai para produção.
+
+Antes a rota era montada condicionalmente em tempo de execução (`if !EhProducao()`). Aquilo resolvia a exposição, mas não o resto: a UI publica a superfície inteira da API para quem alcançar a porta, e o binário de produção **carregava a ferramenta inteira mesmo sem poder servi-la** — 26,63 MB com, 16,61 MB sem, ou seja **10 MB e 37% do binário** em assets da UI que o `swaggo/files` embute e na spec (`docs.go` tem 114 KB de JSON como string).
+
+Virar decisão de compilação resolve as duas coisas de uma vez: o código não existe no binário, e não há variável de ambiente que possa ligá-lo por engano. O efeito se propaga — o `Dockerfile.prod` deixou de instalar e rodar o `swag`, e a esteira deixou de gerar a doc em dois jobs. Quem exercita esse caminho é o job de E2E, que sobe o compose de desenvolvimento (onde o `.air.toml` compila com a tag).
+
+Os dois testes que travam o comportamento são um par, um por variante: `test/config/swagger_desligado_test.go` exige 404 em qualquer `APP_ENV` no build padrão, e `swagger_ligado_test.go` exige que a doc responda com a tag. O 404 do Caddy continua sendo segunda linha de defesa, não a única.
 
 **Para estudar:**
 - [Swaggo — README oficial](https://github.com/swaggo/swag) (sintaxe das anotações)
