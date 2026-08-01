@@ -4,7 +4,7 @@
 # de receber correção de segurança e vira CVE sem conserto na varredura do Trivy.
 # Os dois estágios usam a MESMA versão de propósito — compilar numa e rodar em
 # outra esconde incompatibilidade de runtime até a hora errada.
-FROM node:24-alpine AS build
+FROM node:25-alpine AS build
 
 WORKDIR /app
 
@@ -24,7 +24,7 @@ ENV PUBLIC_API_URL=${PUBLIC_API_URL}
 
 RUN npm run build
 
-FROM node:24-alpine
+FROM node:25-alpine
 
 WORKDIR /app
 ENV NODE_ENV=production
