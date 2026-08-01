@@ -284,7 +284,7 @@ jobs:
 
       - name: publica o SARIF na aba Security
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4.37.3
         with:
           sarif_file: trivy-${{ matrix.imagem }}.sarif
           category: trivy-${{ matrix.imagem }}
