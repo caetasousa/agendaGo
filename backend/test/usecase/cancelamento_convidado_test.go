@@ -240,8 +240,15 @@ func TestCancelamentoConvidado(t *testing.T) {
 		}
 
 		tokenPuro := "token-cancelamento-vencido"
-		// TTL negativo: já nasce expirado, sem precisar esperar ou injetar "agora"
 		expirado := cancellation.Novo(token.Hash(tokenPuro), out.ID, -time.Hour)
+		// A expiração é fixada em relação ao relógio DO TESTE, não ao real.
+		//
+		// cancellation.Novo calcula ExpiraEm a partir de time.Now(), então um TTL
+		// negativo só deixava o token vencido enquanto o relógio real ainda não
+		// tivesse passado de agoraDoTeste+1h. Depois disso o token nascia válido
+		// aos olhos de agoraDoTeste e o teste virava vermelho sozinho, sem
+		// ninguém mexer em nada — foi o que aconteceu.
+		expirado.ExpiraEm = agoraDoTeste.Add(-time.Hour)
 		if err := amb.cancelamentos.Salvar(expirado); err != nil {
 			t.Fatalf("esperava salvar sem erro, got: %v", err)
 		}
