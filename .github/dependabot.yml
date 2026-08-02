@@ -65,6 +65,22 @@ updates:
     commit-message:
       prefix: chore
       include: scope
+    # A imagem de produção do frontend só roda em Node LTS (ver o comentário no
+    # topo de frontend/Dockerfile.prod): versão fora do LTS para de receber
+    # correção de segurança e vira CVE sem conserto na varredura do Trivy.
+    #
+    # Node numera LTS em majors PARES — 24, 26, 28. Os ímpares são "Current" e
+    # nunca viram LTS, então o PR que propõe subir para eles é sempre para
+    # fechar. Ignorá-los aqui evita reabrir a mesma discussão a cada seis meses.
+    #
+    # ⚠️ O corte é por VERSÃO, não `update-types: [version-update:semver-major]`.
+    # Ignorar todo major esconderia também o 26, que é o próximo LTS e
+    # precisa ser adotado — e o congelamento seria silencioso, exatamente o
+    # problema que a política de LTS existe para evitar. Quando o 27 aparecer,
+    # some à lista; o 26 e o 28 devem continuar chegando.
+    ignore:
+      - dependency-name: node
+        versions: ['25.x', '27.x', '29.x']
 
   # As próprias actions do CI. Sem isto elas envelhecem em silêncio até uma
   # runtime antiga ser desligada e o workflow parar de rodar sem ninguém ter
