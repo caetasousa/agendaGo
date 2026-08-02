@@ -35,6 +35,7 @@ import (
 	ucauth "agendago/internal/usecase/auth"
 	ucavailability "agendago/internal/usecase/availability"
 	ucclient "agendago/internal/usecase/client"
+	uclgpd "agendago/internal/usecase/lgpd"
 	ucmembro "agendago/internal/usecase/membro"
 	ucocupacao "agendago/internal/usecase/ocupacao"
 	ucprovider "agendago/internal/usecase/provider"
@@ -79,6 +80,7 @@ func main() {
 	oauthStateRepo := repository.NovoOAuthStatePostgres(pool)
 	conviteRepo := repository.NovoConvitePostgres(pool)
 	ocupacaoRepo := repository.NovoOcupacaoPostgres(pool)
+	auditoriaRepo := repository.NovoAuditoriaPostgres(pool)
 
 	// segurança
 	hasher := security.NovoHasherArgon2id()
@@ -142,7 +144,9 @@ func main() {
 	criarOcupacao := ucocupacao.NovoCriarUseCase(ocupacaoRepo, appointmentRepo)
 	listarOcupacoes := ucocupacao.NovoListarUseCase(ocupacaoRepo)
 	removerOcupacao := ucocupacao.NovoRemoverUseCase(ocupacaoRepo)
-	moderar := ucadmin.NovoModerarUseCase(providerRepo, usuarioRepo, membroRepo, clientRepo, sessionRepo)
+	exportarDados := uclgpd.NovoExportarUseCase(clientRepo, appointmentRepo, auditoriaRepo)
+	anonimizarCliente := uclgpd.NovoAnonimizarUseCase(clientRepo, sessionRepo, passwordResetRepo, socialIdentityRepo, auditoriaRepo)
+	moderar := ucadmin.NovoModerarUseCase(providerRepo, usuarioRepo, membroRepo, clientRepo, sessionRepo, auditoriaRepo)
 	consultarAgenda := ucavailability.NovoConsultarAgendaUseCase(availabilityRepo, providerRepo, membroRepo)
 	definirDia := ucavailability.NovoDefinirDiaUseCase(availabilityRepo)
 	removerDia := ucavailability.NovoRemoverDiaUseCase(availabilityRepo)
@@ -166,6 +170,7 @@ func main() {
 	providerHandler := handler.NovoProviderHandler(solicitarCadastroProvider, confirmarCadastroProvider, atualizarPreferencias, listarPrestadores, buscarPrestador, identidadeDoContexto)
 	membroHandler := handler.NovoMembroHandler(convidarMembro, cancelarConvite, consultarConvite, aceitarConvite, listarEquipe, removerMembro, identidadeDoContexto)
 	ocupacaoHandler := handler.NovoOcupacaoHandler(criarOcupacao, listarOcupacoes, removerOcupacao, identidadeDoContexto)
+	lgpdHandler := handler.NovoLgpdHandler(exportarDados, anonimizarCliente, config.CookieSeguro(), identidadeDoContexto)
 	clientHandler := handler.NovoClientHandler(solicitarCadastroClient, confirmarCadastroClient, consultarPreCadastro, concluirPreCadastro)
 	// teto de tentativas por conta, compartilhado entre login e recuperação de
 	// senha: o mesmo contador, com chaves de prefixo diferente
@@ -175,7 +180,7 @@ func main() {
 	passwordResetHandler := handler.NovoPasswordResetHandler(solicitarRecuperacao, redefinirSenha, limitadorPorConta)
 	availabilityHandler := handler.NovoAvailabilityHandler(consultarAgenda, definirDia, removerDia, identidadeDoContexto)
 	appointmentHandler := handler.NovoAppointmentHandler(consultarSlots, solicitarAgendamento, solicitarConvidado, marcarPeloPrestador, transicionarAgendamento, cancelarPorToken, listarAgendamentos, identidadeDoContexto)
-	adminHandler := handler.NovoAdminHandler(moderar, detalharUsuario)
+	adminHandler := handler.NovoAdminHandler(moderar, detalharUsuario, identidadeDoContexto)
 
 	// middlewares
 	authMw := middleware.NovoAuth(validarSessao, config.CookieSeguro())
@@ -322,6 +327,11 @@ func main() {
 		r.Use(middleware.ExigirClient)
 		r.Post("/agendamentos", appointmentHandler.Solicitar)
 		r.Get("/clients/me/agendamentos", appointmentHandler.ListarDoCliente)
+		// LGPD: portabilidade e exclusão dos próprios dados. A exclusão
+		// anonimiza em vez de apagar — os agendamentos são da agenda do
+		// prestador também, ver internal/usecase/lgpd.
+		r.Get("/clients/me/dados", lgpdHandler.ExportarDados)
+		r.Delete("/clients/me", lgpdHandler.RemoverConta)
 	})
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.SemCache)

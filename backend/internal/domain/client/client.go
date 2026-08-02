@@ -142,3 +142,39 @@ func (c *Client) Reativar() {
 	c.Ativo = true
 	c.AtualizadoEm = time.Now()
 }
+
+// NomeAnonimizado é o que fica no lugar do nome de quem pediu exclusão. O
+// prestador continua vendo a linha na agenda, sabendo que houve atendimento,
+// sem saber de quem.
+const NomeAnonimizado = "Cliente removido"
+
+// Anonimizar apaga os dados pessoais do cliente preservando os agendamentos.
+//
+// Por que não é um DELETE: appointments.client_id tem ON DELETE CASCADE
+// (V5), então apagar a linha destruiria o histórico do PRESTADOR junto — dado
+// de outra pessoa, que ela tem obrigação profissional e fiscal de manter. O
+// direito à exclusão do cliente não alcança o registro de que o atendimento
+// aconteceu; alcança a identificação de quem foi.
+//
+// O email vira um placeholder derivado do id porque a coluna é UNIQUE: deixar
+// vazio faria a segunda anonimização colidir com a primeira. O domínio
+// .invalid é reservado por RFC 2606 e nunca resolve, então nada é enviado para
+// lá por engano.
+//
+// A senha é apagada e o cliente fica inativo: a conta deixa de logar. Sessões,
+// tokens e identidades sociais são de outros agregados — quem os remove é o
+// usecase, não este método.
+func (c *Client) Anonimizar() {
+	c.Nome = NomeAnonimizado
+	c.Email = "removido+" + c.ID + "@anonimizado.invalid"
+	c.Telefone = ""
+	c.SenhaHash = ""
+	c.Ativo = false
+	c.AtualizadoEm = time.Now()
+}
+
+// Anonimizado informa se o cliente já passou por Anonimizar. Útil para não
+// notificar nem exportar dado de quem pediu exclusão.
+func (c *Client) Anonimizado() bool {
+	return c.Nome == NomeAnonimizado && !c.Ativo
+}

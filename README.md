@@ -168,6 +168,8 @@ Ele entra pela [mesma tela de login](http://localhost:5173/login) e cai no paine
 |--------|------|-----------|
 | `POST` | [`/agendamentos`](http://localhost:8080/swagger/index.html#/appointments/post_agendamentos) | Solicitar um agendamento |
 | `GET` | [`/clients/me/agendamentos`](http://localhost:8080/swagger/index.html#/appointments/get_clients_me_agendamentos) | Listar agendamentos do cliente (paginado) |
+| `GET` | [`/clients/me/dados`](http://localhost:8080/swagger/index.html#/lgpd/get_clients_me_dados) | Exportar os próprios dados (portabilidade) |
+| `DELETE` | [`/clients/me`](http://localhost:8080/swagger/index.html#/lgpd/delete_clients_me) | Remover a própria conta (anonimiza, preserva os agendamentos) |
 | `POST` | [`/agendamentos/{id}/cancelar`](http://localhost:8080/swagger/index.html#/appointments/post_agendamentos__id__cancelar) | Cancelar um agendamento (cliente ou prestador) |
 
 </details>

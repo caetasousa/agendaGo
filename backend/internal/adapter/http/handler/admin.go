@@ -7,6 +7,7 @@ import (
 
 	"agendago/internal/adapter/http/dto"
 	ucadmin "agendago/internal/usecase/admin"
+	ucauth "agendago/internal/usecase/auth"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -16,11 +17,30 @@ import (
 type AdminHandler struct {
 	moderar  *ucadmin.ModerarUseCase
 	detalhar *ucadmin.DetalharUseCase
+	// identidadeDoContexto identifica QUEM está moderando, para a trilha de
+	// auditoria. Recebida como função para evitar import cycle entre os
+	// pacotes handler e middleware.
+	identidadeDoContexto func(r *http.Request) (ucauth.Identidade, bool)
 }
 
 // NovoAdminHandler cria uma instância de AdminHandler com os usecases injetados.
-func NovoAdminHandler(moderar *ucadmin.ModerarUseCase, detalhar *ucadmin.DetalharUseCase) *AdminHandler {
-	return &AdminHandler{moderar: moderar, detalhar: detalhar}
+func NovoAdminHandler(
+	moderar *ucadmin.ModerarUseCase,
+	detalhar *ucadmin.DetalharUseCase,
+	identidadeDoContexto func(r *http.Request) (ucauth.Identidade, bool),
+) *AdminHandler {
+	return &AdminHandler{moderar: moderar, detalhar: detalhar, identidadeDoContexto: identidadeDoContexto}
+}
+
+// adminDoContexto devolve o id do admin autenticado. As rotas estão sob
+// ExigirAdmin, então a ausência aqui seria defeito de fiação, não entrada
+// inválida — e ainda assim não vale moderar sem saber quem moderou.
+func (h *AdminHandler) adminDoContexto(r *http.Request) (string, bool) {
+	id, ok := h.identidadeDoContexto(r)
+	if !ok {
+		return "", false
+	}
+	return id.UserID, true
 }
 
 // ListarPrestadores godoc
@@ -149,7 +169,12 @@ func (h *AdminHandler) DetalharCliente(w http.ResponseWriter, r *http.Request) {
 //	@Failure		404	{object}	map[string]string
 //	@Router			/admin/prestadores/{id}/banir [post]
 func (h *AdminHandler) BanirPrestador(w http.ResponseWriter, r *http.Request) {
-	h.responder(w, r, h.moderar.BanirPrestador(chi.URLParam(r, "id")))
+	adminID, ok := h.adminDoContexto(r)
+	if !ok {
+		responderErro(w, http.StatusUnauthorized, "não autenticado")
+		return
+	}
+	h.responder(w, r, h.moderar.BanirPrestador(adminID, chi.URLParam(r, "id")))
 }
 
 // ReativarPrestador godoc
@@ -163,7 +188,12 @@ func (h *AdminHandler) BanirPrestador(w http.ResponseWriter, r *http.Request) {
 //	@Failure		404	{object}	map[string]string
 //	@Router			/admin/prestadores/{id}/reativar [post]
 func (h *AdminHandler) ReativarPrestador(w http.ResponseWriter, r *http.Request) {
-	h.responder(w, r, h.moderar.ReativarPrestador(chi.URLParam(r, "id")))
+	adminID, ok := h.adminDoContexto(r)
+	if !ok {
+		responderErro(w, http.StatusUnauthorized, "não autenticado")
+		return
+	}
+	h.responder(w, r, h.moderar.ReativarPrestador(adminID, chi.URLParam(r, "id")))
 }
 
 // BanirCliente godoc
@@ -177,7 +207,12 @@ func (h *AdminHandler) ReativarPrestador(w http.ResponseWriter, r *http.Request)
 //	@Failure		404	{object}	map[string]string
 //	@Router			/admin/clientes/{id}/banir [post]
 func (h *AdminHandler) BanirCliente(w http.ResponseWriter, r *http.Request) {
-	h.responder(w, r, h.moderar.BanirCliente(chi.URLParam(r, "id")))
+	adminID, ok := h.adminDoContexto(r)
+	if !ok {
+		responderErro(w, http.StatusUnauthorized, "não autenticado")
+		return
+	}
+	h.responder(w, r, h.moderar.BanirCliente(adminID, chi.URLParam(r, "id")))
 }
 
 // ReativarCliente godoc
@@ -191,7 +226,12 @@ func (h *AdminHandler) BanirCliente(w http.ResponseWriter, r *http.Request) {
 //	@Failure		404	{object}	map[string]string
 //	@Router			/admin/clientes/{id}/reativar [post]
 func (h *AdminHandler) ReativarCliente(w http.ResponseWriter, r *http.Request) {
-	h.responder(w, r, h.moderar.ReativarCliente(chi.URLParam(r, "id")))
+	adminID, ok := h.adminDoContexto(r)
+	if !ok {
+		responderErro(w, http.StatusUnauthorized, "não autenticado")
+		return
+	}
+	h.responder(w, r, h.moderar.ReativarCliente(adminID, chi.URLParam(r, "id")))
 }
 
 func (h *AdminHandler) responder(w http.ResponseWriter, r *http.Request, err error) {

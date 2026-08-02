@@ -1,7 +1,13 @@
 package admin
 
 import (
+	"log/slog"
+
+	"agendago/internal/domain/auditoria"
+
 	"errors"
+
+	"github.com/google/uuid"
 
 	"agendago/internal/domain/client"
 	"agendago/internal/domain/membro"
@@ -72,6 +78,12 @@ type ModerarUseCase struct {
 	membros   repositorioMembro
 	clients   repositorioClient
 	sessoes   revogadorSessoes
+	auditoria registradorAuditoria
+}
+
+// registradorAuditoria grava a trilha das ações de moderação.
+type registradorAuditoria interface {
+	Registrar(reg *auditoria.Registro) error
 }
 
 // NovoModerarUseCase cria uma instância de ModerarUseCase com as dependências injetadas.
@@ -81,8 +93,9 @@ func NovoModerarUseCase(
 	membros repositorioMembro,
 	clients repositorioClient,
 	sessoes revogadorSessoes,
+	trilha registradorAuditoria,
 ) *ModerarUseCase {
-	return &ModerarUseCase{providers: providers, usuarios: usuarios, membros: membros, clients: clients, sessoes: sessoes}
+	return &ModerarUseCase{providers: providers, usuarios: usuarios, membros: membros, clients: clients, sessoes: sessoes, auditoria: trilha}
 }
 
 // ListarPrestadores devolve uma página de prestadores com o status de
@@ -140,29 +153,61 @@ func (uc *ModerarUseCase) ListarClientes(pag paging.Pagina) ([]UsuarioResumo, in
 // BanirPrestador desativa um prestador e revoga as sessões ativas dele.
 // ativo=false remove o acesso e a oferta; reversível por ReativarPrestador.
 // Retorna ErrProviderNaoEncontrado se o id não existe.
-func (uc *ModerarUseCase) BanirPrestador(id string) error {
+func (uc *ModerarUseCase) BanirPrestador(adminID, id string) error {
 	if err := uc.mudarPrestador(id, func(u *usuario.Usuario) { u.Banir() }); err != nil {
 		return err
 	}
+	uc.registrar(adminID, auditoria.AcaoBanirPrestador, auditoria.TipoUsuario, id)
 	return uc.sessoes.RemoverDoUsuario(id)
 }
 
 // ReativarPrestador reverte o banimento de um prestador.
-func (uc *ModerarUseCase) ReativarPrestador(id string) error {
-	return uc.mudarPrestador(id, func(u *usuario.Usuario) { u.Reativar() })
+func (uc *ModerarUseCase) ReativarPrestador(adminID, id string) error {
+	if err := uc.mudarPrestador(id, func(u *usuario.Usuario) { u.Reativar() }); err != nil {
+		return err
+	}
+	uc.registrar(adminID, auditoria.AcaoReativarPrestador, auditoria.TipoUsuario, id)
+	return nil
 }
 
 // BanirCliente desativa um cliente (bloqueia o login) e revoga as sessões ativas dele.
-func (uc *ModerarUseCase) BanirCliente(id string) error {
+func (uc *ModerarUseCase) BanirCliente(adminID, id string) error {
 	if err := uc.mudarCliente(id, func(c *client.Client) { c.Banir() }); err != nil {
 		return err
 	}
+	uc.registrar(adminID, auditoria.AcaoBanirCliente, auditoria.TipoCliente, id)
 	return uc.sessoes.RemoverDoUsuario(id)
 }
 
 // ReativarCliente reverte o banimento de um cliente.
-func (uc *ModerarUseCase) ReativarCliente(id string) error {
-	return uc.mudarCliente(id, func(c *client.Client) { c.Reativar() })
+func (uc *ModerarUseCase) ReativarCliente(adminID, id string) error {
+	if err := uc.mudarCliente(id, func(c *client.Client) { c.Reativar() }); err != nil {
+		return err
+	}
+	uc.registrar(adminID, auditoria.AcaoReativarCliente, auditoria.TipoCliente, id)
+	return nil
+}
+
+// registrar grava a moderação na trilha. É interceptado no USECASE, e não no
+// handler, porque é aqui que a intenção tem nome: o handler só sabe que veio um
+// POST numa rota.
+//
+// Falha na trilha não desfaz a moderação — o banimento já valeu, e devolver
+// erro sugeriria o contrário. Vai para o log, que é onde se descobre trilha
+// faltando.
+func (uc *ModerarUseCase) registrar(adminID string, acao auditoria.Acao, alvoTipo, alvoID string) {
+	if uc.auditoria == nil {
+		return
+	}
+	reg, err := auditoria.Novo(uuid.NewString(), adminID, auditoria.TipoAdmin, acao, alvoTipo, alvoID, nil)
+	if err != nil {
+		slog.Error("falha ao montar registro de auditoria", slog.String("erro", err.Error()))
+		return
+	}
+	if err := uc.auditoria.Registrar(reg); err != nil {
+		slog.Error("falha ao gravar auditoria da moderação",
+			slog.String("erro", err.Error()), slog.String("acao", string(acao)))
+	}
 }
 
 // mudarPrestador aplica a moderação na CONTA. O id que chega é o da conta —

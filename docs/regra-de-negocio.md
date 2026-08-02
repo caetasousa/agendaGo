@@ -443,6 +443,41 @@ Consequências que valem saber:
   mesmo id — por isso nenhuma sessão caiu no deploy.
 - **Convidar alguém já é possível** pela tela de Equipe no painel — ver abaixo.
 
+### Exclusão de conta: por que é anonimização
+
+Quando um cliente pede para remover a conta, o cadastro é **anonimizado**, não
+apagado: nome vira "Cliente removido", email vira um placeholder único,
+telefone e senha são apagados e a conta fica inativa.
+
+⚠️ **Não é possível simplesmente apagar a linha.** `appointments.client_id` tem
+`ON DELETE CASCADE` (V5), então um `DELETE` levaria junto o histórico do
+**prestador** — que é dado de outra pessoa, e que ela tem obrigação profissional
+e fiscal de manter.
+
+A separação é essa: o direito do cliente alcança **a identificação dele**, não o
+registro de que o atendimento aconteceu. O prestador continua vendo data,
+horário e status na agenda; deixa de ver de quem era.
+
+Junto com o cadastro caem sessões, tokens de recuperação e identidades sociais —
+tudo que daria acesso à conta.
+
+### Auditoria
+
+Ações sensíveis deixam rastro em `auditoria`: banir e reativar (admin), e os
+pedidos de exportação e exclusão (o próprio titular).
+
+Duas escolhas que valem registro:
+
+- **A trilha não tem foreign key para o ator nem para o alvo.** Ela precisa
+  sobreviver ao desaparecimento dos dois — com `CASCADE`, apagar uma conta
+  apagaria justamente o registro de que ela foi apagada.
+- **Nenhum dado pessoal entra no detalhe.** O alvo é identificado por id.
+  Guardar nome ou email ali recriaria, na trilha, o que a anonimização acabou de
+  apagar do cadastro.
+
+A trilha é append-only por não existir caminho de escrita destrutiva na
+aplicação: o repositório expõe inserção e leitura, e nada mais.
+
 ### Endereço público (slug)
 
 O link de agendamento é `/agendar/joao-barbeiro` em vez de `/agendar/{uuid}`. O

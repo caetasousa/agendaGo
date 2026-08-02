@@ -47,11 +47,11 @@ func novoRouterAdmin(t *testing.T) (r *chi.Mux, providerID, clientID string) {
 	identidadeDoContexto := func(req *http.Request) (ucauth.Identidade, bool) {
 		return middleware.IdentidadeDoContexto(req.Context())
 	}
-	moderar := ucadmin.NovoModerarUseCase(providers, usuarios, membros, clientRepo, sessionRepo)
+	moderar := ucadmin.NovoModerarUseCase(providers, usuarios, membros, clientRepo, sessionRepo, memoria.NovoAuditoriaMemoria())
 	appointmentRepo := memoria.NovoAppointmentMemoria()
 	listarAgendamentos := ucappointment.NovoListarUseCase(appointmentRepo, providers, clientRepo)
 	detalhar := ucadmin.NovoDetalharUseCase(providers, usuarios, membros, clientRepo, listarAgendamentos)
-	adminHandler := handler.NovoAdminHandler(moderar, detalhar)
+	adminHandler := handler.NovoAdminHandler(moderar, detalhar, identidadeDoContexto)
 	authHandler := handler.NovoAuthHandler(loginProvider, loginClient, loginAdmin, nil, nil, false, nil, identidadeDoContexto)
 	authMw := middleware.NovoAuth(validarSessao, false)
 

@@ -86,7 +86,7 @@ func TestModerar(t *testing.T) {
 
 		sessoes := memoria.NovoSessionMemoria()
 		return ambiente{
-			uc:        ucadmin.NovoModerarUseCase(providers, usuarios, membros, clients, sessoes),
+			uc:        ucadmin.NovoModerarUseCase(providers, usuarios, membros, clients, sessoes, memoria.NovoAuditoriaMemoria()),
 			usuarios:  usuarios,
 			membros:   membros,
 			providers: providers,
@@ -120,7 +120,7 @@ func TestModerar(t *testing.T) {
 		usuarios.AtualizarSenha("p-1", senhaHash)
 		login := ucauth.NovoLoginProviderUseCase(usuarios, membros, providers, sessionRepo, hasher)
 
-		if err := uc.BanirPrestador("p-1"); err != nil {
+		if err := uc.BanirPrestador("admin-de-teste", "p-1"); err != nil {
 			t.Fatalf("esperava banir, got: %v", err)
 		}
 		if _, err := login.Executar(ucauth.LoginInput{Email: "joao@email.com", Senha: "12345678"}); err != ucauth.ErrUsuarioInativo {
@@ -131,7 +131,7 @@ func TestModerar(t *testing.T) {
 			t.Error("esperava prestador inativo na listagem")
 		}
 
-		if err := uc.ReativarPrestador("p-1"); err != nil {
+		if err := uc.ReativarPrestador("admin-de-teste", "p-1"); err != nil {
 			t.Fatalf("esperava reativar, got: %v", err)
 		}
 		if _, err := login.Executar(ucauth.LoginInput{Email: "joao@email.com", Senha: "12345678"}); err != nil {
@@ -150,13 +150,13 @@ func TestModerar(t *testing.T) {
 		clients.Salvar(c)
 		login := ucauth.NovoLoginClientUseCase(clients, sessionRepo, hasher)
 
-		uc.BanirCliente("c-1")
+		uc.BanirCliente("admin-de-teste", "c-1")
 		if _, err := login.Executar(ucauth.LoginInput{Email: "maria@email.com", Senha: "12345678"}); err != ucauth.ErrUsuarioInativo {
 			t.Errorf("esperava ErrUsuarioInativo, got: %v", err)
 		}
 
 		// reativar devolve o acesso
-		if err := uc.ReativarCliente("c-1"); err != nil {
+		if err := uc.ReativarCliente("admin-de-teste", "c-1"); err != nil {
 			t.Fatalf("esperava reativar, got: %v", err)
 		}
 		if _, err := login.Executar(ucauth.LoginInput{Email: "maria@email.com", Senha: "12345678"}); err != nil {
@@ -172,14 +172,14 @@ func TestModerar(t *testing.T) {
 		amb.sessoes.Salvar(session.Nova(hashDoToken("tok-cliente"), "c-1", session.TipoClient, time.Hour))
 		amb.sessoes.Salvar(session.Nova(hashDoToken("tok-outro"), "outro", session.TipoClient, time.Hour))
 
-		if err := amb.uc.BanirPrestador("p-1"); err != nil {
+		if err := amb.uc.BanirPrestador("admin-de-teste", "p-1"); err != nil {
 			t.Fatalf("esperava banir prestador, got: %v", err)
 		}
 		if s, _ := amb.sessoes.BuscarPorTokenHash(hashDoToken("tok-prestador")); s != nil {
 			t.Error("esperava sessão do prestador banido revogada")
 		}
 
-		if err := amb.uc.BanirCliente("c-1"); err != nil {
+		if err := amb.uc.BanirCliente("admin-de-teste", "c-1"); err != nil {
 			t.Fatalf("esperava banir cliente, got: %v", err)
 		}
 		if s, _ := amb.sessoes.BuscarPorTokenHash(hashDoToken("tok-cliente")); s != nil {
@@ -193,10 +193,10 @@ func TestModerar(t *testing.T) {
 
 	t.Run("banir usuário inexistente retorna erro", func(t *testing.T) {
 		uc := novoAmbiente().uc
-		if err := uc.BanirPrestador("fantasma"); err != ucadmin.ErrProviderNaoEncontrado {
+		if err := uc.BanirPrestador("admin-de-teste", "fantasma"); err != ucadmin.ErrProviderNaoEncontrado {
 			t.Errorf("esperava ErrProviderNaoEncontrado, got: %v", err)
 		}
-		if err := uc.BanirCliente("fantasma"); err != ucadmin.ErrClientNaoEncontrado {
+		if err := uc.BanirCliente("admin-de-teste", "fantasma"); err != ucadmin.ErrClientNaoEncontrado {
 			t.Errorf("esperava ErrClientNaoEncontrado, got: %v", err)
 		}
 	})
