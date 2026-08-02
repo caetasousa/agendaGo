@@ -4,6 +4,7 @@ import (
 	"time"
 
 	domavailability "agendago/internal/domain/availability"
+	"agendago/internal/domain/ocupacao"
 	"agendago/internal/domain/slot"
 	ucavailability "agendago/internal/usecase/availability"
 )
@@ -15,6 +16,11 @@ const maxDiasSlots = 92
 // implementado por availability.ConsultarDisponibilidadeUseCase.
 type resolvedorDisponibilidade interface {
 	Executar(in ucavailability.ConsultarDisponibilidadeInput) ([]domavailability.TimeBlock, error)
+}
+
+// repositorioOcupacao lê os compromissos pessoais do prestador no período.
+type repositorioOcupacao interface {
+	ListarPorPeriodo(providerID string, de, ate time.Time) ([]*ocupacao.Ocupacao, error)
 }
 
 // ConsultarSlotsInput define o prestador, o período (inclusivo) e o instante
@@ -50,6 +56,7 @@ type ConsultarSlotsUseCase struct {
 	appointmentRepo repositorioAppointment
 	providerRepo    repositorioProvider
 	membroRepo      repositorioMembro
+	ocupacaoRepo    repositorioOcupacao
 	fuso            *time.Location
 }
 
@@ -59,6 +66,7 @@ func NovoConsultarSlotsUseCase(
 	appointmentRepo repositorioAppointment,
 	providerRepo repositorioProvider,
 	membroRepo repositorioMembro,
+	ocupacaoRepo repositorioOcupacao,
 	fuso *time.Location,
 ) *ConsultarSlotsUseCase {
 	return &ConsultarSlotsUseCase{
@@ -66,6 +74,7 @@ func NovoConsultarSlotsUseCase(
 		appointmentRepo: appointmentRepo,
 		providerRepo:    providerRepo,
 		membroRepo:      membroRepo,
+		ocupacaoRepo:    ocupacaoRepo,
 		fuso:            fuso,
 	}
 }
@@ -97,6 +106,21 @@ func (uc *ConsultarSlotsUseCase) Executar(in ConsultarSlotsInput) (*ConsultarSlo
 		ocupadosPorDia[chave] = append(ocupadosPorDia[chave], slot.Intervalo{
 			InicioMinutos: a.InicioMinutos,
 			FimMinutos:    a.FimMinutos,
+		})
+	}
+
+	// Compromissos pessoais entram no MESMO mapa dos agendamentos: para o
+	// cálculo, "ocupado" é ocupado, venha de onde vier. slot.Livres não muda,
+	// e é isso que torna barato plugar outra origem de ocupação depois.
+	compromissos, err := uc.ocupacaoRepo.ListarPorPeriodo(in.ProviderID, in.De, in.Ate)
+	if err != nil {
+		return nil, err
+	}
+	for _, o := range compromissos {
+		chave := o.Data.Format("2006-01-02")
+		ocupadosPorDia[chave] = append(ocupadosPorDia[chave], slot.Intervalo{
+			InicioMinutos: o.InicioMinutos,
+			FimMinutos:    o.FimMinutos,
 		})
 	}
 

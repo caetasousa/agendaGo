@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { PageData } from './$types';
+	import CompromissosDoDia from '$lib/components/CompromissosDoDia.svelte';
 	import { ApiError } from '$lib/api/client';
 	import {
 		consultarAgenda,
@@ -513,6 +514,8 @@
 					+ Adicionar período
 				</button>
 			</div>
+
+			<CompromissosDoDia data={diaSelecionado.chave} podeEditar={podeEditarHoje} />
 
 			<div class="mt-6 flex flex-wrap items-center gap-2">
 				<button

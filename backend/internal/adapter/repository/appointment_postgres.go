@@ -55,11 +55,37 @@ func (r *AppointmentPostgres) SalvarSeLivre(a *appointment.Appointment, agora ti
 		return appointment.ErrConflitoHorario
 	}
 
+	// Segunda checagem, contra os compromissos pessoais do prestador.
+	//
+	// Sem ela existe overbooking silencioso: o slot deixa de ser OFERTADO, mas
+	// nada impede um POST direto na rota de solicitação com aquele horário — e
+	// o cliente reservaria por cima do compromisso. Some no mesmo lock da
+	// primeira, que já serializa as reservas concorrentes do prestador.
+	//
+	// A comparação é de sobreposição real, sem buffer: o buffer é regra de
+	// OFERTA (slot.Livres o aplica dos dois lados), não de conflito. Recusar
+	// uma reserva que só encosta no buffer seria mais restritivo do que a
+	// própria oferta e confundiria quem já viu o horário disponível.
+	err = tx.QueryRow(ctx,
+		`SELECT EXISTS (
+			SELECT 1 FROM ocupacoes
+			WHERE provider_id = $1 AND data = $2
+			  AND inicio_minutos < $4 AND $3 < fim_minutos
+		)`,
+		a.ProviderID, a.Data, a.InicioMinutos, a.FimMinutos,
+	).Scan(&conflito)
+	if err != nil {
+		return err
+	}
+	if conflito {
+		return appointment.ErrConflitoHorario
+	}
+
 	_, err = tx.Exec(ctx,
 		`INSERT INTO appointments (id, provider_id, client_id, data, inicio_minutos, fim_minutos, status, expira_em, criado_em, atualizado_em, observacao, marcado_pelo_prestador)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
 		a.ID, a.ProviderID, a.ClientID, a.Data, a.InicioMinutos, a.FimMinutos,
-		string(a.Status), a.ExpiraEm, a.CriadoEm, a.AtualizadoEm, observacaoOuNulo(a.Observacao), a.MarcadoPeloPrestador,
+		string(a.Status), a.ExpiraEm, a.CriadoEm, a.AtualizadoEm, textoOuNulo(a.Observacao), a.MarcadoPeloPrestador,
 	)
 	if err != nil {
 		return err
@@ -204,10 +230,3 @@ func escanearAppointment(linha escaneavel) (*appointment.Appointment, error) {
 	return &a, nil
 }
 
-// observacaoOuNulo converte a string vazia (sem observação) para NULL.
-func observacaoOuNulo(observacao string) *string {
-	if observacao == "" {
-		return nil
-	}
-	return &observacao
-}

@@ -222,7 +222,7 @@ func TestDetalhar(t *testing.T) {
 		availabilityRepo := memoria.NovoAvailabilityMemoria()
 		appointments := memoria.NovoAppointmentMemoria()
 		resolvedor := ucavailability.NovoConsultarDisponibilidadeUseCase(availabilityRepo, providers, membros)
-		consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointments, providers, membros, time.UTC)
+		consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointments, providers, membros, memoria.NovoOcupacaoMemoria(), time.UTC)
 		notificador := email.NovoNotificador(email.NovaMailerMemoria(), "http://localhost:5173", time.UTC, email.ExecutorSincrono)
 		solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointments, clients, providers, membros, notificador, 24*time.Hour)
 		listar := ucappointment.NovoListarUseCase(appointments, providers, clients)

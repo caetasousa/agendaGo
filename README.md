@@ -140,6 +140,9 @@ Ele entra pela [mesma tela de login](http://localhost:5173/login) e cai no paine
 | `GET` | [`/providers/me/agenda`](http://localhost:8080/swagger/index.html#/availability/get_providers_me_agenda) | Consultar agenda resolvida (por período) |
 | `PUT` | [`/providers/me/dias/{data}`](http://localhost:8080/swagger/index.html#/availability/put_providers_me_dias__data_) | Definir um dia (bloqueio ou horários personalizados) |
 | `DELETE` | [`/providers/me/dias/{data}`](http://localhost:8080/swagger/index.html#/availability/delete_providers_me_dias__data_) | Remover a definição de um dia (volta ao padrão) |
+| `GET` | [`/providers/me/ocupacoes`](http://localhost:8080/swagger/index.html#/ocupacoes/get_providers_me_ocupacoes) | Listar compromissos pessoais do período |
+| `POST` | [`/providers/me/ocupacoes`](http://localhost:8080/swagger/index.html#/ocupacoes/post_providers_me_ocupacoes) | Registrar compromisso pessoal (sai da oferta sem mexer no expediente) |
+| `DELETE` | [`/providers/me/ocupacoes/{id}`](http://localhost:8080/swagger/index.html#/ocupacoes/delete_providers_me_ocupacoes__id_) | Remover compromisso pessoal |
 | `GET` | [`/providers/me/agendamentos`](http://localhost:8080/swagger/index.html#/appointments/get_providers_me_agendamentos) | Listar agendamentos recebidos (paginado) |
 | `GET` | [`/providers/me/slots`](http://localhost:8080/swagger/index.html#/appointments/get_providers_me_slots) | Slots livres da própria agenda (inclusive fechada ao público) |
 | `POST` | [`/providers/me/agendamentos`](http://localhost:8080/swagger/index.html#/appointments/post_providers_me_agendamentos) | Marcar para um cliente que ligou |

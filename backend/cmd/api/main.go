@@ -36,6 +36,7 @@ import (
 	ucavailability "agendago/internal/usecase/availability"
 	ucclient "agendago/internal/usecase/client"
 	ucmembro "agendago/internal/usecase/membro"
+	ucocupacao "agendago/internal/usecase/ocupacao"
 	ucprovider "agendago/internal/usecase/provider"
 
 	"github.com/go-chi/chi/v5"
@@ -77,6 +78,7 @@ func main() {
 	socialIdentityRepo := repository.NovoSocialIdentityPostgres(pool)
 	oauthStateRepo := repository.NovoOAuthStatePostgres(pool)
 	conviteRepo := repository.NovoConvitePostgres(pool)
+	ocupacaoRepo := repository.NovoOcupacaoPostgres(pool)
 
 	// segurança
 	hasher := security.NovoHasherArgon2id()
@@ -137,6 +139,9 @@ func main() {
 	aceitarConvite := ucmembro.NovoAceitarConviteUseCase(conviteRepo, usuarioRepo, membroRepo, providerRepo, hasher)
 	listarEquipe := ucmembro.NovoListarEquipeUseCase(membroRepo, usuarioRepo, conviteRepo)
 	removerMembro := ucmembro.NovoRemoverMembroUseCase(membroRepo, membroRepo, usuarioRepo, sessionRepo)
+	criarOcupacao := ucocupacao.NovoCriarUseCase(ocupacaoRepo, appointmentRepo)
+	listarOcupacoes := ucocupacao.NovoListarUseCase(ocupacaoRepo)
+	removerOcupacao := ucocupacao.NovoRemoverUseCase(ocupacaoRepo)
 	moderar := ucadmin.NovoModerarUseCase(providerRepo, usuarioRepo, membroRepo, clientRepo, sessionRepo)
 	consultarAgenda := ucavailability.NovoConsultarAgendaUseCase(availabilityRepo, providerRepo, membroRepo)
 	definirDia := ucavailability.NovoDefinirDiaUseCase(availabilityRepo)
@@ -144,7 +149,7 @@ func main() {
 	consultarDisponibilidade := ucavailability.NovoConsultarDisponibilidadeUseCase(availabilityRepo, providerRepo, membroRepo)
 	listarPrestadores := ucprovider.NovoListarUseCase(providerRepo)
 	buscarPrestador := ucprovider.NovoBuscarResumoUseCase(providerRepo, membroRepo)
-	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(consultarDisponibilidade, appointmentRepo, providerRepo, membroRepo, config.FusoHorario)
+	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(consultarDisponibilidade, appointmentRepo, providerRepo, membroRepo, ocupacaoRepo, config.FusoHorario)
 	solicitarAgendamento := ucappointment.NovoSolicitarUseCase(consultarSlots, appointmentRepo, clientRepo, providerRepo, membroRepo, notificador, config.TTLSolicitacao)
 	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitarAgendamento, clientRepo, providerRepo, membroRepo, cancelamentoRepo, preCadastroRepo, notificador)
 	marcarPeloPrestador := ucappointment.NovoMarcarPeloPrestadorUseCase(solicitarAgendamento, clientRepo, providerRepo)
@@ -160,6 +165,7 @@ func main() {
 	}
 	providerHandler := handler.NovoProviderHandler(solicitarCadastroProvider, confirmarCadastroProvider, atualizarPreferencias, listarPrestadores, buscarPrestador, identidadeDoContexto)
 	membroHandler := handler.NovoMembroHandler(convidarMembro, cancelarConvite, consultarConvite, aceitarConvite, listarEquipe, removerMembro, identidadeDoContexto)
+	ocupacaoHandler := handler.NovoOcupacaoHandler(criarOcupacao, listarOcupacoes, removerOcupacao, identidadeDoContexto)
 	clientHandler := handler.NovoClientHandler(solicitarCadastroClient, confirmarCadastroClient, consultarPreCadastro, concluirPreCadastro)
 	// teto de tentativas por conta, compartilhado entre login e recuperação de
 	// senha: o mesmo contador, com chaves de prefixo diferente
@@ -287,6 +293,11 @@ func main() {
 		// própria agenda (mesmo fechada ao público) e o registro da reserva
 		r.Get("/providers/me/slots", appointmentHandler.ConsultarSlotsDoPrestador)
 		r.Post("/providers/me/agendamentos", appointmentHandler.MarcarPeloPrestador)
+		// compromisso pessoal: reserva um intervalo do dia para o prestador,
+		// tirando-o da oferta sem redefinir o expediente
+		r.Get("/providers/me/ocupacoes", ocupacaoHandler.Listar)
+		r.Post("/providers/me/ocupacoes", ocupacaoHandler.Criar)
+		r.Delete("/providers/me/ocupacoes/{id}", ocupacaoHandler.Remover)
 		// Ver quem tem acesso é parte de operar a agenda; mudar quem tem acesso
 		// não é — por isso o POST e os DELETE ficam no grupo do dono, abaixo.
 		r.Get("/providers/me/membros", membroHandler.ListarEquipe)

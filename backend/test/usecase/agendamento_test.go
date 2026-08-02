@@ -62,7 +62,7 @@ func novoAmbienteAgendamento(t *testing.T) *ambienteAgendamento {
 	notificador := email.NovoNotificador(mailer, "http://localhost:5173", time.UTC, email.ExecutorSincrono)
 
 	resolvedor := ucavailability.NovoConsultarDisponibilidadeUseCase(availabilityRepo, providers, membros)
-	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointments, providers, membros, time.UTC)
+	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointments, providers, membros, memoria.NovoOcupacaoMemoria(), time.UTC)
 	solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointments, clientRepo, providers, membros, notificador, 24*time.Hour)
 	preCadastros := memoria.NovoPreCadastroMemoria()
 	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitar, clientRepo, providers, membros, cancelamentos, preCadastros, notificador)

@@ -443,6 +443,35 @@ Consequências que valem saber:
   mesmo id — por isso nenhuma sessão caiu no deploy.
 - **Convidar alguém já é possível** pela tela de Equipe no painel — ver abaixo.
 
+### Compromisso pessoal
+
+O prestador reserva um intervalo do dia para si — médico, almoço, deslocamento —
+e aquele horário some da oferta **sem redefinir o expediente**. É diferente de
+bloquear o dia (que derruba o dia inteiro) e de marcar horários personalizados
+(que substitui o expediente todo).
+
+Três regras que valem registro:
+
+- **Não pode ser criado por cima de cliente já marcado.** A resposta é 409 e o
+  prestador cancela o agendamento primeiro. O sistema não desmarca ninguém por
+  conta própria.
+- **Não tem regra de antecedência**, diferente do agendamento. Criar compromisso
+  só reduz a oferta e não desmarca nada, então exigir 24h atrapalharia sem
+  proteger ninguém.
+- **O buffer do prestador vale dos dois lados.** Um compromisso das 14h às 15h
+  com descanso de 15 minutos também tira as 13h45 e as 15h15 da oferta. É o
+  comportamento desejado — preparação e deslocamento —, mas surpreende quem
+  espera que só o intervalo exato saia.
+
+⚠️ Já a **recusa de reserva** usa sobreposição real, sem buffer: recusar um
+horário que só encosta no buffer seria mais restritivo do que a própria oferta,
+e confundiria quem acabou de ver o horário disponível.
+
+Internamente o compromisso carrega uma **origem**, hoje sempre `manual`. Ela
+existe porque este é o canal genérico de "intervalo ocupado que não é
+agendamento": uma integração com calendário externo entraria como outra origem,
+escrevendo na mesma tabela, sem tocar no cálculo de horários.
+
 ### Papéis: o que cada um pode
 
 | | `dono` | `operador` |

@@ -61,7 +61,7 @@ func novoRouterAgendamento(t *testing.T) (r *chi.Mux, providerID string, mailer 
 	cancelamentoRepo := memoria.NovoCancellationMemoria()
 	preCadastroRepo := memoria.NovoPreCadastroMemoria()
 	resolvedor := ucavailability.NovoConsultarDisponibilidadeUseCase(availabilityRepo, providers, membros)
-	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointmentRepo, providers, membros, time.UTC)
+	consultarSlots := ucappointment.NovoConsultarSlotsUseCase(resolvedor, appointmentRepo, providers, membros, memoria.NovoOcupacaoMemoria(), time.UTC)
 	solicitar := ucappointment.NovoSolicitarUseCase(consultarSlots, appointmentRepo, clientRepo, providers, membros, notificador, 24*time.Hour)
 	solicitarConvidado := ucappointment.NovoSolicitarConvidadoUseCase(solicitar, clientRepo, providers, membros, cancelamentoRepo, preCadastroRepo, notificador)
 	marcarPeloPrestador := ucappointment.NovoMarcarPeloPrestadorUseCase(solicitar, clientRepo, providers)
