@@ -372,7 +372,7 @@ jobs:
       # reproduzir o ambiente inteiro na mão para entender a quebra.
       - name: guarda o relatório e os traces do Playwright (em falha)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: |
