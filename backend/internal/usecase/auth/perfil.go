@@ -10,6 +10,7 @@ import (
 // resposta, o que é da conta do que é da agenda.
 type AgendaDoPerfil struct {
 	ID                           string
+	Slug                         string
 	Papel                        string
 	AceitaAgendamentos           bool
 	DescansoMinutos              int
@@ -75,6 +76,7 @@ func (uc *PerfilUseCase) Executar(id Identidade) (*PerfilOutput, error) {
 			Tipo:     string(session.TipoProvider),
 			Provider: &AgendaDoPerfil{
 				ID:                           p.ID,
+				Slug:                         p.Slug,
 				Papel:                        string(id.Papel),
 				AceitaAgendamentos:           p.AceitaAgendamentos,
 				DescansoMinutos:              p.DescansoMinutos,

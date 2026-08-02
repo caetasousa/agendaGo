@@ -24,6 +24,7 @@ type repositorioDono interface {
 // agendamento. AceitaAgendamentos indica se ele está ofertando horários.
 type PrestadorResumo struct {
 	ID                        string
+	Slug                      string
 	Nome                      string
 	DuracaoAtendimentoMinutos int
 	AceitaAgendamentos        bool
@@ -77,8 +78,8 @@ func NovoBuscarResumoUseCase(repo repositorioPreferencias, donos repositorioDono
 
 // Executar devolve o resumo público do prestador. Retorna
 // ErrProviderNaoEncontrado quando o id não existe.
-func (uc *BuscarResumoUseCase) Executar(id string) (*PrestadorResumo, error) {
-	p, err := uc.repo.BuscarPorID(id)
+func (uc *BuscarResumoUseCase) Executar(identificador string) (*PrestadorResumo, error) {
+	p, err := uc.buscar(identificador)
 	if err != nil {
 		return nil, err
 	}
@@ -93,9 +94,28 @@ func (uc *BuscarResumoUseCase) Executar(id string) (*PrestadorResumo, error) {
 	return &resumo, nil
 }
 
+// buscar resolve o prestador por slug OU por id.
+//
+// ⚠️ O caminho por UUID não pode ser removido nunca: todo link compartilhado
+// antes do slug existir usa o id, e tirá-lo daria 404 em endereço que já está
+// na mão de cliente.
+//
+// A ordem é slug primeiro porque é o caso comum a partir de agora; o formato
+// de UUID é distinguível o bastante para não haver ambiguidade real (um slug
+// válido pode até ter 36 caracteres, mas não teria os hifens nas posições
+// exatas do UUID — e mesmo se tivesse, a busca por slug acha primeiro, que é o
+// que o dono do slug espera).
+func (uc *BuscarResumoUseCase) buscar(identificador string) (*provider.Provider, error) {
+	if p, err := uc.repo.BuscarPorSlug(identificador); err != nil || p != nil {
+		return p, err
+	}
+	return uc.repo.BuscarPorID(identificador)
+}
+
 func resumoDe(p *provider.Provider, donoAtivo bool) PrestadorResumo {
 	return PrestadorResumo{
 		ID:                        p.ID,
+		Slug:                      p.Slug,
 		Nome:                      p.Nome,
 		DuracaoAtendimentoMinutos: p.DuracaoAtendimentoMinutos,
 		// Um prestador banido aparece como "não oferta" no link direto, sem

@@ -26,6 +26,9 @@ export function confirmarCadastroPrestador(token: string): Promise<void> {
 
 export interface PrestadorResumo {
 	id: string;
+	// Endereço público legível. O link por id continua funcionando — ver
+	// BuscarResumoUseCase no backend —, mas o que se compartilha é o slug.
+	slug: string;
 	nome: string;
 	duracaoAtendimentoMinutos: number;
 	aceitaAgendamentos: boolean;

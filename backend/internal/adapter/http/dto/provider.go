@@ -22,6 +22,7 @@ type CadastrarProviderResponse struct {
 }
 
 type AtualizarPreferenciasRequest struct {
+	Slug                         string     `json:"slug" validate:"omitempty,min=3,max=60"`
 	Telefone                     string     `json:"telefone" validate:"required,min=8,max=30"`
 	AceitaAgendamentos           bool       `json:"aceitaAgendamentos"`
 	DescansoMinutos              int        `json:"descansoMinutos" validate:"min=0"`
@@ -35,6 +36,7 @@ func (r AtualizarPreferenciasRequest) Validar() error {
 }
 
 type AtualizarPreferenciasResponse struct {
+	Slug                         string     `json:"slug"`
 	Telefone                     string     `json:"telefone"`
 	AceitaAgendamentos           bool       `json:"aceitaAgendamentos"`
 	DescansoMinutos              int        `json:"descansoMinutos"`

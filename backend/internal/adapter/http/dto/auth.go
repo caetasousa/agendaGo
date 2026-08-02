@@ -38,6 +38,7 @@ func (r RedefinirSenhaRequest) Validar() error {
 // a agenda de outra, misturar os dois no topo deixaria de fazer sentido.
 type ProviderDoMeResponse struct {
 	ID                           string     `json:"id"`
+	Slug                         string     `json:"slug"`
 	Papel                        string     `json:"papel"`
 	AceitaAgendamentos           bool       `json:"aceitaAgendamentos"`
 	DescansoMinutos              int        `json:"descansoMinutos"`

@@ -229,4 +229,3 @@ func escanearAppointment(linha escaneavel) (*appointment.Appointment, error) {
 	}
 	return &a, nil
 }
-

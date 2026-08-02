@@ -61,6 +61,7 @@ type enviadorCadastro interface {
 // repositorioPreferencias busca e persiste as preferências mutáveis da agenda.
 type repositorioPreferencias interface {
 	BuscarPorID(id string) (*provider.Provider, error)
+	BuscarPorSlug(slug string) (*provider.Provider, error)
 	Atualizar(p *provider.Provider) error
 }
 

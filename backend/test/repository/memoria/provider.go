@@ -2,6 +2,7 @@ package memoria
 
 import (
 	"sort"
+	"strconv"
 	"sync"
 
 	"agendago/internal/domain/provider"
@@ -26,11 +27,44 @@ func NovoProviderMemoriaCom(membros *MembroMemoria) *ProviderMemoria {
 	return &ProviderMemoria{dados: make(map[string]*provider.Provider), membros: membros}
 }
 
+// Salvar persiste o prestador, desempatando o slug como o Postgres faz: se
+// "joao-silva" já existe em outro prestador, vira "joao-silva-2". Sem isto um
+// teste em memória passaria onde o banco recusaria por violação de unicidade.
 func (r *ProviderMemoria) Salvar(p *provider.Provider) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	if p.Slug != "" {
+		base := p.Slug
+		for tentativa := 2; r.slugTomado(p.Slug, p.ID); tentativa++ {
+			p.Slug = base + "-" + strconv.Itoa(tentativa)
+		}
+	}
 	r.dados[p.ID] = p
 	return nil
+}
+
+// slugTomado informa se OUTRO prestador já usa o slug.
+func (r *ProviderMemoria) slugTomado(slug, excetoID string) bool {
+	for _, existente := range r.dados {
+		if existente.ID != excetoID && existente.Slug == slug {
+			return true
+		}
+	}
+	return false
+}
+
+// BuscarPorSlug retorna (nil, nil) quando não há prestador com o slug,
+// seguindo o mesmo contrato do repositório Postgres.
+func (r *ProviderMemoria) BuscarPorSlug(slug string) (*provider.Provider, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, p := range r.dados {
+		if p.Slug == slug {
+			return p, nil
+		}
+	}
+	return nil, nil
 }
 
 // BuscarPorID retorna (nil, nil) quando não há prestador com o id, seguindo

@@ -278,3 +278,34 @@ func TestProviderPostgres(t *testing.T) {
 		}
 	})
 }
+
+// Homônimos são o caso comum — dois "João Silva" — e o slug derivado do nome
+// colide. Sem desempate, o segundo cadastro falha por violação de unicidade e
+// a pessoa simplesmente não consegue criar conta.
+func TestProviderPostgresDesempataSlug(t *testing.T) {
+	repo := repository.NovoProviderPostgres(novoPool(t))
+
+	primeiro, _ := provider.Novo("77777777-0000-0000-0000-000000000001", "João Silva")
+	if err := repo.Salvar(primeiro); err != nil {
+		t.Fatalf("esperava salvar o primeiro, got: %v", err)
+	}
+	if primeiro.Slug != "joao-silva" {
+		t.Errorf("esperava 'joao-silva', got: %q", primeiro.Slug)
+	}
+
+	segundo, _ := provider.Novo("77777777-0000-0000-0000-000000000002", "João Silva")
+	if err := repo.Salvar(segundo); err != nil {
+		t.Fatalf("esperava salvar o homônimo, got: %v", err)
+	}
+	if segundo.Slug != "joao-silva-2" {
+		t.Errorf("esperava 'joao-silva-2', got: %q", segundo.Slug)
+	}
+
+	terceiro, _ := provider.Novo("77777777-0000-0000-0000-000000000003", "João Silva")
+	if err := repo.Salvar(terceiro); err != nil {
+		t.Fatalf("esperava salvar o terceiro, got: %v", err)
+	}
+	if terceiro.Slug != "joao-silva-3" {
+		t.Errorf("esperava 'joao-silva-3', got: %q", terceiro.Slug)
+	}
+}

@@ -14,6 +14,7 @@ export async function load(): Promise<{
 	horariosPadrao: Bloco[];
 	permiteMarcacaoPeloPrestador: boolean;
 	telefonePendente: boolean;
+	slug: string;
 }> {
 	// permite carregar mesmo com telefone pendente — é aqui que ele é resolvido
 	const usuario = await carregarUsuarioDoPainel(true);
@@ -31,6 +32,7 @@ export async function load(): Promise<{
 		duracaoAtendimentoMinutos: usuario.provider?.duracaoAtendimentoMinutos ?? 60,
 		horariosPadrao: usuario.provider?.horariosPadrao ?? [],
 		permiteMarcacaoPeloPrestador: usuario.provider?.permiteMarcacaoPeloPrestador ?? true,
-		telefonePendente: usuario.telefonePendente ?? false
+		telefonePendente: usuario.telefonePendente ?? false,
+		slug: usuario.provider?.slug ?? ''
 	};
 }

@@ -15,8 +15,11 @@ import (
 // existe para que uma segunda pessoa (recepção, sócia) possa operar a mesma
 // agenda com login próprio.
 type Provider struct {
-	ID                        string
-	Nome                      string
+	ID   string
+	Nome string
+	// Slug é o endereço público legível (/agendar/joao-barbeiro). Único entre
+	// prestadores — a unicidade é do banco, ver DefinirSlug.
+	Slug                      string
 	AceitaAgendamentos        bool
 	DescansoMinutos           int
 	DuracaoAtendimentoMinutos int
@@ -48,9 +51,12 @@ func Novo(id, nome string) (*Provider, error) {
 	}
 
 	agora := time.Now()
+	// O slug nasce derivado do nome. Pode colidir com o de outro prestador — a
+	// unicidade é do banco, e quem trata a colisão é quem persiste.
 	return &Provider{
 		ID:                           id,
 		Nome:                         nome,
+		Slug:                         GerarSlug(nome),
 		AceitaAgendamentos:           false,
 		DescansoMinutos:              0,
 		DuracaoAtendimentoMinutos:    duracaoAtendimentoSugerida,

@@ -175,6 +175,7 @@ func (h *ProviderHandler) AtualizarPreferencias(w http.ResponseWriter, r *http.R
 		DuracaoAtendimentoMinutos:    req.DuracaoAtendimentoMinutos,
 		HorariosPadrao:               horarios,
 		PermiteMarcacaoPeloPrestador: req.PermiteMarcacaoPeloPrestador,
+		Slug:                         req.Slug,
 	})
 	if err != nil {
 		switch {
@@ -195,6 +196,7 @@ func (h *ProviderHandler) AtualizarPreferencias(w http.ResponseWriter, r *http.R
 	}
 
 	responderJSON(w, http.StatusOK, dto.AtualizarPreferenciasResponse{
+		Slug:                         output.Slug,
 		Telefone:                     output.Telefone,
 		AceitaAgendamentos:           output.AceitaAgendamentos,
 		DescansoMinutos:              output.DescansoMinutos,
@@ -302,6 +304,7 @@ func (h *ProviderHandler) BuscarResumo(w http.ResponseWriter, r *http.Request) {
 func resumoParaDTO(p ucprovider.PrestadorResumo) dto.PrestadorResumoDTO {
 	return dto.PrestadorResumoDTO{
 		ID:                        p.ID,
+		Slug:                      p.Slug,
 		Nome:                      p.Nome,
 		DuracaoAtendimentoMinutos: p.DuracaoAtendimentoMinutos,
 		AceitaAgendamentos:        p.AceitaAgendamentos,

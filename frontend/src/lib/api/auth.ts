@@ -21,6 +21,7 @@ export interface LoginResponse {
 // no topo deixaria de fazer sentido.
 export interface ProviderDoMe {
 	id: string;
+	slug: string;
 	papel: string;
 	aceitaAgendamentos: boolean;
 	descansoMinutos: number;

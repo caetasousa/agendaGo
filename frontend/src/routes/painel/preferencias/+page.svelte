@@ -27,6 +27,10 @@
 	let permiteMarcacaoPeloPrestador = $state(data.permiteMarcacaoPeloPrestador);
 	// svelte-ignore state_referenced_locally
 	let telefonePendente = $state(data.telefonePendente);
+	// svelte-ignore state_referenced_locally
+	let slug = $state(data.slug);
+	// svelte-ignore state_referenced_locally
+	const slugOriginal = data.slug;
 
 	let enviando = $state(false);
 	let erro = $state<string | null>(null);
@@ -45,7 +49,8 @@
 			descansoMinutos,
 			duracaoAtendimentoMinutos,
 			horariosPadrao,
-			permiteMarcacaoPeloPrestador
+			permiteMarcacaoPeloPrestador,
+			slug
 		});
 	}
 
@@ -95,7 +100,8 @@
 				descansoMinutos,
 				duracaoAtendimentoMinutos,
 				horariosPadrao,
-				permiteMarcacaoPeloPrestador
+				permiteMarcacaoPeloPrestador,
+				slug
 			});
 			telefone = salvo.telefone;
 			aceitaAgendamentos = salvo.aceitaAgendamentos;
@@ -103,6 +109,7 @@
 			duracaoAtendimentoMinutos = salvo.duracaoAtendimentoMinutos;
 			horariosPadrao = salvo.horariosPadrao;
 			permiteMarcacaoPeloPrestador = salvo.permiteMarcacaoPeloPrestador;
+			slug = salvo.slug;
 			// o backend só aceita um telefone real (valida no mínimo 8 dígitos),
 			// então se chegou aqui o telefone pendente foi resolvido
 			const estavaPendente = telefonePendente;
@@ -175,6 +182,37 @@
 					class="mt-2 h-10 w-full rounded-md border border-hairline-strong bg-surface-card px-3.5 text-sm text-ink outline-none transition placeholder:text-mute focus:border-ink"
 				/>
 				<p class="mt-1.5 text-xs text-mute">Como os clientes entram em contato com você.</p>
+			</div>
+		</div>
+
+		<!-- Endereço público -->
+		<div class="rounded-xl border border-hairline-strong bg-surface-card p-6">
+			<h2 class="text-sm font-semibold text-ink">Seu endereço de agendamento</h2>
+			<div class="mt-4">
+				<label for="slug" class="block text-sm font-medium text-ink">Endereço</label>
+				<div class="mt-2 flex items-center gap-1">
+					<span class="text-sm whitespace-nowrap text-mute">/agendar/</span>
+					<input
+						id="slug"
+						type="text"
+						bind:value={slug}
+						onchange={() => (sucesso = false)}
+						minlength="3"
+						maxlength="60"
+						placeholder="joao-barbeiro"
+						class="h-10 w-full rounded-md border border-hairline-strong bg-surface-card px-3.5 text-sm text-ink outline-none transition placeholder:text-mute focus:border-ink"
+					/>
+				</div>
+				<p class="mt-1.5 text-xs text-mute">
+					Apenas letras minúsculas, números e hífens.
+				</p>
+				{#if slug !== slugOriginal}
+					<p class="mt-2 flex items-start gap-2 text-xs text-body">
+						<span class="mt-1 h-2 w-2 shrink-0 rounded-full bg-accent-yellow"></span>
+						Ao salvar, o endereço anterior deixa de funcionar. Quem já recebeu o link antigo
+						precisará do novo.
+					</p>
+				{/if}
 			</div>
 		</div>
 

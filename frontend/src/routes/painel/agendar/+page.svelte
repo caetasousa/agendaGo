@@ -39,7 +39,7 @@
 		<div class="grid gap-3 sm:grid-cols-2">
 			{#each prestadores as prestador (prestador.id)}
 				<a
-					href="/agendar/{prestador.id}"
+					href="/agendar/{prestador.slug}"
 					class="group rounded-xl border border-hairline-strong bg-surface-card p-5 transition hover:border-ink/30 hover:bg-surface-elevated/40"
 				>
 					<div class="flex items-start justify-between gap-3">

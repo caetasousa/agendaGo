@@ -28,10 +28,14 @@ type AtualizarPreferenciasInput struct {
 	DuracaoAtendimentoMinutos    int
 	HorariosPadrao               []BlocoInput
 	PermiteMarcacaoPeloPrestador bool
+	// Slug vazio mantém o endereço atual. O prestador só o troca quando quer,
+	// e trocar quebra os links já compartilhados — ver DefinirSlug.
+	Slug string
 }
 
 // AtualizarPreferenciasOutput contém as preferências após a atualização.
 type AtualizarPreferenciasOutput struct {
+	Slug                         string
 	Telefone                     string
 	AceitaAgendamentos           bool
 	DescansoMinutos              int
@@ -97,6 +101,12 @@ func (uc *AtualizarPreferenciasUseCase) Executar(in AtualizarPreferenciasInput) 
 		return nil, err
 	}
 
+	if in.Slug != "" && in.Slug != p.Slug {
+		if err := p.DefinirSlug(in.Slug); err != nil {
+			return nil, err
+		}
+	}
+
 	blocos := make([]availability.TimeBlock, 0, len(in.HorariosPadrao))
 	for _, b := range in.HorariosPadrao {
 		bloco, err := availability.NovoTimeBlock(b.InicioMinutos, b.FimMinutos)
@@ -117,6 +127,7 @@ func (uc *AtualizarPreferenciasUseCase) Executar(in AtualizarPreferenciasInput) 
 	}
 
 	return &AtualizarPreferenciasOutput{
+		Slug:                         p.Slug,
 		Telefone:                     u.Telefone,
 		AceitaAgendamentos:           p.AceitaAgendamentos,
 		DescansoMinutos:              p.DescansoMinutos,

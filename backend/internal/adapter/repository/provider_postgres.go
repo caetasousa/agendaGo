@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"strconv"
 
 	"agendago/internal/domain/availability"
 	"agendago/internal/domain/provider"
@@ -32,10 +33,16 @@ func (r *ProviderPostgres) Salvar(p *provider.Provider) error {
 	}
 	defer tx.Rollback(ctx)
 
+	slug, err := r.slugDisponivel(ctx, tx, p.Slug)
+	if err != nil {
+		return err
+	}
+	p.Slug = slug
+
 	_, err = tx.Exec(ctx,
-		`INSERT INTO providers (id, nome, aceita_agendamentos, descanso_minutos, duracao_atendimento_minutos, permite_marcacao_pelo_prestador)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		p.ID, p.Nome, p.AceitaAgendamentos, p.DescansoMinutos, p.DuracaoAtendimentoMinutos, p.PermiteMarcacaoPeloPrestador,
+		`INSERT INTO providers (id, nome, slug, aceita_agendamentos, descanso_minutos, duracao_atendimento_minutos, permite_marcacao_pelo_prestador)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		p.ID, p.Nome, p.Slug, p.AceitaAgendamentos, p.DescansoMinutos, p.DuracaoAtendimentoMinutos, p.PermiteMarcacaoPeloPrestador,
 	)
 	if err != nil {
 		return err
@@ -46,6 +53,39 @@ func (r *ProviderPostgres) Salvar(p *provider.Provider) error {
 	}
 
 	return tx.Commit(ctx)
+}
+
+// maxTentativasSlug limita o desempate de homônimos. Passar disso significaria
+// dezenas de prestadores com o mesmo nome — mais provável ser defeito do que
+// caso real, e vale falhar em vez de girar.
+const maxTentativasSlug = 50
+
+// slugDisponivel desempata homônimos: "joao-silva" já tomado vira
+// "joao-silva-2", depois "joao-silva-3".
+//
+// O desempate é do repositório, não do domínio: só quem enxerga a tabela sabe
+// o que já existe. E acontece DENTRO da transação do INSERT, sob o mesmo
+// contexto — duas contas com o mesmo nome criadas ao mesmo tempo ainda podem
+// escolher o mesmo sufixo, e nesse caso é o UNIQUE que decide, com a segunda
+// falhando de forma limpa em vez de gravar link ambíguo.
+func (r *ProviderPostgres) slugDisponivel(ctx context.Context, tx pgx.Tx, base string) (string, error) {
+	if base == "" {
+		base = "prestador"
+	}
+	candidato := base
+	for tentativa := 2; tentativa <= maxTentativasSlug; tentativa++ {
+		var existe bool
+		if err := tx.QueryRow(ctx,
+			`SELECT EXISTS (SELECT 1 FROM providers WHERE slug = $1)`, candidato,
+		).Scan(&existe); err != nil {
+			return "", err
+		}
+		if !existe {
+			return candidato, nil
+		}
+		candidato = base + "-" + strconv.Itoa(tentativa)
+	}
+	return "", errors.New("não foi possível gerar um endereço público único")
 }
 
 // Atualizar persiste as preferências mutáveis da agenda (ofertar horários,
@@ -61,9 +101,9 @@ func (r *ProviderPostgres) Atualizar(p *provider.Provider) error {
 
 	_, err = tx.Exec(ctx,
 		`UPDATE providers
-		 SET aceita_agendamentos = $2, descanso_minutos = $3, duracao_atendimento_minutos = $4, permite_marcacao_pelo_prestador = $5, atualizado_em = $6
+		 SET slug = $2, aceita_agendamentos = $3, descanso_minutos = $4, duracao_atendimento_minutos = $5, permite_marcacao_pelo_prestador = $6, atualizado_em = $7
 		 WHERE id = $1`,
-		p.ID, p.AceitaAgendamentos, p.DescansoMinutos, p.DuracaoAtendimentoMinutos, p.PermiteMarcacaoPeloPrestador, p.AtualizadoEm,
+		p.ID, p.Slug, p.AceitaAgendamentos, p.DescansoMinutos, p.DuracaoAtendimentoMinutos, p.PermiteMarcacaoPeloPrestador, p.AtualizadoEm,
 	)
 	if err != nil {
 		return err
@@ -82,13 +122,26 @@ func (r *ProviderPostgres) Atualizar(p *provider.Provider) error {
 // BuscarPorID retorna (prestador, nil) quando encontra, (nil, nil) quando não
 // existe prestador com o id, e (nil, err) em falha real de infraestrutura.
 func (r *ProviderPostgres) BuscarPorID(id string) (*provider.Provider, error) {
+	return r.buscarPor("id", id)
+}
+
+// BuscarPorSlug retorna (prestador, nil) quando encontra, (nil, nil) quando não
+// existe prestador com o slug, e (nil, err) em falha real de infraestrutura.
+func (r *ProviderPostgres) BuscarPorSlug(slug string) (*provider.Provider, error) {
+	return r.buscarPor("slug", slug)
+}
+
+// buscarPor monta a consulta por uma coluna única. `coluna` NUNCA vem de
+// entrada do usuário — é literal nos dois chamadores — e o valor vai
+// parametrizado, então não há injeção possível aqui.
+func (r *ProviderPostgres) buscarPor(coluna, valor string) (*provider.Provider, error) {
 	ctx := context.Background()
 	var p provider.Provider
 	err := r.pool.QueryRow(ctx,
-		`SELECT id, nome, aceita_agendamentos, descanso_minutos, duracao_atendimento_minutos, permite_marcacao_pelo_prestador, criado_em, atualizado_em
-		 FROM providers WHERE id = $1`, id,
+		`SELECT id, nome, slug, aceita_agendamentos, descanso_minutos, duracao_atendimento_minutos, permite_marcacao_pelo_prestador, criado_em, atualizado_em
+		 FROM providers WHERE `+coluna+` = $1`, valor,
 	).Scan(
-		&p.ID, &p.Nome, &p.AceitaAgendamentos,
+		&p.ID, &p.Nome, &p.Slug, &p.AceitaAgendamentos,
 		&p.DescansoMinutos, &p.DuracaoAtendimentoMinutos, &p.PermiteMarcacaoPeloPrestador, &p.CriadoEm, &p.AtualizadoEm,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -170,7 +223,7 @@ func (r *ProviderPostgres) listarPaginado(filtro string, pag paging.Pagina) ([]*
 	}
 
 	rows, err := r.pool.Query(ctx,
-		`SELECT p.id, p.nome, p.aceita_agendamentos, p.descanso_minutos, p.duracao_atendimento_minutos, p.permite_marcacao_pelo_prestador, p.criado_em, p.atualizado_em
+		`SELECT p.id, p.nome, p.slug, p.aceita_agendamentos, p.descanso_minutos, p.duracao_atendimento_minutos, p.permite_marcacao_pelo_prestador, p.criado_em, p.atualizado_em
 		 FROM providers p `+filtro+` ORDER BY p.nome, p.id LIMIT $1 OFFSET $2`, pag.Limite, pag.Offset)
 	if err != nil {
 		return nil, 0, err
@@ -181,7 +234,7 @@ func (r *ProviderPostgres) listarPaginado(filtro string, pag paging.Pagina) ([]*
 	for rows.Next() {
 		var p provider.Provider
 		if err := rows.Scan(
-			&p.ID, &p.Nome, &p.AceitaAgendamentos,
+			&p.ID, &p.Nome, &p.Slug, &p.AceitaAgendamentos,
 			&p.DescansoMinutos, &p.DuracaoAtendimentoMinutos, &p.PermiteMarcacaoPeloPrestador, &p.CriadoEm, &p.AtualizadoEm,
 		); err != nil {
 			return nil, 0, err

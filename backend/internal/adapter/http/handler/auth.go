@@ -186,6 +186,7 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	if perfil.Provider != nil {
 		resp.Provider = &dto.ProviderDoMeResponse{
 			ID:                           perfil.Provider.ID,
+			Slug:                         perfil.Provider.Slug,
 			Papel:                        perfil.Provider.Papel,
 			AceitaAgendamentos:           perfil.Provider.AceitaAgendamentos,
 			DescansoMinutos:              perfil.Provider.DescansoMinutos,

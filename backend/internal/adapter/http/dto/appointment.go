@@ -105,6 +105,7 @@ type SlotsResponse struct {
 // agendamento.
 type PrestadorResumoDTO struct {
 	ID                        string `json:"id"`
+	Slug                      string `json:"slug"`
 	Nome                      string `json:"nome"`
 	DuracaoAtendimentoMinutos int    `json:"duracaoAtendimentoMinutos"`
 	AceitaAgendamentos        bool   `json:"aceitaAgendamentos"`

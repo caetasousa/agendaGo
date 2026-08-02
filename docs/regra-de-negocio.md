@@ -443,6 +443,23 @@ Consequências que valem saber:
   mesmo id — por isso nenhuma sessão caiu no deploy.
 - **Convidar alguém já é possível** pela tela de Equipe no painel — ver abaixo.
 
+### Endereço público (slug)
+
+O link de agendamento é `/agendar/joao-barbeiro` em vez de `/agendar/{uuid}`. O
+slug nasce derivado do nome do prestador e pode ser trocado em Preferências.
+
+⚠️ **O caminho por UUID continua valendo, para sempre.** Todo link compartilhado
+antes do slug existir usa o id, e removê-lo daria 404 em endereço que já está na
+mão de cliente. A busca tenta slug primeiro e cai para id.
+
+Trocar o slug **quebra os links antigos** — não há redirecionamento do endereço
+anterior. A tela avisa isso antes de salvar; o sistema não tem como saber quem
+já recebeu o link.
+
+Há uma lista de palavras reservadas (`admin`, `painel`, `api`, `login`,
+`agendar`, entre outras) que não podem virar slug, para não colidir com
+caminhos do próprio site.
+
 ### Compromisso pessoal
 
 O prestador reserva um intervalo do dia para si — médico, almoço, deslocamento —
