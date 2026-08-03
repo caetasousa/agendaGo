@@ -4,8 +4,9 @@
 -- conflito) são responsabilidade do domínio/usecase, não do banco.
 -- lembrete_enviado_em NULL significa "ainda não enviado". observacao é uma
 -- nota livre opcional, escrita por quem solicita. marcado_pelo_prestador
--- indica um registro que o próprio prestador criou (em vez de partir de uma
--- solicitação do cliente/convidado) — nasce FALSE, valor técnico inicial.
+-- indica um registro que o próprio prestador criou, em vez de partir de uma
+-- solicitação do cliente/convidado — sem DEFAULT, porque com que valor um
+-- agendamento nasce é decisão do domínio, e o INSERT escreve a coluna.
 CREATE TABLE appointments (
     id                     UUID        PRIMARY KEY,
     provider_id            UUID        NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
@@ -19,7 +20,7 @@ CREATE TABLE appointments (
     atualizado_em          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     lembrete_enviado_em    TIMESTAMPTZ,
     observacao             TEXT,
-    marcado_pelo_prestador BOOLEAN     NOT NULL DEFAULT FALSE
+    marcado_pelo_prestador BOOLEAN     NOT NULL
 );
 
 CREATE INDEX idx_appointments_provider_data ON appointments (provider_id, data);

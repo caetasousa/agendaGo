@@ -9,11 +9,13 @@
 -- as duas pontas e é onde mora o papel de cada pessoa numa agenda.
 --
 -- Esta migration REMOVE as colunas de identidade de `providers` no mesmo passo
--- em que cria as tabelas novas. Não é expand/contract: o banco de produção é
+-- em que cria as tabelas novas, e não converte prestador nenhum: o banco é
 -- descartável neste momento do projeto, então não há dado a preservar entre
--- duas versões do código nem janela em que as duas precisem conviver. Quando
--- existir base real com usuários de verdade, uma mudança equivalente terá que
--- ser dividida em dois deploys — ver docs/tecnologias.md.
+-- duas versões do código nem janela em que as duas precisem conviver. Converter
+-- exigiria ainda decidir em SQL que todo prestador vira dono da própria agenda
+-- — regra do domínio, escrita onde não há teste que a cubra. Quando existir
+-- base real com usuários de verdade, uma mudança equivalente terá que ser
+-- dividida em dois deploys — ver docs/tecnologias.md.
 --
 -- `papel` é VARCHAR sem CHECK de propósito: quais papéis existem e o que cada
 -- um pode fazer é decisão do domínio (internal/domain/membro), não do banco.
@@ -37,27 +39,6 @@ CREATE TABLE provider_membros (
 );
 
 CREATE INDEX idx_provider_membros_usuario ON provider_membros (usuario_id);
-
--- Converte os prestadores que porventura existam antes de remover as colunas.
--- Em produção e no CI a tabela está vazia e isto não copia nada; num banco de
--- desenvolvimento com dados, evita perdê-los sem querer.
---
--- O id do usuário é o MESMO id do provider, deliberadamente. sessions.user_id
--- (V3) e social_identities.user_id (V11) apontam para o id do prestador; ao
--- reusá-lo, essas duas tabelas seguem coerentes sem serem migradas.
-INSERT INTO usuarios (id, email, senha_hash, telefone, ativo, criado_em, atualizado_em)
-SELECT id, email, senha_hash, telefone, ativo, criado_em, atualizado_em
-FROM providers;
-
--- gen_random_uuid() é built-in no Postgres 13+. Aqui ele gera chave substituta
--- para linhas criadas pela própria migração — não é DEFAULT de regra de
--- negócio: o id de todo vínculo criado pela aplicação vem do domínio.
---
--- Todo prestador convertido vira dono da própria agenda: era a única relação
--- possível antes desta migration.
-INSERT INTO provider_membros (id, usuario_id, provider_id, papel, criado_em)
-SELECT gen_random_uuid(), id, id, 'dono', criado_em
-FROM providers;
 
 -- Identidade sai de `providers` para valer. O UNIQUE de email vai junto com a
 -- coluna — a unicidade do email agora é responsabilidade de `usuarios`.
