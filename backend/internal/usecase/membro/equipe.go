@@ -31,21 +31,41 @@ type EquipeOutput struct {
 
 // ListarEquipeUseCase monta a visão de quem opera uma agenda.
 type ListarEquipeUseCase struct {
-	membros  repositorioMembro
-	usuarios repositorioUsuario
-	convites repositorioConvite
+	membros   repositorioMembro
+	usuarios  repositorioUsuario
+	convites  repositorioConvite
+	providers buscadorProvider
 }
 
 // NovoListarEquipeUseCase cria uma instância de ListarEquipeUseCase com as dependências injetadas.
-func NovoListarEquipeUseCase(membros repositorioMembro, usuarios repositorioUsuario, convites repositorioConvite) *ListarEquipeUseCase {
-	return &ListarEquipeUseCase{membros: membros, usuarios: usuarios, convites: convites}
+func NovoListarEquipeUseCase(
+	membros repositorioMembro,
+	usuarios repositorioUsuario,
+	convites repositorioConvite,
+	providers buscadorProvider,
+) *ListarEquipeUseCase {
+	return &ListarEquipeUseCase{membros: membros, usuarios: usuarios, convites: convites, providers: providers}
 }
 
 // Executar devolve os vínculos da agenda com o email de cada pessoa, mais os
 // convites ainda pendentes. Uma consulta por vínculo para resolver a conta: a
 // equipe de uma agenda é pequena, e evita espalhar um join de leitura pelo
 // repositório de vínculos.
+//
+// Retorna ErrEquipeDesativada quando a agenda não ligou o recurso de equipe em
+// Configurações, e ErrProviderNaoEncontrado se a agenda sumiu.
 func (uc *ListarEquipeUseCase) Executar(providerID string) (*EquipeOutput, error) {
+	p, err := uc.providers.BuscarPorID(providerID)
+	if err != nil {
+		return nil, err
+	}
+	if p == nil {
+		return nil, ErrProviderNaoEncontrado
+	}
+	if !p.PermiteEquipe {
+		return nil, ErrEquipeDesativada
+	}
+
 	vinculos, err := uc.membros.ListarPorProvider(providerID)
 	if err != nil {
 		return nil, err

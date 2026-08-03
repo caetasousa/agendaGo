@@ -45,6 +45,7 @@ type ProviderDoMeResponse struct {
 	DuracaoAtendimentoMinutos    int        `json:"duracaoAtendimentoMinutos"`
 	HorariosPadrao               []BlocoDTO `json:"horariosPadrao"`
 	PermiteMarcacaoPeloPrestador bool       `json:"permiteMarcacaoPeloPrestador"`
+	PermiteEquipe                bool       `json:"permiteEquipe"`
 }
 
 type MeResponse struct {

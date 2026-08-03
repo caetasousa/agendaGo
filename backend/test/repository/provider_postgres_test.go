@@ -238,6 +238,34 @@ func TestProviderPostgres(t *testing.T) {
 		}
 	})
 
+	t.Run("Atualizar persiste PermiteEquipe ativado", func(t *testing.T) {
+		p, _ := provider.Novo("22222222-2222-2222-2222-222222222222", "Marina Fisio")
+		if err := repo.Salvar(p); err != nil {
+			t.Fatalf("esperava sucesso ao salvar, got: %v", err)
+		}
+
+		salvo, err := repo.BuscarPorID(p.ID)
+		if err != nil {
+			t.Fatalf("esperava sucesso na busca, got: %v", err)
+		}
+		if salvo.PermiteEquipe {
+			t.Error("esperava PermiteEquipe false num prestador recém-criado")
+		}
+
+		p.AtivarEquipe()
+		if err := repo.Atualizar(p); err != nil {
+			t.Fatalf("esperava sucesso ao atualizar, got: %v", err)
+		}
+
+		encontrado, err := repo.BuscarPorID(p.ID)
+		if err != nil {
+			t.Fatalf("esperava sucesso na busca, got: %v", err)
+		}
+		if !encontrado.PermiteEquipe {
+			t.Error("esperava PermiteEquipe true após ativar e Atualizar")
+		}
+	})
+
 	t.Run("Atualizar substitui o expediente padrão (delete-all + insert)", func(t *testing.T) {
 		p, _ := provider.Novo("55555555-5555-5555-5555-555555555555", "Eva Souza")
 		if err := repo.Salvar(p); err != nil {

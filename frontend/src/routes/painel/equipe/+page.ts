@@ -13,6 +13,13 @@ export async function load(): Promise<{ equipe: Equipe; ehDono: boolean }> {
 		throw redirect(302, '/painel');
 	}
 
+	// A equipe é um recurso opcional, ligado em Configurações. Desligada, a API
+	// recusa a listagem — voltar ao painel é mais honesto que mostrar um erro
+	// sobre algo que a pessoa nem sabe que existe.
+	if (!usuario.provider?.permiteEquipe) {
+		throw redirect(302, '/painel/configuracoes');
+	}
+
 	// Quem opera a agenda vê a equipe; só o dono a modifica. A API impõe isso —
 	// aqui a checagem existe para a tela não oferecer botões que dariam 403.
 	return {

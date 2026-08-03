@@ -4,10 +4,17 @@ import (
 	"errors"
 
 	"agendago/internal/domain/availability"
+	"agendago/internal/domain/membro"
 )
 
 // ErrProviderNaoEncontrado é retornado quando o prestador da sessão não existe mais.
 var ErrProviderNaoEncontrado = errors.New("prestador não encontrado")
+
+// ErrEquipeComMembros é retornado ao desligar o recurso de equipe numa agenda
+// que ainda tem alguém além do dono — ou um convite no ar. Desligar assim
+// esconderia da dona gente que continua com acesso: primeiro remove o acesso,
+// depois desliga.
+var ErrEquipeComMembros = errors.New("remova quem ainda tem acesso antes de desativar a equipe")
 
 // BlocoInput representa um bloco do expediente padrão, ainda não validado pelo domínio.
 type BlocoInput struct {
@@ -28,6 +35,7 @@ type AtualizarPreferenciasInput struct {
 	DuracaoAtendimentoMinutos    int
 	HorariosPadrao               []BlocoInput
 	PermiteMarcacaoPeloPrestador bool
+	PermiteEquipe                bool
 	// Slug vazio mantém o endereço atual. O prestador só o troca quando quer,
 	// e trocar quebra os links já compartilhados — ver DefinirSlug.
 	Slug string
@@ -42,22 +50,31 @@ type AtualizarPreferenciasOutput struct {
 	DuracaoAtendimentoMinutos    int
 	HorariosPadrao               []availability.TimeBlock
 	PermiteMarcacaoPeloPrestador bool
+	PermiteEquipe                bool
 }
 
 // AtualizarPreferenciasUseCase orquestra a atualização das preferências de um prestador.
 type AtualizarPreferenciasUseCase struct {
 	repo     repositorioPreferencias
 	usuarios repositorioUsuario
+	membros  listadorMembros
+	convites listadorConvitesPendentes
 }
 
 // NovoAtualizarPreferenciasUseCase cria uma instância de AtualizarPreferenciasUseCase com os repositórios injetados.
-func NovoAtualizarPreferenciasUseCase(repo repositorioPreferencias, usuarios repositorioUsuario) *AtualizarPreferenciasUseCase {
-	return &AtualizarPreferenciasUseCase{repo: repo, usuarios: usuarios}
+func NovoAtualizarPreferenciasUseCase(
+	repo repositorioPreferencias,
+	usuarios repositorioUsuario,
+	membros listadorMembros,
+	convites listadorConvitesPendentes,
+) *AtualizarPreferenciasUseCase {
+	return &AtualizarPreferenciasUseCase{repo: repo, usuarios: usuarios, membros: membros, convites: convites}
 }
 
 // Executar carrega a conta e a agenda, aplica as preferências via regras de
 // domínio e persiste as duas. Retorna ErrProviderNaoEncontrado se qualquer uma
-// das duas não existir e ErrDescansoInvalido se o descanso for negativo.
+// das duas não existir, ErrDescansoInvalido se o descanso for negativo e
+// ErrEquipeComMembros ao desligar a equipe com alguém ainda dentro.
 func (uc *AtualizarPreferenciasUseCase) Executar(in AtualizarPreferenciasInput) (*AtualizarPreferenciasOutput, error) {
 	p, err := uc.repo.BuscarPorID(in.ProviderID)
 	if err != nil {
@@ -91,6 +108,23 @@ func (uc *AtualizarPreferenciasUseCase) Executar(in AtualizarPreferenciasInput) 
 		p.AtivarMarcacaoPeloPrestador()
 	} else {
 		p.DesativarMarcacaoPeloPrestador()
+	}
+
+	if in.PermiteEquipe {
+		p.AtivarEquipe()
+	} else {
+		// A checagem só faz sentido no desligamento de fato: com o recurso já
+		// desligado não há vínculo nem convite a proteger.
+		if p.PermiteEquipe {
+			acompanhada, err := uc.agendaTemMaisAlguem(in.ProviderID)
+			if err != nil {
+				return nil, err
+			}
+			if acompanhada {
+				return nil, ErrEquipeComMembros
+			}
+		}
+		p.DesativarEquipe()
 	}
 
 	if err := p.DefinirDescanso(in.DescansoMinutos); err != nil {
@@ -134,5 +168,26 @@ func (uc *AtualizarPreferenciasUseCase) Executar(in AtualizarPreferenciasInput) 
 		DuracaoAtendimentoMinutos:    p.DuracaoAtendimentoMinutos,
 		HorariosPadrao:               p.HorariosPadrao,
 		PermiteMarcacaoPeloPrestador: p.PermiteMarcacaoPeloPrestador,
+		PermiteEquipe:                p.PermiteEquipe,
 	}, nil
+}
+
+// agendaTemMaisAlguem diz se alguém além do dono opera a agenda — ou está a um
+// clique de operar, com convite pendente.
+func (uc *AtualizarPreferenciasUseCase) agendaTemMaisAlguem(providerID string) (bool, error) {
+	vinculos, err := uc.membros.ListarPorProvider(providerID)
+	if err != nil {
+		return false, err
+	}
+	for _, v := range vinculos {
+		if v.Papel != membro.PapelDono {
+			return true, nil
+		}
+	}
+
+	pendentes, err := uc.convites.ListarPendentesPorProvider(providerID)
+	if err != nil {
+		return false, err
+	}
+	return len(pendentes) > 0, nil
 }

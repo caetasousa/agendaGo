@@ -13,6 +13,7 @@ export async function load(): Promise<{
 	duracaoAtendimentoMinutos: number;
 	horariosPadrao: Bloco[];
 	permiteMarcacaoPeloPrestador: boolean;
+	permiteEquipe: boolean;
 	telefonePendente: boolean;
 	slug: string;
 }> {
@@ -32,6 +33,7 @@ export async function load(): Promise<{
 		duracaoAtendimentoMinutos: usuario.provider?.duracaoAtendimentoMinutos ?? 60,
 		horariosPadrao: usuario.provider?.horariosPadrao ?? [],
 		permiteMarcacaoPeloPrestador: usuario.provider?.permiteMarcacaoPeloPrestador ?? true,
+		permiteEquipe: usuario.provider?.permiteEquipe ?? false,
 		telefonePendente: usuario.telefonePendente ?? false,
 		slug: usuario.provider?.slug ?? ''
 	};

@@ -18,11 +18,21 @@ async function sair(page: Page) {
 	await page.waitForURL('/');
 }
 
-// prepararDona cria a prestadora e a deixa logada no painel de equipe.
+// ativarEquipe liga o recurso em Configurações. A equipe nasce desligada — sem
+// isso a rota /painel/equipe redireciona e a API recusa convidar e listar.
+async function ativarEquipe(page: Page) {
+	await page.goto('/painel/configuracoes');
+	await page.click('label[for="permite-equipe"]');
+	await page.click('button:has-text("Salvar alterações")');
+	await expect(page.getByText('Salvo', { exact: true })).toBeVisible();
+}
+
+// prepararDona cria a prestadora, liga a equipe e a deixa logada no painel de equipe.
 async function prepararDona(page: Page, request: APIRequestContext): Promise<string> {
 	const email = emailUnico('dona');
 	await cadastrarPrestador(page, request, `Agenda da Dona ${Date.now()}`, email);
 	await entrar(page, email);
+	await ativarEquipe(page);
 	await page.goto('/painel/equipe');
 	return email;
 }
@@ -152,6 +162,51 @@ test('convite para email que já tem conta é recusado', async ({ page, request 
 	// uma sonda de emails cadastrados.
 	await expect(page.getByText(/não foi possível convidar este email/i)).toBeVisible();
 	await expect(page.locator(`[data-convite="${emailOutroPrestador}"]`)).toHaveCount(0);
+});
+
+// A equipe nasce desligada: quem trabalha sozinho não vê a tela nem carrega a
+// ideia de convidar alguém. Ligar em Configurações é o que a revela.
+test('equipe só aparece no painel depois de ser ativada em Configurações', async ({
+	page,
+	request
+}) => {
+	const email = emailUnico('sem-equipe');
+	await cadastrarPrestador(page, request, `Agenda Solo ${Date.now()}`, email);
+	await entrar(page, email);
+
+	await expect(page.getByRole('link', { name: 'Equipe' })).toHaveCount(0);
+	// Rota fora do menu também não entra — volta para onde o recurso se liga.
+	await page.goto('/painel/equipe');
+	await page.waitForURL('/painel/configuracoes');
+
+	await page.click('label[for="permite-equipe"]');
+	await page.click('button:has-text("Salvar alterações")');
+	await expect(page.getByText('Salvo', { exact: true })).toBeVisible();
+
+	await expect(page.getByRole('link', { name: 'Equipe' }).first()).toBeVisible();
+	await page.goto('/painel/equipe');
+	await expect(page.getByText('Convidar alguém')).toBeVisible();
+});
+
+// Desligar com alguém dentro esconderia da dona uma pessoa que continua
+// operando a agenda — a API recusa, e a tela mostra o motivo.
+test('equipe não é desativada enquanto alguém ainda tem acesso', async ({ page, request }) => {
+	await prepararDona(page, request);
+	const emailOperadora = emailUnico('ainda-dentro');
+
+	await page.fill('#email-convite', emailOperadora);
+	await page.click('button:has-text("Enviar convite")');
+	await expect(page.getByText(`Convite enviado para ${emailOperadora}`)).toBeVisible();
+
+	await page.goto('/painel/configuracoes');
+	await page.click('label[for="permite-equipe"]');
+	await page.click('button:has-text("Salvar alterações")');
+
+	await expect(page.getByText(/remova quem ainda tem acesso/i)).toBeVisible();
+
+	// E o recurso continua ligado: a Equipe segue no menu.
+	await page.reload({ waitUntil: 'networkidle' });
+	await expect(page.locator('#permite-equipe')).toBeChecked();
 });
 
 test('link de convite inválido explica o que fazer', async ({ page }) => {

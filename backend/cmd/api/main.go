@@ -122,7 +122,7 @@ func main() {
 	// usecases
 	solicitarCadastroProvider := ucprovider.NovoSolicitarCadastroUseCase(usuarioRepo, clientRepo, adminRepo, signupRepo, notificador, hasher)
 	confirmarCadastroProvider := ucprovider.NovoConfirmarCadastroUseCase(providerRepo, usuarioRepo, membroRepo, clientRepo, adminRepo, signupRepo)
-	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(providerRepo, usuarioRepo)
+	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(providerRepo, usuarioRepo, membroRepo, conviteRepo)
 	solicitarCadastroClient := ucclient.NovoSolicitarCadastroUseCase(clientRepo, usuarioRepo, adminRepo, signupRepo, notificador, hasher)
 	confirmarCadastroClient := ucclient.NovoConfirmarCadastroUseCase(clientRepo, usuarioRepo, adminRepo, signupRepo)
 	consultarPreCadastro := ucclient.NovoConsultarPreCadastroUseCase(preCadastroRepo)
@@ -140,7 +140,7 @@ func main() {
 	cancelarConvite := ucmembro.NovoCancelarConviteUseCase(conviteRepo)
 	consultarConvite := ucmembro.NovoConsultarConviteUseCase(conviteRepo, providerRepo)
 	aceitarConvite := ucmembro.NovoAceitarConviteUseCase(conviteRepo, usuarioRepo, membroRepo, providerRepo, hasher)
-	listarEquipe := ucmembro.NovoListarEquipeUseCase(membroRepo, usuarioRepo, conviteRepo)
+	listarEquipe := ucmembro.NovoListarEquipeUseCase(membroRepo, usuarioRepo, conviteRepo, providerRepo)
 	removerMembro := ucmembro.NovoRemoverMembroUseCase(membroRepo, membroRepo, usuarioRepo, sessionRepo)
 	criarOcupacao := ucocupacao.NovoCriarUseCase(ocupacaoRepo, appointmentRepo)
 	listarOcupacoes := ucocupacao.NovoListarUseCase(ocupacaoRepo)

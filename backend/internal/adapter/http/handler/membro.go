@@ -57,6 +57,8 @@ func NovoMembroHandler(
 //	@Produce		json
 //	@Success		200	{object}	dto.EquipeResponse
 //	@Failure		401	{object}	map[string]string
+//	@Failure		403	{object}	map[string]string
+//	@Failure		404	{object}	map[string]string
 //	@Router			/providers/me/membros [get]
 func (h *MembroHandler) ListarEquipe(w http.ResponseWriter, r *http.Request) {
 	id, ok := h.identidadeDoContexto(r)
@@ -67,7 +69,14 @@ func (h *MembroHandler) ListarEquipe(w http.ResponseWriter, r *http.Request) {
 
 	out, err := h.listarEquipe.Executar(id.ProviderID)
 	if err != nil {
-		responderErroInterno(w, r, err)
+		switch {
+		case errors.Is(err, ucmembro.ErrEquipeDesativada):
+			responderErro(w, http.StatusForbidden, err.Error())
+		case errors.Is(err, ucmembro.ErrProviderNaoEncontrado):
+			responderErro(w, http.StatusNotFound, err.Error())
+		default:
+			responderErroInterno(w, r, err)
+		}
 		return
 	}
 
@@ -140,6 +149,8 @@ func (h *MembroHandler) Convidar(w http.ResponseWriter, r *http.Request) {
 	// sistema — aquele email já pertence a alguém.
 	case errors.Is(err, ucmembro.ErrEmailIndisponivel):
 		responderErro(w, http.StatusConflict, err.Error())
+	case errors.Is(err, ucmembro.ErrEquipeDesativada):
+		responderErro(w, http.StatusForbidden, err.Error())
 	case errors.Is(err, ucmembro.ErrProviderNaoEncontrado):
 		responderErro(w, http.StatusNotFound, err.Error())
 	default:

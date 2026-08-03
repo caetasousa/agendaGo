@@ -40,9 +40,9 @@ func (r *ProviderPostgres) Salvar(p *provider.Provider) error {
 	p.Slug = slug
 
 	_, err = tx.Exec(ctx,
-		`INSERT INTO providers (id, nome, slug, aceita_agendamentos, descanso_minutos, duracao_atendimento_minutos, permite_marcacao_pelo_prestador)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		p.ID, p.Nome, p.Slug, p.AceitaAgendamentos, p.DescansoMinutos, p.DuracaoAtendimentoMinutos, p.PermiteMarcacaoPeloPrestador,
+		`INSERT INTO providers (id, nome, slug, aceita_agendamentos, descanso_minutos, duracao_atendimento_minutos, permite_marcacao_pelo_prestador, permite_equipe)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		p.ID, p.Nome, p.Slug, p.AceitaAgendamentos, p.DescansoMinutos, p.DuracaoAtendimentoMinutos, p.PermiteMarcacaoPeloPrestador, p.PermiteEquipe,
 	)
 	if err != nil {
 		return err
@@ -101,9 +101,9 @@ func (r *ProviderPostgres) Atualizar(p *provider.Provider) error {
 
 	_, err = tx.Exec(ctx,
 		`UPDATE providers
-		 SET slug = $2, aceita_agendamentos = $3, descanso_minutos = $4, duracao_atendimento_minutos = $5, permite_marcacao_pelo_prestador = $6, atualizado_em = $7
+		 SET slug = $2, aceita_agendamentos = $3, descanso_minutos = $4, duracao_atendimento_minutos = $5, permite_marcacao_pelo_prestador = $6, permite_equipe = $7, atualizado_em = $8
 		 WHERE id = $1`,
-		p.ID, p.Slug, p.AceitaAgendamentos, p.DescansoMinutos, p.DuracaoAtendimentoMinutos, p.PermiteMarcacaoPeloPrestador, p.AtualizadoEm,
+		p.ID, p.Slug, p.AceitaAgendamentos, p.DescansoMinutos, p.DuracaoAtendimentoMinutos, p.PermiteMarcacaoPeloPrestador, p.PermiteEquipe, p.AtualizadoEm,
 	)
 	if err != nil {
 		return err
@@ -138,11 +138,11 @@ func (r *ProviderPostgres) buscarPor(coluna, valor string) (*provider.Provider, 
 	ctx := context.Background()
 	var p provider.Provider
 	err := r.pool.QueryRow(ctx,
-		`SELECT id, nome, slug, aceita_agendamentos, descanso_minutos, duracao_atendimento_minutos, permite_marcacao_pelo_prestador, criado_em, atualizado_em
+		`SELECT id, nome, slug, aceita_agendamentos, descanso_minutos, duracao_atendimento_minutos, permite_marcacao_pelo_prestador, permite_equipe, criado_em, atualizado_em
 		 FROM providers WHERE `+coluna+` = $1`, valor,
 	).Scan(
 		&p.ID, &p.Nome, &p.Slug, &p.AceitaAgendamentos,
-		&p.DescansoMinutos, &p.DuracaoAtendimentoMinutos, &p.PermiteMarcacaoPeloPrestador, &p.CriadoEm, &p.AtualizadoEm,
+		&p.DescansoMinutos, &p.DuracaoAtendimentoMinutos, &p.PermiteMarcacaoPeloPrestador, &p.PermiteEquipe, &p.CriadoEm, &p.AtualizadoEm,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -223,7 +223,7 @@ func (r *ProviderPostgres) listarPaginado(filtro string, pag paging.Pagina) ([]*
 	}
 
 	rows, err := r.pool.Query(ctx,
-		`SELECT p.id, p.nome, p.slug, p.aceita_agendamentos, p.descanso_minutos, p.duracao_atendimento_minutos, p.permite_marcacao_pelo_prestador, p.criado_em, p.atualizado_em
+		`SELECT p.id, p.nome, p.slug, p.aceita_agendamentos, p.descanso_minutos, p.duracao_atendimento_minutos, p.permite_marcacao_pelo_prestador, p.permite_equipe, p.criado_em, p.atualizado_em
 		 FROM providers p `+filtro+` ORDER BY p.nome, p.id LIMIT $1 OFFSET $2`, pag.Limite, pag.Offset)
 	if err != nil {
 		return nil, 0, err
@@ -235,7 +235,7 @@ func (r *ProviderPostgres) listarPaginado(filtro string, pag paging.Pagina) ([]*
 		var p provider.Provider
 		if err := rows.Scan(
 			&p.ID, &p.Nome, &p.Slug, &p.AceitaAgendamentos,
-			&p.DescansoMinutos, &p.DuracaoAtendimentoMinutos, &p.PermiteMarcacaoPeloPrestador, &p.CriadoEm, &p.AtualizadoEm,
+			&p.DescansoMinutos, &p.DuracaoAtendimentoMinutos, &p.PermiteMarcacaoPeloPrestador, &p.PermiteEquipe, &p.CriadoEm, &p.AtualizadoEm,
 		); err != nil {
 			return nil, 0, err
 		}

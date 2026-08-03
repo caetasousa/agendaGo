@@ -28,6 +28,7 @@ export interface ProviderDoMe {
 	duracaoAtendimentoMinutos: number;
 	horariosPadrao: Bloco[];
 	permiteMarcacaoPeloPrestador: boolean;
+	permiteEquipe: boolean;
 }
 
 export interface MeResponse {
@@ -40,7 +41,7 @@ export interface MeResponse {
 	provider?: ProviderDoMe;
 	// telefonePendente é true quando o prestador entrou via login social e
 	// ainda não confirmou um telefone de verdade — travamos o painel em
-	// Preferências até ele completar o cadastro.
+	// Configurações até ele completar o cadastro.
 	telefonePendente?: boolean;
 }
 

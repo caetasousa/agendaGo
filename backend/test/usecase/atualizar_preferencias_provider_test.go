@@ -2,8 +2,11 @@ package usecase_test
 
 import (
 	"testing"
+	"time"
 
 	"agendago/internal/domain/availability"
+	"agendago/internal/domain/convite"
+	"agendago/internal/domain/membro"
 	"agendago/internal/domain/provider"
 	ucprovider "agendago/internal/usecase/provider"
 	"agendago/test/repository/memoria"
@@ -22,7 +25,7 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 	t.Run("ativa a agenda e define o descanso", func(t *testing.T) {
 		usuarios, membros, providers := fakesDePrestador()
 		novoProviderComPreferencias(usuarios, membros, providers)
-		uc := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios)
+		uc := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios, membros, memoria.NovoConviteMemoria())
 
 		out, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
 			UsuarioID:                 "provider-1",
@@ -52,7 +55,7 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 		usuarios, membros, providers := fakesDePrestador()
 		p := novoProviderComPreferencias(usuarios, membros, providers)
 		p.AtivarAgenda()
-		uc := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios)
+		uc := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios, membros, memoria.NovoConviteMemoria())
 
 		out, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
 			UsuarioID:                 "provider-1",
@@ -76,7 +79,7 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 		_, p := criarPrestador(usuarios, membros, providers, "provider-1", "João Silva", "joao@email.com", "11999998888", senhaDeTeste)
 		p.PermiteMarcacaoPeloPrestador = true
 		providers.Salvar(p)
-		uc := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios)
+		uc := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios, membros, memoria.NovoConviteMemoria())
 
 		out, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
 			UsuarioID:                    "provider-1",
@@ -118,7 +121,7 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 	t.Run("retorna erro quando descanso é negativo", func(t *testing.T) {
 		usuarios, membros, providers := fakesDePrestador()
 		novoProviderComPreferencias(usuarios, membros, providers)
-		uc := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios)
+		uc := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios, membros, memoria.NovoConviteMemoria())
 
 		_, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
 			UsuarioID:                 "provider-1",
@@ -134,8 +137,8 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 	})
 
 	t.Run("retorna erro quando prestador não existe", func(t *testing.T) {
-		usuarios, _, providers := fakesDePrestador()
-		uc := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios)
+		usuarios, membros, providers := fakesDePrestador()
+		uc := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios, membros, memoria.NovoConviteMemoria())
 
 		_, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
 			UsuarioID:                 "provider-1",
@@ -152,7 +155,7 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 	t.Run("define o expediente padrão com três blocos curtos", func(t *testing.T) {
 		usuarios, membros, providers := fakesDePrestador()
 		novoProviderComPreferencias(usuarios, membros, providers)
-		uc := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios)
+		uc := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios, membros, memoria.NovoConviteMemoria())
 
 		out, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
 			UsuarioID:                 "provider-1",
@@ -183,7 +186,7 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 	t.Run("aceita expediente padrão vazio (nenhum horário)", func(t *testing.T) {
 		usuarios, membros, providers := fakesDePrestador()
 		novoProviderComPreferencias(usuarios, membros, providers)
-		uc := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios)
+		uc := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios, membros, memoria.NovoConviteMemoria())
 
 		out, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
 			UsuarioID:                 "provider-1",
@@ -205,7 +208,7 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 	t.Run("retorna erro quando um bloco do expediente padrão é inválido", func(t *testing.T) {
 		usuarios, membros, providers := fakesDePrestador()
 		novoProviderComPreferencias(usuarios, membros, providers)
-		uc := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios)
+		uc := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios, membros, memoria.NovoConviteMemoria())
 
 		_, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
 			UsuarioID:                 "provider-1",
@@ -224,7 +227,7 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 	t.Run("retorna erro quando blocos do expediente padrão se sobrepõem", func(t *testing.T) {
 		usuarios, membros, providers := fakesDePrestador()
 		novoProviderComPreferencias(usuarios, membros, providers)
-		uc := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios)
+		uc := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios, membros, memoria.NovoConviteMemoria())
 
 		_, err := uc.Executar(ucprovider.AtualizarPreferenciasInput{
 			UsuarioID:                 "provider-1",
@@ -242,4 +245,88 @@ func TestAtualizarPreferenciasProvider(t *testing.T) {
 			t.Errorf("esperava ErrBlocosSobrepostos, got: %v", err)
 		}
 	})
+
+	t.Run("ativa e desativa a equipe numa agenda de uma pessoa só", func(t *testing.T) {
+		usuarios, membros, providers := fakesDePrestador()
+		novoProviderComPreferencias(usuarios, membros, providers)
+		uc := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios, membros, memoria.NovoConviteMemoria())
+
+		out, err := uc.Executar(entradaComEquipe(true))
+		if err != nil {
+			t.Fatalf("esperava sucesso ao ativar, got: %v", err)
+		}
+		if !out.PermiteEquipe {
+			t.Error("esperava equipe ativada na saída")
+		}
+		persistido, _ := providers.BuscarPorID("provider-1")
+		if !persistido.PermiteEquipe {
+			t.Error("esperava equipe ativada persistida")
+		}
+
+		out, err = uc.Executar(entradaComEquipe(false))
+		if err != nil {
+			t.Fatalf("esperava sucesso ao desativar, got: %v", err)
+		}
+		if out.PermiteEquipe {
+			t.Error("esperava equipe desativada na saída")
+		}
+	})
+
+	// Desligar a equipe com alguém ainda dentro esconderia da dona uma pessoa
+	// que continua operando a agenda — daí a recusa em vez do desligamento.
+	t.Run("recusa desativar a equipe com outro membro na agenda", func(t *testing.T) {
+		usuarios, membros, providers := fakesDePrestador()
+		p := novoProviderComPreferencias(usuarios, membros, providers)
+		p.AtivarEquipe()
+		providers.Salvar(p)
+
+		criarPrestador(usuarios, membros, providers, "operadora-1", "Recepção", "recepcao@email.com", "11988887777", senhaDeTeste)
+		vinculo, err := membro.Novo("m-operadora-1", "operadora-1", "provider-1", membro.PapelOperador)
+		if err != nil {
+			t.Fatalf("vínculo de teste inválido: %v", err)
+		}
+		membros.Salvar(vinculo)
+
+		uc := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios, membros, memoria.NovoConviteMemoria())
+		if _, err := uc.Executar(entradaComEquipe(false)); err != ucprovider.ErrEquipeComMembros {
+			t.Errorf("esperava ErrEquipeComMembros, got: %v", err)
+		}
+
+		persistido, _ := providers.BuscarPorID("provider-1")
+		if !persistido.PermiteEquipe {
+			t.Error("esperava a equipe continuar ativada após a recusa")
+		}
+	})
+
+	t.Run("recusa desativar a equipe com convite pendente", func(t *testing.T) {
+		usuarios, membros, providers := fakesDePrestador()
+		p := novoProviderComPreferencias(usuarios, membros, providers)
+		p.AtivarEquipe()
+		providers.Salvar(p)
+
+		convites := memoria.NovoConviteMemoria()
+		pendente, err := convite.Novo("hash-de-teste", "recepcao@email.com", "provider-1", membro.PapelOperador, time.Hour)
+		if err != nil {
+			t.Fatalf("convite de teste inválido: %v", err)
+		}
+		convites.Salvar(pendente)
+
+		uc := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios, membros, convites)
+		if _, err := uc.Executar(entradaComEquipe(false)); err != ucprovider.ErrEquipeComMembros {
+			t.Errorf("esperava ErrEquipeComMembros, got: %v", err)
+		}
+	})
+}
+
+// entradaComEquipe monta o input mínimo válido das preferências variando só o
+// que estes casos exercitam.
+func entradaComEquipe(permite bool) ucprovider.AtualizarPreferenciasInput {
+	return ucprovider.AtualizarPreferenciasInput{
+		UsuarioID:                 "provider-1",
+		ProviderID:                "provider-1",
+		Telefone:                  "11999998888",
+		DuracaoAtendimentoMinutos: 60,
+		AceitaAgendamentos:        true,
+		PermiteEquipe:             permite,
+	}
 }

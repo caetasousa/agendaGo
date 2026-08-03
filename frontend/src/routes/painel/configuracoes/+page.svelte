@@ -26,6 +26,8 @@
 	// svelte-ignore state_referenced_locally
 	let permiteMarcacaoPeloPrestador = $state(data.permiteMarcacaoPeloPrestador);
 	// svelte-ignore state_referenced_locally
+	let permiteEquipe = $state(data.permiteEquipe);
+	// svelte-ignore state_referenced_locally
 	let telefonePendente = $state(data.telefonePendente);
 	// svelte-ignore state_referenced_locally
 	let slug = $state(data.slug);
@@ -50,6 +52,7 @@
 			duracaoAtendimentoMinutos,
 			horariosPadrao,
 			permiteMarcacaoPeloPrestador,
+			permiteEquipe,
 			slug
 		});
 	}
@@ -101,6 +104,7 @@
 				duracaoAtendimentoMinutos,
 				horariosPadrao,
 				permiteMarcacaoPeloPrestador,
+				permiteEquipe,
 				slug
 			});
 			telefone = salvo.telefone;
@@ -109,13 +113,25 @@
 			duracaoAtendimentoMinutos = salvo.duracaoAtendimentoMinutos;
 			horariosPadrao = salvo.horariosPadrao;
 			permiteMarcacaoPeloPrestador = salvo.permiteMarcacaoPeloPrestador;
+			permiteEquipe = salvo.permiteEquipe;
 			slug = salvo.slug;
 			// o backend só aceita um telefone real (valida no mínimo 8 dígitos),
 			// então se chegou aqui o telefone pendente foi resolvido
 			const estavaPendente = telefonePendente;
 			telefonePendente = false;
+			// A resposta vem plana, mas na sessão o telefone é da conta e o resto é
+			// da agenda. Espalhar tudo no topo deixaria a sidebar lendo
+			// provider.permiteEquipe desatualizado até a próxima navegação.
 			if (sessao.usuario) {
-				sessao.definir({ ...sessao.usuario, ...salvo, telefonePendente: false });
+				const { telefone: telefoneSalvo, ...agenda } = salvo;
+				sessao.definir({
+					...sessao.usuario,
+					telefone: telefoneSalvo,
+					telefonePendente: false,
+					provider: sessao.usuario.provider
+						? { ...sessao.usuario.provider, ...agenda }
+						: undefined
+				});
 			}
 			if (estavaPendente) {
 				goto('/painel');
@@ -240,6 +256,36 @@
 					class="relative mt-0.5 h-6 w-11 shrink-0 rounded-full border border-hairline-strong bg-surface-elevated transition-colors peer-checked:border-accent-green peer-checked:bg-accent-green/30 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-link after:absolute after:top-0.5 after:left-0.5 after:h-5 after:w-5 after:rounded-full after:bg-mute after:transition-transform after:content-[''] peer-checked:after:translate-x-5 peer-checked:after:bg-accent-green"
 				></span>
 			</label>
+		</div>
+
+		<!-- Equipe: toggle -->
+		<div class="rounded-xl border border-hairline-strong bg-surface-card p-6">
+			<label for="permite-equipe" class="flex cursor-pointer items-start justify-between gap-4">
+				<span class="min-w-0">
+					<span class="block text-sm font-semibold text-ink">Equipe</span>
+					<span class="mt-1 block text-sm text-body">
+						Quando ativo, você pode convidar outra pessoa (recepção, sócia) para operar esta
+						agenda com o login dela.
+					</span>
+				</span>
+				<input
+					id="permite-equipe"
+					type="checkbox"
+					bind:checked={permiteEquipe}
+					onchange={() => (sucesso = false)}
+					class="peer sr-only"
+				/>
+				<span
+					class="relative mt-0.5 h-6 w-11 shrink-0 rounded-full border border-hairline-strong bg-surface-elevated transition-colors peer-checked:border-accent-green peer-checked:bg-accent-green/30 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-link after:absolute after:top-0.5 after:left-0.5 after:h-5 after:w-5 after:rounded-full after:bg-mute after:transition-transform after:content-[''] peer-checked:after:translate-x-5 peer-checked:after:bg-accent-green"
+				></span>
+			</label>
+			{#if !permiteEquipe && data.permiteEquipe}
+				<p class="mt-3 flex items-start gap-2 text-xs text-body">
+					<span class="mt-1 h-2 w-2 shrink-0 rounded-full bg-accent-yellow"></span>
+					Só desativa se ninguém além de você tiver acesso — remova quem estiver na equipe
+					primeiro.
+				</p>
+			{/if}
 		</div>
 
 		<!-- Duração e descanso -->

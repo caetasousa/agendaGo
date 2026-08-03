@@ -5,6 +5,7 @@ import (
 
 	"agendago/internal/domain/admin"
 	"agendago/internal/domain/client"
+	"agendago/internal/domain/convite"
 	"agendago/internal/domain/membro"
 	"agendago/internal/domain/provider"
 	"agendago/internal/domain/signup"
@@ -63,6 +64,18 @@ type repositorioPreferencias interface {
 	BuscarPorID(id string) (*provider.Provider, error)
 	BuscarPorSlug(slug string) (*provider.Provider, error)
 	Atualizar(p *provider.Provider) error
+}
+
+// listadorMembros lista quem opera a agenda. As preferências consultam para
+// não deixar o recurso de equipe ser desligado com gente ainda dentro.
+type listadorMembros interface {
+	ListarPorProvider(providerID string) ([]*membro.Membro, error)
+}
+
+// listadorConvitesPendentes lista os convites emitidos e não aceitos — um
+// convite no ar é acesso a caminho, e conta tanto quanto um vínculo já criado.
+type listadorConvitesPendentes interface {
+	ListarPendentesPorProvider(providerID string) ([]*convite.Convite, error)
 }
 
 // repositorioUsuario busca e persiste os dados mutáveis da conta — hoje só o

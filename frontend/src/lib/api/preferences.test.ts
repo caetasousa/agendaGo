@@ -28,7 +28,8 @@ describe('atualizarPreferencias', () => {
 			descansoMinutos: 15,
 			duracaoAtendimentoMinutos: 60,
 			horariosPadrao,
-			permiteMarcacaoPeloPrestador: true
+			permiteMarcacaoPeloPrestador: true,
+			permiteEquipe: false
 		});
 		expect(resultado).toEqual({ telefone: '11999998888', aceitaAgendamentos: true, descansoMinutos: 15, horariosPadrao });
 	});
@@ -46,7 +47,8 @@ describe('atualizarPreferencias', () => {
 			descansoMinutos: 0,
 			duracaoAtendimentoMinutos: 60,
 			horariosPadrao: [],
-			permiteMarcacaoPeloPrestador: true
+			permiteMarcacaoPeloPrestador: true,
+			permiteEquipe: false
 		});
 
 		expect(fn.mock.calls[0][0]).toContain('/providers/me/preferencias');
@@ -59,7 +61,8 @@ describe('atualizarPreferencias', () => {
 				descansoMinutos: 0,
 				duracaoAtendimentoMinutos: 60,
 				horariosPadrao: [],
-				permiteMarcacaoPeloPrestador: true
+				permiteMarcacaoPeloPrestador: true,
+				permiteEquipe: false
 			})
 		});
 	});
@@ -82,7 +85,8 @@ describe('atualizarPreferencias', () => {
 			descansoMinutos: 10,
 			duracaoAtendimentoMinutos: 60,
 			horariosPadrao: tresBlocos,
-			permiteMarcacaoPeloPrestador: true
+			permiteMarcacaoPeloPrestador: true,
+			permiteEquipe: false
 		});
 
 		const corpoEnviado = JSON.parse(fn.mock.calls[0][1].body);
@@ -98,7 +102,8 @@ describe('atualizarPreferencias', () => {
 				descansoMinutos: -1,
 				duracaoAtendimentoMinutos: 60,
 				horariosPadrao: [],
-				permiteMarcacaoPeloPrestador: true
+				permiteMarcacaoPeloPrestador: true,
+				permiteEquipe: false
 			})
 		).rejects.toBeInstanceOf(ApiError);
 	});
@@ -116,7 +121,8 @@ describe('atualizarPreferencias', () => {
 				descansoMinutos: 0,
 				duracaoAtendimentoMinutos: 60,
 				horariosPadrao: [],
-				permiteMarcacaoPeloPrestador: true
+				permiteMarcacaoPeloPrestador: true,
+				permiteEquipe: false
 			})
 		).rejects.toMatchObject({ status: 403 });
 	});

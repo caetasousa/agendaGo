@@ -32,6 +32,12 @@ var (
 	// ErrProviderNaoEncontrado é retornado quando a agenda do convite sumiu.
 	ErrProviderNaoEncontrado = errors.New("agenda não encontrada")
 
+	// ErrEquipeDesativada é retornado quando a agenda não ligou o recurso de
+	// equipe. Ele nasce desligado, e sem ele a agenda é de uma pessoa só — não
+	// basta esconder a tela, senão uma chamada direta à API contornaria a
+	// escolha de quem opera a agenda.
+	ErrEquipeDesativada = errors.New("a equipe não está ativada nesta agenda")
+
 	// ErrMembroNaoEncontrado é retornado ao remover um vínculo que não existe
 	// nesta agenda.
 	ErrMembroNaoEncontrado = errors.New("membro não encontrado nesta agenda")

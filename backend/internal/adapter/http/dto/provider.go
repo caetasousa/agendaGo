@@ -29,6 +29,7 @@ type AtualizarPreferenciasRequest struct {
 	DuracaoAtendimentoMinutos    int        `json:"duracaoAtendimentoMinutos" validate:"min=15,max=1440"`
 	HorariosPadrao               []BlocoDTO `json:"horariosPadrao"  validate:"dive"`
 	PermiteMarcacaoPeloPrestador bool       `json:"permiteMarcacaoPeloPrestador"`
+	PermiteEquipe                bool       `json:"permiteEquipe"`
 }
 
 func (r AtualizarPreferenciasRequest) Validar() error {
@@ -43,4 +44,5 @@ type AtualizarPreferenciasResponse struct {
 	DuracaoAtendimentoMinutos    int        `json:"duracaoAtendimentoMinutos"`
 	HorariosPadrao               []BlocoDTO `json:"horariosPadrao"`
 	PermiteMarcacaoPeloPrestador bool       `json:"permiteMarcacaoPeloPrestador"`
+	PermiteEquipe                bool       `json:"permiteEquipe"`
 }

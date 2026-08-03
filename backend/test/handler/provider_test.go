@@ -34,7 +34,7 @@ func novoHandler() *handler.ProviderHandler {
 	notificador := email.NovoNotificador(email.NovaMailerMemoria(), "http://localhost:5173", time.UTC, email.ExecutorSincrono)
 	solicitar := ucprovider.NovoSolicitarCadastroUseCase(usuarios, clients, admins, pendentes, notificador, security.NovoHasherArgon2id())
 	confirmar := ucprovider.NovoConfirmarCadastroUseCase(providers, usuarios, membros, clients, admins, pendentes)
-	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios)
+	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios, membros, memoria.NovoConviteMemoria())
 	listar := ucprovider.NovoListarUseCase(providers)
 	buscarResumo := ucprovider.NovoBuscarResumoUseCase(providers, membros)
 	return handler.NovoProviderHandler(solicitar, confirmar, atualizarPreferencias, listar, buscarResumo, identidadeAusente)
@@ -75,7 +75,7 @@ func novoRouterPreferencias(t *testing.T) (r *chi.Mux, providerID string) {
 	identidadeDoContexto := func(req *http.Request) (ucauth.Identidade, bool) {
 		return middleware.IdentidadeDoContexto(req.Context())
 	}
-	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios)
+	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios, membros, memoria.NovoConviteMemoria())
 	listar := ucprovider.NovoListarUseCase(providers)
 	buscarResumo := ucprovider.NovoBuscarResumoUseCase(providers, membros)
 	providerHandler := handler.NovoProviderHandler(nil, nil, atualizarPreferencias, listar, buscarResumo, identidadeDoContexto)

@@ -7,6 +7,7 @@
 
 	const ehPrestador = $derived(sessao.usuario?.tipo === 'provider');
 	const permiteMarcacao = $derived(sessao.usuario?.provider?.permiteMarcacaoPeloPrestador ?? false);
+	const permiteEquipe = $derived(sessao.usuario?.provider?.permiteEquipe ?? false);
 
 	type Item = { href: string; rotulo: string; icone: 'inicio' | 'agendamentos' | 'disponibilidade' | 'configuracoes' | 'marcar' | 'agendar' | 'equipe' };
 	type Secao = { titulo: string | null; itens: Item[] };
@@ -34,17 +35,18 @@
 			atendimento.push({ href: '/painel/marcar', rotulo: 'Marcar para cliente', icone: 'marcar' });
 		}
 
+		const agenda: Item[] = [
+			{ href: '/painel/disponibilidade', rotulo: 'Disponibilidade', icone: 'disponibilidade' },
+			{ href: '/painel/configuracoes', rotulo: 'Configurações', icone: 'configuracoes' }
+		];
+		if (permiteEquipe) {
+			agenda.push({ href: '/painel/equipe', rotulo: 'Equipe', icone: 'equipe' });
+		}
+
 		return [
 			{ titulo: null, itens: [{ href: '/painel', rotulo: 'Início', icone: 'inicio' }] },
 			{ titulo: 'Atendimento', itens: atendimento },
-			{
-				titulo: 'Sua agenda',
-				itens: [
-					{ href: '/painel/disponibilidade', rotulo: 'Disponibilidade', icone: 'disponibilidade' },
-					{ href: '/painel/configuracoes', rotulo: 'Configurações', icone: 'configuracoes' },
-					{ href: '/painel/equipe', rotulo: 'Equipe', icone: 'equipe' }
-				]
-			}
+			{ titulo: 'Sua agenda', itens: agenda }
 		];
 	});
 

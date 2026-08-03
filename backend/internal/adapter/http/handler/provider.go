@@ -137,6 +137,7 @@ func (h *ProviderHandler) ConfirmarCadastro(w http.ResponseWriter, r *http.Reque
 //	@Failure		401		{object}	map[string]string
 //	@Failure		403		{object}	map[string]string
 //	@Failure		404		{object}	map[string]string
+//	@Failure		409		{object}	map[string]string
 //	@Router			/providers/me/preferencias [put]
 func (h *ProviderHandler) AtualizarPreferencias(w http.ResponseWriter, r *http.Request) {
 	id, ok := h.identidadeDoContexto(r)
@@ -175,6 +176,7 @@ func (h *ProviderHandler) AtualizarPreferencias(w http.ResponseWriter, r *http.R
 		DuracaoAtendimentoMinutos:    req.DuracaoAtendimentoMinutos,
 		HorariosPadrao:               horarios,
 		PermiteMarcacaoPeloPrestador: req.PermiteMarcacaoPeloPrestador,
+		PermiteEquipe:                req.PermiteEquipe,
 		Slug:                         req.Slug,
 	})
 	if err != nil {
@@ -189,6 +191,8 @@ func (h *ProviderHandler) AtualizarPreferencias(w http.ResponseWriter, r *http.R
 			responderErro(w, http.StatusBadRequest, err.Error())
 		case errors.Is(err, ucprovider.ErrProviderNaoEncontrado):
 			responderErro(w, http.StatusNotFound, err.Error())
+		case errors.Is(err, ucprovider.ErrEquipeComMembros):
+			responderErro(w, http.StatusConflict, err.Error())
 		default:
 			responderErroInterno(w, r, err)
 		}
@@ -203,6 +207,7 @@ func (h *ProviderHandler) AtualizarPreferencias(w http.ResponseWriter, r *http.R
 		DuracaoAtendimentoMinutos:    output.DuracaoAtendimentoMinutos,
 		HorariosPadrao:               blocosParaDTO(output.HorariosPadrao),
 		PermiteMarcacaoPeloPrestador: output.PermiteMarcacaoPeloPrestador,
+		PermiteEquipe:                output.PermiteEquipe,
 	})
 }
 

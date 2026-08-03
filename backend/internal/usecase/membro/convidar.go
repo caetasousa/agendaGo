@@ -56,6 +56,9 @@ func NovoConvidarUseCase(
 //
 // Reconvidar o mesmo email substitui o convite anterior, em vez de acumular
 // links válidos para o mesmo destino.
+//
+// Retorna ErrEquipeDesativada quando a agenda não ligou o recurso de equipe em
+// Configurações.
 func (uc *ConvidarUseCase) Executar(in ConvidarInput) error {
 	p, err := uc.providers.BuscarPorID(in.ProviderID)
 	if err != nil {
@@ -63,6 +66,9 @@ func (uc *ConvidarUseCase) Executar(in ConvidarInput) error {
 	}
 	if p == nil {
 		return ErrProviderNaoEncontrado
+	}
+	if !p.PermiteEquipe {
+		return ErrEquipeDesativada
 	}
 
 	if indisponivel, err := uc.emailJaTemConta(in.Email); err != nil {

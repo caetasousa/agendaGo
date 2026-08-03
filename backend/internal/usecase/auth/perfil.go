@@ -17,6 +17,7 @@ type AgendaDoPerfil struct {
 	DuracaoAtendimentoMinutos    int
 	HorariosPadrao               []availability.TimeBlock
 	PermiteMarcacaoPeloPrestador bool
+	PermiteEquipe                bool
 }
 
 // PerfilOutput contém os dados do usuário autenticado. Provider só é
@@ -83,6 +84,7 @@ func (uc *PerfilUseCase) Executar(id Identidade) (*PerfilOutput, error) {
 				DuracaoAtendimentoMinutos:    p.DuracaoAtendimentoMinutos,
 				HorariosPadrao:               p.HorariosPadrao,
 				PermiteMarcacaoPeloPrestador: p.PermiteMarcacaoPeloPrestador,
+				PermiteEquipe:                p.PermiteEquipe,
 			},
 			TelefonePendente: u.Telefone == TelefonePendente,
 		}, nil

@@ -29,8 +29,12 @@ type Provider struct {
 	// exemplo). Nasce true — é uma capacidade que já existe por padrão,
 	// desativável em Preferências.
 	PermiteMarcacaoPeloPrestador bool
-	CriadoEm                     time.Time
-	AtualizadoEm                 time.Time
+	// PermiteEquipe controla se esta agenda pode ser operada por mais de uma
+	// pessoa. Nasce false: a maioria dos prestadores trabalha sozinha, e quem
+	// precisa de recepção ou sócia liga o recurso em Configurações.
+	PermiteEquipe bool
+	CriadoEm      time.Time
+	AtualizadoEm  time.Time
 }
 
 var (
@@ -62,6 +66,7 @@ func Novo(id, nome string) (*Provider, error) {
 		DuracaoAtendimentoMinutos:    duracaoAtendimentoSugerida,
 		HorariosPadrao:               horariosComerciaisPadrao,
 		PermiteMarcacaoPeloPrestador: false,
+		PermiteEquipe:                false,
 		CriadoEm:                     agora,
 		AtualizadoEm:                 agora,
 	}, nil
@@ -116,6 +121,21 @@ func (p *Provider) AtivarMarcacaoPeloPrestador() {
 // agendamentos na própria agenda — só sobra o fluxo normal de solicitação.
 func (p *Provider) DesativarMarcacaoPeloPrestador() {
 	p.PermiteMarcacaoPeloPrestador = false
+	p.AtualizadoEm = time.Now()
+}
+
+// AtivarEquipe abre a agenda para ser operada por mais de uma pessoa —
+// convites, lista de quem tem acesso e remoção de acesso passam a valer.
+func (p *Provider) AtivarEquipe() {
+	p.PermiteEquipe = true
+	p.AtualizadoEm = time.Now()
+}
+
+// DesativarEquipe fecha a agenda de volta a uma pessoa só. Quem já tem acesso
+// não é removido aqui — o domínio não conhece os vínculos; é o usecase que
+// impede desligar enquanto houver mais alguém na agenda.
+func (p *Provider) DesativarEquipe() {
+	p.PermiteEquipe = false
 	p.AtualizadoEm = time.Now()
 }
 

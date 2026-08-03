@@ -46,7 +46,7 @@ func novoRouterComPapel(t *testing.T, papel membro.Papel) *chi.Mux {
 	identidadeDoContexto := func(req *http.Request) (ucauth.Identidade, bool) {
 		return middleware.IdentidadeDoContexto(req.Context())
 	}
-	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios)
+	atualizarPreferencias := ucprovider.NovoAtualizarPreferenciasUseCase(providers, usuarios, membros, memoria.NovoConviteMemoria())
 	providerHandler := handler.NovoProviderHandler(nil, nil, atualizarPreferencias, nil, nil, identidadeDoContexto)
 	authHandler := handler.NovoAuthHandler(loginProvider, nil, nil, nil, nil, false, nil, identidadeDoContexto)
 	authMw := middleware.NovoAuth(validarSessao, false)

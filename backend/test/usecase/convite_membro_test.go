@@ -33,7 +33,11 @@ type ambienteConvite struct {
 func novoAmbienteConvite(t *testing.T) *ambienteConvite {
 	t.Helper()
 	usuarios, membros, providers := fakesDePrestador()
-	criarPrestador(usuarios, membros, providers, "provider-1", "Marina Fisio", "marina@email.com", "11999998888", senhaDeTeste)
+	_, p := criarPrestador(usuarios, membros, providers, "provider-1", "Marina Fisio", "marina@email.com", "11999998888", senhaDeTeste)
+	// A equipe nasce desligada em Configurações; estes casos são sobre o que
+	// acontece DEPOIS de ligar. O caso de estar desligada tem teste próprio.
+	p.AtivarEquipe()
+	providers.Salvar(p)
 
 	convites := memoria.NovoConviteMemoria()
 	clients := memoria.NovoClientMemoria()
@@ -48,7 +52,7 @@ func novoAmbienteConvite(t *testing.T) *ambienteConvite {
 		cancelar:   ucmembro.NovoCancelarConviteUseCase(convites),
 		consultar:  ucmembro.NovoConsultarConviteUseCase(convites, providers),
 		aceitar:    ucmembro.NovoAceitarConviteUseCase(convites, usuarios, membros, providers, hasher),
-		listar:     ucmembro.NovoListarEquipeUseCase(membros, usuarios, convites),
+		listar:     ucmembro.NovoListarEquipeUseCase(membros, usuarios, convites, providers),
 		remover:    ucmembro.NovoRemoverMembroUseCase(membros, membros, usuarios, sessoes),
 		usuarios:   usuarios,
 		membros:    membros,
@@ -387,6 +391,42 @@ func TestEquipeDaAgenda(t *testing.T) {
 		err := amb.remover.Executar(ucmembro.RemoverInput{ProviderID: "outra-agenda", MembroID: "m-provider-1"})
 		if err != ucmembro.ErrMembroNaoEncontrado {
 			t.Errorf("esperava ErrMembroNaoEncontrado, got: %v", err)
+		}
+	})
+}
+
+// Esconder a tela não basta: sem a recusa aqui, uma chamada direta à API
+// contornaria a escolha de quem opera a agenda.
+func TestEquipeDesativada(t *testing.T) {
+	// desligarEquipe devolve a agenda ao estado em que ela nasce.
+	desligarEquipe := func(t *testing.T, amb *ambienteConvite) {
+		t.Helper()
+		p, _ := amb.providers.BuscarPorID(amb.providerID)
+		p.DesativarEquipe()
+		amb.providers.Salvar(p)
+	}
+
+	t.Run("não convida", func(t *testing.T) {
+		amb := novoAmbienteConvite(t)
+		desligarEquipe(t, amb)
+
+		err := amb.convidar.Executar(ucmembro.ConvidarInput{
+			ProviderID: amb.providerID, Email: "recepcao@email.com", Papel: membro.PapelOperador,
+		})
+		if err != ucmembro.ErrEquipeDesativada {
+			t.Errorf("esperava ErrEquipeDesativada, got: %v", err)
+		}
+		if len(amb.mailer.Enviadas()) != 0 {
+			t.Error("esperava nenhum email de convite enviado")
+		}
+	})
+
+	t.Run("não lista a equipe", func(t *testing.T) {
+		amb := novoAmbienteConvite(t)
+		desligarEquipe(t, amb)
+
+		if _, err := amb.listar.Executar(amb.providerID); err != ucmembro.ErrEquipeDesativada {
+			t.Errorf("esperava ErrEquipeDesativada, got: %v", err)
 		}
 	})
 }

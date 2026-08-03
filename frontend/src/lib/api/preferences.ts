@@ -14,6 +14,7 @@ export interface AtualizarPreferenciasRequest {
 	duracaoAtendimentoMinutos: number;
 	horariosPadrao: Bloco[];
 	permiteMarcacaoPeloPrestador: boolean;
+	permiteEquipe: boolean;
 }
 
 export interface AtualizarPreferenciasResponse {
@@ -24,6 +25,7 @@ export interface AtualizarPreferenciasResponse {
 	duracaoAtendimentoMinutos: number;
 	horariosPadrao: Bloco[];
 	permiteMarcacaoPeloPrestador: boolean;
+	permiteEquipe: boolean;
 }
 
 export function atualizarPreferencias(

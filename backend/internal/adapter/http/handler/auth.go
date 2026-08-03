@@ -193,6 +193,7 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 			DuracaoAtendimentoMinutos:    perfil.Provider.DuracaoAtendimentoMinutos,
 			HorariosPadrao:               blocosParaDTO(perfil.Provider.HorariosPadrao),
 			PermiteMarcacaoPeloPrestador: perfil.Provider.PermiteMarcacaoPeloPrestador,
+			PermiteEquipe:                perfil.Provider.PermiteEquipe,
 		}
 	}
 	responderJSON(w, http.StatusOK, resp)
