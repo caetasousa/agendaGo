@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: test test-all test-backend test-backend-integration test-frontend test-e2e
+.PHONY: test test-all test-backend test-backend-integration test-frontend test-e2e test-rollback
 
 # Roda os testes rápidos de backend e frontend (sem Docker, sem browsers).
 # É o alvo padrão para checar o projeto antes de commitar.
@@ -10,7 +10,7 @@ test: test-backend test-frontend
 # Exige Docker rodando; para o E2E, também exige `docker compose up` no ar
 # (API em :8080 e web em :5173) e o browser do Playwright instalado
 # (`cd frontend && npx playwright install chromium`).
-test-all: test-backend-integration test-frontend test-e2e
+test-all: test-backend-integration test-frontend test-e2e test-rollback
 
 # Testes rápidos do backend (domínio, usecases, handlers — em memória).
 test-backend:
@@ -27,3 +27,9 @@ test-frontend:
 # Testes E2E do frontend (Playwright). Exige `docker compose up` no ar.
 test-e2e:
 	@cd frontend && npm run test:e2e
+
+# Ensaia o ciclo de rollback (backup carimbado, restore e o guard que impede
+# voltar código para trás do schema) num ambiente descartável. Exige Docker;
+# não toca em produção nem no banco de desenvolvimento.
+test-rollback:
+	@./scripts/testar-rollback.sh

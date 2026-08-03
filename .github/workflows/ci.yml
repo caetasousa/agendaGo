@@ -63,6 +63,18 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Migration não escreve dado. Todo backfill precisa decidir com que valor
+      # as linhas antigas ficam, e essa decisão é do domínio — em SQL ela vira
+      # uma segunda fonte da verdade, sem teste e sem conserto, porque migration
+      # aplicada não se corrige. A regra vivia só nos comentários das migrations,
+      # e comentário não reprova pull request.
+      - name: migrations não podem escrever dado
+        run: |
+          if grep -nE '^[[:space:]]*(UPDATE|INSERT|DELETE)[[:space:]]' backend/migrations/*.sql; then
+            echo "::error::migration com statement de dados — o preenchimento roda pelo domínio, não em SQL (ver CLAUDE.md)"
+            exit 1
+          fi
+
       - uses: ./.github/actions/docker-hub-login
         with:
           usuario: ${{ secrets.DOCKERHUB_USERNAME }}
