@@ -418,22 +418,26 @@ O padrão **expand/contract** divide a mudança em dois deploys:
 1. **Expand** — só adiciona. Cria as tabelas novas, copia os dados, e **afrouxa** o que o código novo vai parar de preencher. Nada é removido, então as duas versões do código funcionam ao mesmo tempo. O rollback é voltar a imagem.
 2. **Contract** — só depois de confirmado que ninguém lê mais o que ficou para trás, um deploy seguinte remove. É o passo irreversível, e por isso ele espera.
 
-`V14__separa_identidade_de_provider.sql` é o exemplo no repositório: cria `usuarios` e `provider_membros`, copia cada prestador para as duas, e **solta o `NOT NULL`** das colunas de identidade que ficaram em `providers`. Esse último passo é o que menos parece necessário e é o que mais dói esquecer — sem ele, o código novo (que não escreve mais nessas colunas) não consegue inserir nenhum prestador, e a falha só aparece no primeiro cadastro em produção. Aqui ela apareceu num teste de integração, que aplica a migration num Postgres real e tenta o `INSERT`.
+**Nenhuma migration deste repositório segue esse padrão**, e isso é decisão, não esquecimento. Coluna obrigatória entra `NOT NULL` de uma vez (`V13`, `V17`, `V19`), e a `V14__separa_identidade_de_provider.sql` cria `usuarios` e `provider_membros` e remove a identidade de `providers` no mesmo passo, sem converter prestador nenhum.
 
-O backfill dessa migration usa outra manobra que vale registrar: ao criar a conta de cada prestador existente, **reusa o mesmo UUID** da agenda. Como `sessions.user_id` e `social_identities.user_id` apontavam para aquele id, as duas tabelas seguiram válidas sem serem migradas — e nenhuma sessão aberta caiu no deploy.
+O que se ganha é o assunto do CLAUDE.md: **migration nenhuma escreve dado**. Todo backfill precisa decidir com que valor as linhas antigas ficam, e essa decisão é do domínio; escrita em SQL ela vira uma segunda fonte da verdade — sem teste, e sem conserto, porque migration aplicada não se corrige. A V17 é o caso mais claro: preencher `slug` a partir do nome exigiria reimplementar `provider.GerarSlug` em SQL, com dobra de acentos, formato aceito e desempate de homônimos. A V14 tinha a sua: decidir que todo prestador convertido vira `'dono'` da própria agenda é regra de `internal/domain/membro`, não de um `INSERT ... SELECT`.
+
+Some junto o passo que mais dói esquecer no expand/contract — soltar o `NOT NULL` das colunas que o código novo parou de preencher. Removendo-as no mesmo ato, não há janela em que a versão antiga e a nova precisem conviver. O teste de integração da V14 continua verificando o resultado: aplica a migration num Postgres real e insere um prestador só com dados de agenda.
+
+O preço é explícito: `ADD COLUMN ... NOT NULL` sem `DEFAULT` **falha se a tabela tiver linhas**. Toda mudança de schema passa a exigir banco recriado (`docker compose down -v`), e o dia em que houver base real esse atalho morre junto com o "banco descartável" — a divisão em dois deploys volta a ser obrigatória, e o backfill sai do SQL para um comando que fale com o domínio.
 
 **Para estudar:**
 - [Martin Fowler — ParallelChange (expand/contract)](https://martinfowler.com/bliki/ParallelChange.html) (a formulação original do padrão)
 - [PostgreSQL — ALTER TABLE](https://www.postgresql.org/docs/16/sql-altertable.html) (quais alterações travam a tabela e quais não travam)
 
 > [!IMPORTANT]
-> **A V14 não seguiu esse padrão, de propósito.** Ela cria as tabelas novas e
-> remove as colunas antigas de `providers` no mesmo passo, porque neste momento
-> do projeto o banco de produção é descartável: não há usuário real cuja sessão
-> ou senha precise sobreviver ao deploy. Fazer expand/contract ali seria pagar
-> duas migrations, uma coluna órfã e um deploy extra para proteger dado que não
-> existe. **Quando houver base real, a divisão volta a ser obrigatória** — é por
-> isso que o padrão está documentado aqui, e não porque a V14 o use.
+> **O padrão está documentado aqui porque um dia será obrigatório, não porque
+> alguma migration o use.** Enquanto o banco de produção for descartável, não há
+> usuário real cuja sessão ou senha precise sobreviver ao deploy: expand/contract
+> custaria duas migrations, uma coluna órfã e um deploy extra para proteger dado
+> que não existe. **Quando houver base real, a divisão volta a ser obrigatória**
+> — e com ela o backfill, que aí precisa rodar fora do SQL para não trazer regra
+> de negócio de volta para dentro do banco.
 
 ### Autorização por papel, resolvida no domínio
 
