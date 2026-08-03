@@ -39,7 +39,7 @@ Três camadas, refletidas no domínio (`internal/domain/{user,availability,slot,
 ## 1️⃣ 🗓️ Disponibilidade do prestador
 
 ### Expediente padrão
-Não há grade recorrente por dia da semana: o prestador configura, em Preferências, um
+Não há grade recorrente por dia da semana: o prestador configura, em Configurações, um
 único conjunto de **blocos de horário** (`horarios_padrao`) que vale igual de segunda a
 sexta — quantos períodos quiser, inclusive blocos curtos, com os intervalos que fizer
 sentido entre eles. Um prestador recém-cadastrado começa com uma sugestão de dia
@@ -117,7 +117,7 @@ slots livres  =  blocos do dia  −  agendamentos (SOLICITADO / CONFIRMADO)
 ### Fatiamento por duração + buffer
 Cada bloco é fatiado em slots conforme a **duração do atendimento** somada ao **buffer**
 do prestador. Enquanto não existe um domínio de serviços, a duração é única por
-prestador (`duracao_atendimento_minutos`, configurável em Preferências, sugestão inicial
+prestador (`duracao_atendimento_minutos`, configurável em Configurações, sugestão inicial
 de 60 min):
 
 - **Buffer configurável por prestador** (`descanso_minutos`: 0, 10, 15…) — intervalo de
@@ -216,7 +216,7 @@ próprio Google já provou a posse do endereço.
   um telefone-placeholder técnico (`TelefonePendente`, ver `usecase/auth/login_social.go`) e
   a agenda desativada (`AceitaAgendamentos=false`, o padrão de qualquer prestador novo). O
   frontend detecta esse placeholder (`MeResponse.telefonePendente`) e trava a navegação do
-  painel em `/painel/preferencias` até um telefone de verdade ser salvo — nenhuma outra
+  painel em `/painel/configuracoes` até um telefone de verdade ser salvo — nenhuma outra
   página do painel carrega enquanto isso. Cliente não passa por essa trava — o cadastro de
   cliente não exige telefone.
 - **Convidados (sem conta) ficam de fora**: login social só se aplica a quem tem ou vai
@@ -441,7 +441,8 @@ Consequências que valem saber:
 - **Hoje todo mundo tem exatamente um vínculo, como `dono`.** A migração V14
   converteu cada prestador existente em conta + agenda + vínculo, reusando o
   mesmo id — por isso nenhuma sessão caiu no deploy.
-- **Convidar alguém já é possível** pela tela de Equipe no painel — ver abaixo.
+- **Convidar alguém já é possível** pela tela de Equipe no painel, depois de
+  ligar o recurso em Configurações — ver abaixo.
 
 ### Exclusão de conta: por que é anonimização
 
@@ -481,7 +482,7 @@ aplicação: o repositório expõe inserção e leitura, e nada mais.
 ### Endereço público (slug)
 
 O link de agendamento é `/agendar/joao-barbeiro` em vez de `/agendar/{uuid}`. O
-slug nasce derivado do nome do prestador e pode ser trocado em Preferências.
+slug nasce derivado do nome do prestador e pode ser trocado em Configurações.
 
 ⚠️ **O caminho por UUID continua valendo, para sempre.** Todo link compartilhado
 antes do slug existir usa o id, e removê-lo daria 404 em endereço que já está na
@@ -542,6 +543,23 @@ o middleware não muda comportamento nenhum — ele existe pela ordem em que as
 coisas dão errado. Sem ele, um papel novo e mais restrito nasceria com acesso a
 todas as rotas e só o perderia onde alguém lembrasse de checar; com ele, o
 padrão é negar.
+
+### A equipe é opcional, e nasce desligada
+
+Equipe é um recurso que o prestador liga em **Configurações**
+(`permite_equipe`). Ele nasce **desativado**: a maioria trabalha sozinha, e uma
+agenda de uma pessoa só não precisa carregar a ideia de convidar ninguém — a
+tela some do painel inteiro.
+
+Desligado, não é só a tela que some: `POST /providers/me/membros` e
+`GET /providers/me/membros` respondem **403**. Esconder o menu e deixar a API
+aberta faria de uma chamada direta um contorno da escolha de quem opera a
+agenda.
+
+⚠️ **Não se desliga a equipe com gente dentro.** Com um vínculo além do dono ou
+um convite pendente, salvar as configurações devolve **409** — a agenda ficaria
+com alguém operando e ninguém para ver ou remover esse acesso. Primeiro remove,
+depois desliga.
 
 ### Convidar alguém para a equipe
 
