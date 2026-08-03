@@ -32,7 +32,7 @@ async function cadastrarPrestadorComAgenda(
 
 	// a marcação pelo prestador nasce desativada; habilita para poder marcar.
 	// A agenda só é ativada quando pedido (um dos testes marca com ela fechada).
-	await page.goto('/painel/preferencias');
+	await page.goto('/painel/configuracoes');
 	await page.click('label[for="permite-marcacao-pelo-prestador"]');
 	if (ativarAgenda) {
 		await page.click('label[for="aceita-agendamentos"]');

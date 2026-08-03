@@ -31,7 +31,7 @@ type PerfilOutput struct {
 	// TelefonePendente é true quando o prestador entrou via login social e
 	// ainda não confirmou um telefone de verdade (ver TelefonePendente em
 	// login_social.go) — o frontend usa isso para travar o painel em
-	// Preferências até ele completar o cadastro.
+	// Configurações até ele completar o cadastro.
 	TelefonePendente bool
 }
 

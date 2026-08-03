@@ -17,7 +17,7 @@ type BlocoInput struct {
 
 // AtualizarPreferenciasInput contém as preferências a aplicar. UsuarioID e
 // ProviderID vêm da identidade da sessão autenticada, nunca do corpo da
-// requisição. São dois porque a tela de Preferências mexe nas duas coisas de
+// requisição. São dois porque a tela de Configurações mexe nas duas coisas de
 // uma vez: o telefone é da conta, o resto é da agenda.
 type AtualizarPreferenciasInput struct {
 	UsuarioID                    string

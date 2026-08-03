@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { cadastrarPrestadorELogar, emailUnico, tokenDeConfirmacaoCadastro } from './helpers';
 
-test('prestador acessa preferências, salva e vê o banner de sucesso', async ({ page, request }) => {
-	await cadastrarPrestadorELogar(page, request, 'Preferencias Teste', emailUnico('preferencias'));
+test('prestador acessa configurações, salva e vê o banner de sucesso', async ({ page, request }) => {
+	await cadastrarPrestadorELogar(page, request, 'Configuracoes Teste', emailUnico('configuracoes'));
 
-	await page.click('a:has-text("Preferências")');
-	await page.waitForURL('/painel/preferencias');
+	await page.click('a:has-text("Configurações")');
+	await page.waitForURL('/painel/configuracoes');
 
 	await page.click('label[for="aceita-agendamentos"]');
 	await page.fill('#descanso-minutos', '15');
@@ -22,7 +22,7 @@ test('prestador começa com o expediente comercial sugerido e pode editá-lo', a
 }) => {
 	await cadastrarPrestadorELogar(page, request, 'Expediente Teste', emailUnico('expediente'));
 
-	await page.goto('/painel/preferencias');
+	await page.goto('/painel/configuracoes');
 	const seletoresHorario = page.locator('select');
 	await expect(seletoresHorario).toHaveCount(4);
 	await expect(seletoresHorario.first()).toHaveValue('08:00');
@@ -41,7 +41,7 @@ test('prestador começa com o expediente comercial sugerido e pode editá-lo', a
 test('prestador define três períodos curtos no expediente padrão', async ({ page, request }) => {
 	await cadastrarPrestadorELogar(page, request, 'Tres Periodos Teste', emailUnico('tres-periodos'));
 
-	await page.goto('/painel/preferencias');
+	await page.goto('/painel/configuracoes');
 
 	// remove os dois blocos sugeridos e monta três períodos curtos do zero
 	await page.locator('button:has-text("Remover")').last().click();
@@ -83,7 +83,7 @@ test('expediente padrão configurado aparece no calendário de disponibilidade',
 		emailUnico('padrao-calendario')
 	);
 
-	await page.goto('/painel/preferencias');
+	await page.goto('/painel/configuracoes');
 	await page.click('label[for="aceita-agendamentos"]');
 	// mantém só a manhã, editada para 09:00-11:00
 	await page.locator('button:has-text("Remover")').last().click();
@@ -114,11 +114,11 @@ test('expediente padrão configurado aparece no calendário de disponibilidade',
 	await expect(celula).toHaveAttribute('title', 'Disponível (09:00–11:00)');
 });
 
-test('cliente é redirecionado do painel de preferências para o painel', async ({ page, request }) => {
-	const email = emailUnico('cliente-preferencias');
+test('cliente é redirecionado do painel de configurações para o painel', async ({ page, request }) => {
+	const email = emailUnico('cliente-configuracoes');
 
 	await page.goto('/cadastro?tipo=cliente');
-	await page.fill('#nome', 'Cliente Preferencias');
+	await page.fill('#nome', 'Cliente Configuracoes');
 	await page.fill('#email', email);
 	await page.fill('#telefone', '(11) 99999-8888');
 	await page.fill('#senha', '12345678');
@@ -136,6 +136,6 @@ test('cliente é redirecionado do painel de preferências para o painel', async 
 	await page.click('button[type="submit"]');
 	await page.waitForURL('/painel');
 
-	await page.goto('/painel/preferencias');
+	await page.goto('/painel/configuracoes');
 	await page.waitForURL('/painel');
 });

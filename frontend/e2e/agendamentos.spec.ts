@@ -30,7 +30,7 @@ async function cadastrarPrestadorAtivo(
 	await page.click('button[type="submit"]');
 	await page.waitForURL('/painel');
 
-	await page.goto('/painel/preferencias');
+	await page.goto('/painel/configuracoes');
 	await page.click('label[for="aceita-agendamentos"]');
 	await page.click('button[type="submit"]');
 	await expect(page.getByText('Salvo', { exact: true })).toBeVisible();

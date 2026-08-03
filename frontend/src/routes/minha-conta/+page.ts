@@ -9,7 +9,7 @@ export async function load(): Promise<{ nome: string; email: string }> {
 	const usuario = await carregarUsuarioDoPainel();
 
 	// Esta página trata dos dados de CLIENTE. O prestador tem os dele em
-	// Preferências, e a exclusão do lado prestador envolve a agenda inteira —
+	// Configurações, e a exclusão do lado prestador envolve a agenda inteira —
 	// outro fluxo, não este.
 	if (usuario.tipo !== 'client') {
 		throw redirect(302, '/painel');

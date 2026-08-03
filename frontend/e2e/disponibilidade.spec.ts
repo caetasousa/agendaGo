@@ -18,9 +18,9 @@ async function cadastrarPrestador(page: Page, request: APIRequestContext, prefix
 }
 
 // A agenda nasce desativada; o expediente padrão dos dias úteis só vale após
-// ativar em Preferências.
+// ativar em Configurações.
 async function ativarAgenda(page: Page) {
-	await page.goto('/painel/preferencias');
+	await page.goto('/painel/configuracoes');
 	await page.click('label[for="aceita-agendamentos"]');
 	await page.click('button:has-text("Salvar alterações")');
 	await expect(page.getByText('Salvo', { exact: true })).toBeVisible();

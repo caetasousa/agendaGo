@@ -66,7 +66,7 @@ type repositorioPreferencias interface {
 }
 
 // repositorioUsuario busca e persiste os dados mutáveis da conta — hoje só o
-// telefone, que a tela de Preferências edita junto com os da agenda.
+// telefone, que a tela de Configurações edita junto com os da agenda.
 type repositorioUsuario interface {
 	BuscarPorID(id string) (*usuario.Usuario, error)
 	Atualizar(u *usuario.Usuario) error

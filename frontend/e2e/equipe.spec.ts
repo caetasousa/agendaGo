@@ -60,9 +60,9 @@ test('dona convida, operadora cria o acesso e passa a operar a agenda', async ({
 	await expect(page.getByText(emailDona)).toBeVisible();
 	await expect(page.getByText(emailOperadora)).toBeVisible();
 
-	// E opera de fato: preferências é uma rota de gestão da agenda. A barra de
+	// E opera de fato: configurações é uma rota de gestão da agenda. A barra de
 	// salvar só aparece com alteração pendente, daí o toggle antes do submit.
-	await page.goto('/painel/preferencias');
+	await page.goto('/painel/configuracoes');
 	await page.click('label[for="aceita-agendamentos"]');
 	await page.click('button[type="submit"]');
 	await expect(page.getByText('Salvo', { exact: true })).toBeVisible();

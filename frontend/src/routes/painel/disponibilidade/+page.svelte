@@ -288,7 +288,7 @@
 <div>
 	<PageHeader titulo="Disponibilidade">
 		Seus dias úteis seguem o expediente padrão definido em
-		<a href="/painel/preferencias" class="font-medium text-ink underline">Preferências</a>. Clique
+		<a href="/painel/configuracoes" class="font-medium text-ink underline">Configurações</a>. Clique
 		em um dia do calendário para bloqueá-lo ou definir horários próprios.
 	</PageHeader>
 
@@ -343,7 +343,7 @@
 				<span class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent-yellow"></span>
 				<span class="text-body">
 					Sua agenda está desativada, então os dias úteis não oferecem o expediente padrão. Ative
-					em <a href="/painel/preferencias" class="font-medium text-ink underline">Preferências</a>.
+					em <a href="/painel/configuracoes" class="font-medium text-ink underline">Configurações</a>.
 				</span>
 			</div>
 		{/if}

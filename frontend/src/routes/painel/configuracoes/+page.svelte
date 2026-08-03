@@ -124,7 +124,7 @@
 			salvoComo = instantaneo();
 			sucesso = true;
 		} catch (e) {
-			erro = e instanceof ApiError ? e.message : 'Não foi possível salvar as preferências.';
+			erro = e instanceof ApiError ? e.message : 'Não foi possível salvar as configurações.';
 		} finally {
 			enviando = false;
 		}
@@ -137,7 +137,7 @@
 
 <div class="max-w-2xl">
 	<PageHeader
-		titulo="Preferências"
+		titulo="Configurações"
 		descricao={telefonePendente
 			? 'O Google não compartilha seu telefone — é como os clientes vão falar com você. Confirme um telefone para liberar o restante do painel.'
 			: 'Configure como você recebe agendamentos.'}

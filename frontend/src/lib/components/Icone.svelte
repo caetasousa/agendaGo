@@ -6,7 +6,7 @@
 		| 'inicio'
 		| 'agendamentos'
 		| 'disponibilidade'
-		| 'preferencias'
+		| 'configuracoes'
 		| 'equipe'
 		| 'marcar'
 		| 'agendar'
@@ -28,7 +28,7 @@
 		agendamentos: 'M9 6h11M9 12h11M9 18h11M3.5 6l1 1 2-2M3.5 12l1 1 2-2M3.5 18l1 1 2-2',
 		disponibilidade:
 			'M8 2v3M16 2v3M3.5 9h17M4.5 5.5h15a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1ZM7.5 12.5h2M11 12.5h2M14.5 12.5h2M7.5 16.5h2M11 16.5h2',
-		preferencias:
+		configuracoes:
 			'M4 6h10M18 6h2M4 12h2M10 12h10M4 18h8M16 18h4M16 6a2 2 0 1 0 0-.01M8 12a2 2 0 1 0 0-.01M14 18a2 2 0 1 0 0-.01',
 		marcar:
 			'M8 2v3M16 2v3M3.5 9h17M4.5 5.5h15a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1ZM12 12.5v5M9.5 15h5',

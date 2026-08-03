@@ -1,14 +1,14 @@
 // Guard de autenticação compartilhado pelos load() das páginas do painel:
 // consulta /auth/me, trata 401 (desloga e redireciona ao login), popula a
 // store de sessão, e trava o prestador com telefone pendente (login social
-// que ainda não confirmou um telefone real) em /painel/preferencias — só essa
+// que ainda não confirmou um telefone real) em /painel/configuracoes — só essa
 // página pode carregar até o telefone ser salvo.
 import { redirect } from '@sveltejs/kit';
 import { ApiError } from '$lib/api/client';
 import { me, type MeResponse } from '$lib/api/auth';
 import { sessao } from '$lib/stores/session.svelte';
 
-// permitirTelefonePendente é true só na própria página de Preferências —
+// permitirTelefonePendente é true só na própria página de Configurações —
 // nas demais, o prestador é redirecionado antes de carregar qualquer dado.
 export async function carregarUsuarioDoPainel(permitirTelefonePendente = false): Promise<MeResponse> {
 	let usuario: MeResponse;
@@ -25,7 +25,7 @@ export async function carregarUsuarioDoPainel(permitirTelefonePendente = false):
 	sessao.definir(usuario);
 
 	if (usuario.tipo === 'provider' && usuario.telefonePendente && !permitirTelefonePendente) {
-		throw redirect(302, '/painel/preferencias');
+		throw redirect(302, '/painel/configuracoes');
 	}
 
 	return usuario;
