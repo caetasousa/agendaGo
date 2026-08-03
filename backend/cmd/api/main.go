@@ -31,6 +31,7 @@ import (
 	"agendago/internal/adapter/worker"
 	"agendago/internal/pkg/logging"
 	ucadmin "agendago/internal/usecase/admin"
+	ucanalytics "agendago/internal/usecase/analytics"
 	ucappointment "agendago/internal/usecase/appointment"
 	ucauth "agendago/internal/usecase/auth"
 	ucavailability "agendago/internal/usecase/availability"
@@ -162,6 +163,7 @@ func main() {
 	listarAgendamentos := ucappointment.NovoListarUseCase(appointmentRepo, providerRepo, clientRepo)
 	detalharUsuario := ucadmin.NovoDetalharUseCase(providerRepo, usuarioRepo, membroRepo, clientRepo, listarAgendamentos)
 	lembrarAgendamento := ucappointment.NovoLembrarUseCase(appointmentRepo, providerRepo, membroRepo, clientRepo, notificador, config.FusoHorario, config.AntecedenciaLembrete)
+	metricasDoPrestador := ucanalytics.NovoMetricasUseCase(consultarAgenda, appointmentRepo, ocupacaoRepo)
 
 	// handlers
 	identidadeDoContexto := func(r *http.Request) (ucauth.Identidade, bool) {
@@ -181,6 +183,7 @@ func main() {
 	availabilityHandler := handler.NovoAvailabilityHandler(consultarAgenda, definirDia, removerDia, identidadeDoContexto)
 	appointmentHandler := handler.NovoAppointmentHandler(consultarSlots, solicitarAgendamento, solicitarConvidado, marcarPeloPrestador, transicionarAgendamento, cancelarPorToken, listarAgendamentos, identidadeDoContexto)
 	adminHandler := handler.NovoAdminHandler(moderar, detalharUsuario, identidadeDoContexto)
+	analyticsHandler := handler.NovoAnalyticsHandler(metricasDoPrestador, identidadeDoContexto)
 
 	// middlewares
 	authMw := middleware.NovoAuth(validarSessao, config.CookieSeguro())
@@ -294,6 +297,8 @@ func main() {
 		r.Put("/providers/me/dias/{data}", availabilityHandler.DefinirDia)
 		r.Delete("/providers/me/dias/{data}", availabilityHandler.RemoverDia)
 		r.Get("/providers/me/agendamentos", appointmentHandler.ListarDoPrestador)
+		// resumo analítico do período: funil de status e ocupação do expediente
+		r.Get("/providers/me/metricas", analyticsHandler.Metricas)
 		// marcação feita pelo próprio prestador (cliente ligou): slots da
 		// própria agenda (mesmo fechada ao público) e o registro da reserva
 		r.Get("/providers/me/slots", appointmentHandler.ConsultarSlotsDoPrestador)

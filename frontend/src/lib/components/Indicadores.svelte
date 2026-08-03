@@ -2,7 +2,11 @@
      em colunas, e não um bloco por número: contadores soltos com borda própria
      competiam em peso com o conteúdo que eles apenas resumem. -->
 <script lang="ts">
-	type Indicador = { rotulo: string; valor: number; destaque?: boolean };
+	// valor aceita texto porque nem todo indicador é contagem: uma taxa vem
+	// formatada ("62%") e pode vir como travessão quando não houve o que medir.
+	// detalhe é a linha de contexto opcional sob o número — a base do cálculo,
+	// que sozinha ocuparia uma coluna inteira sem merecer.
+	type Indicador = { rotulo: string; valor: string | number; detalhe?: string; destaque?: boolean };
 
 	let { itens }: { itens: Indicador[] } = $props();
 </script>
@@ -22,6 +26,9 @@
 			>
 				{item.valor}
 			</dd>
+			{#if item.detalhe}
+				<p class="mt-0.5 truncate text-xs text-mute" title={item.detalhe}>{item.detalhe}</p>
+			{/if}
 		</div>
 	{/each}
 </dl>

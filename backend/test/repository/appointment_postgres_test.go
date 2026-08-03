@@ -124,6 +124,17 @@ func TestAppointmentPostgres(t *testing.T) {
 		if err != nil || len(ocupantes) != 1 {
 			t.Errorf("esperava 1 ocupante, got: %d (%v)", len(ocupantes), err)
 		}
+
+		// o funil precisa dos quatro, ocupando horário ou não
+		doPeriodo, err := repo.ListarPorPeriodo(providerID, data, data)
+		if err != nil || len(doPeriodo) != 4 {
+			t.Errorf("esperava 4 agendamentos no período, got: %d (%v)", len(doPeriodo), err)
+		}
+
+		foraDoPeriodo, err := repo.ListarPorPeriodo(providerID, data.AddDate(0, 0, 1), data.AddDate(0, 0, 2))
+		if err != nil || len(foraDoPeriodo) != 0 {
+			t.Errorf("esperava período vazio, got: %d (%v)", len(foraDoPeriodo), err)
+		}
 	})
 
 	t.Run("corrida real: N goroutines disputando o mesmo slot, só uma vence", func(t *testing.T) {

@@ -164,6 +164,20 @@ func (r *AppointmentPostgres) ListarOcupantesPorPeriodo(providerID string, de, a
 		string(appointment.StatusConfirmado), string(appointment.StatusSolicitado), agora)
 }
 
+// ListarPorPeriodo devolve TODOS os agendamentos do prestador entre as datas
+// (inclusive), em qualquer status. Diferente de ListarOcupantesPorPeriodo, que
+// filtra pelos que ocupam horário: aqui quem consome quer justamente os
+// desfechos — recusa, cancelamento, expiração — para montar o funil. Sem
+// paginação porque o período já é o limite (o usecase recusa janelas longas).
+func (r *AppointmentPostgres) ListarPorPeriodo(providerID string, de, ate time.Time) ([]*appointment.Appointment, error) {
+	return r.listar(
+		`SELECT id, provider_id, client_id, data, inicio_minutos, fim_minutos, status, expira_em, criado_em, atualizado_em, observacao, marcado_pelo_prestador
+		 FROM appointments
+		 WHERE provider_id = $1 AND data BETWEEN $2 AND $3
+		 ORDER BY data, inicio_minutos`,
+		providerID, de, ate)
+}
+
 // ListarConfirmadosSemLembrete devolve os agendamentos CONFIRMADOs cuja data
 // está entre de e ate (inclusive) e cujo lembrete ainda não foi enviado.
 func (r *AppointmentPostgres) ListarConfirmadosSemLembrete(de, ate time.Time) ([]*appointment.Appointment, error) {

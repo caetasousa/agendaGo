@@ -158,3 +158,47 @@ func TestCicloDeVida(t *testing.T) {
 		}
 	})
 }
+
+func TestConsumiuHorario(t *testing.T) {
+	agora := time.Date(2026, 8, 1, 10, 0, 0, 0, time.UTC)
+	depoisDoInicio := time.Date(2026, 8, 10, 9, 30, 0, 0, time.UTC)
+
+	consumiram := map[appointment.Status]func(a *appointment.Appointment){
+		appointment.StatusConfirmado: func(a *appointment.Appointment) { a.Confirmar(agora) },
+		appointment.StatusRealizado: func(a *appointment.Appointment) {
+			a.Confirmar(agora)
+			a.MarcarRealizado(depoisDoInicio, time.UTC)
+		},
+		appointment.StatusNaoCompareceu: func(a *appointment.Appointment) {
+			a.Confirmar(agora)
+			a.MarcarNaoCompareceu(depoisDoInicio, time.UTC)
+		},
+	}
+	for status, levarAte := range consumiram {
+		t.Run("horário gasto em "+string(status), func(t *testing.T) {
+			a := novoAgendamento(t, agora)
+			levarAte(a)
+			if !a.ConsumiuHorario() {
+				t.Errorf("esperava horário consumido em %s", status)
+			}
+		})
+	}
+
+	devolveram := map[appointment.Status]func(a *appointment.Appointment){
+		appointment.StatusSolicitado: func(a *appointment.Appointment) {},
+		appointment.StatusRecusado:   func(a *appointment.Appointment) { a.Recusar(agora) },
+		appointment.StatusCancelado:  func(a *appointment.Appointment) { a.Cancelar(agora, time.Hour, time.UTC) },
+		appointment.StatusExpirado: func(a *appointment.Appointment) {
+			a.ExpirarSeVencido(agora.Add(25 * time.Hour))
+		},
+	}
+	for status, levarAte := range devolveram {
+		t.Run("horário devolvido em "+string(status), func(t *testing.T) {
+			a := novoAgendamento(t, agora)
+			levarAte(a)
+			if a.ConsumiuHorario() {
+				t.Errorf("esperava horário devolvido em %s", status)
+			}
+		})
+	}
+}

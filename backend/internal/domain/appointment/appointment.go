@@ -34,6 +34,20 @@ const (
 	StatusNaoCompareceu Status = "NAO_COMPARECEU"
 )
 
+// TodosOsStatus lista o ciclo de vida inteiro, do pedido aos desfechos.
+// Existe para quem precisa percorrer todos os estados — o funil de um
+// relatório, por exemplo — não manter a própria cópia da lista e esquecer de
+// atualizá-la quando um status novo aparecer.
+var TodosOsStatus = []Status{
+	StatusSolicitado,
+	StatusConfirmado,
+	StatusRealizado,
+	StatusNaoCompareceu,
+	StatusCancelado,
+	StatusRecusado,
+	StatusExpirado,
+}
+
 var (
 	// ErrProviderIDObrigatorio é retornado quando o providerID está vazio.
 	ErrProviderIDObrigatorio = errors.New("providerID é obrigatório")
@@ -136,6 +150,21 @@ func (a *Appointment) Ocupa(agora time.Time) bool {
 		return true
 	case StatusSolicitado:
 		return agora.Before(a.ExpiraEm)
+	default:
+		return false
+	}
+}
+
+// ConsumiuHorario informa se o agendamento gastou de fato o horário do
+// prestador: confirmado, realizado ou ausência do cliente — nos três o
+// intervalo ficou reservado e não foi ofertado a mais ninguém. É a pergunta
+// de quem olha para trás (relatórios), enquanto Ocupa é a de quem oferta
+// agora: uma solicitação pendente ocupa o intervalo, mas ainda pode virar
+// recusa e devolvê-lo.
+func (a *Appointment) ConsumiuHorario() bool {
+	switch a.Status {
+	case StatusConfirmado, StatusRealizado, StatusNaoCompareceu:
+		return true
 	default:
 		return false
 	}

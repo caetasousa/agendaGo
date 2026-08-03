@@ -27,6 +27,12 @@ type ConsultarAgendaInput struct {
 	ProviderID string
 	De         time.Time
 	Ate        time.Time
+	// IncluirAgendaFechada resolve o expediente mesmo com AceitaAgendamentos
+	// desligado, como no irmão ConsultarDisponibilidadeInput. A tela de
+	// disponibilidade deixa em false para refletir o que o público vê; quem
+	// mede o expediente do dono (relatórios) liga, senão fechar a agenda por
+	// uma semana zeraria o denominador e faria a ocupação sumir.
+	IncluirAgendaFechada bool
 }
 
 // DiaAgenda é a disponibilidade resolvida de uma data.
@@ -94,7 +100,7 @@ func (uc *ConsultarAgendaUseCase) Executar(in ConsultarAgendaInput) (*ConsultarA
 	for d := in.De; !d.After(in.Ate); d = d.AddDate(0, 0, 1) {
 		// a tela de disponibilidade reflete o que o público vê: agenda
 		// desativada zera o expediente padrão (a UI mostra o aviso)
-		dia := DiaAgenda{Data: d, Origem: OrigemPadrao, Blocos: blocosPadrao(p, donoAtivo, d, false)}
+		dia := DiaAgenda{Data: d, Origem: OrigemPadrao, Blocos: blocosPadrao(p, donoAtivo, d, in.IncluirAgendaFechada)}
 		if e, ok := porData[d.Format("2006-01-02")]; ok {
 			if e.Tipo == availability.TipoBloqueio {
 				dia.Origem = OrigemBloqueio

@@ -20,6 +20,27 @@ export function dataLonga(data: string): string {
 	return rotulo.charAt(0).toUpperCase() + rotulo.slice(1);
 }
 
+// porcentagem formata uma fração em [0,1] como "62%". Recebe null quando a API
+// não teve base para calcular a taxa e devolve um travessão: exibir "0%" ali
+// afirmaria uma medida que ninguém fez.
+export function porcentagem(fracao: number | null): string {
+	if (fracao === null) {
+		return '—';
+	}
+	return `${Math.round(fracao * 100)}%`;
+}
+
+// duracaoEmHoras formata minutos como "18h", "18h30" ou "45min" — a leitura de
+// quem fala de expediente, não de um cronômetro.
+export function duracaoEmHoras(minutos: number): string {
+	const horas = Math.floor(minutos / 60);
+	const resto = minutos % 60;
+	if (horas === 0) {
+		return `${resto}min`;
+	}
+	return resto === 0 ? `${horas}h` : `${horas}h${resto.toString().padStart(2, '0')}`;
+}
+
 // rotuloStatus devolve o texto e a cor do marcador para cada status do
 // agendamento — usado nas listas do admin.
 export function rotuloStatus(status: string): { texto: string; cor: string } {

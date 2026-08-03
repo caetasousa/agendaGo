@@ -7,6 +7,7 @@
 	import LinhaAgendamento from '$lib/components/LinhaAgendamento.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Indicadores from '$lib/components/Indicadores.svelte';
+	import ResumoDoPeriodo from '$lib/components/ResumoDoPeriodo.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -55,18 +56,26 @@
 		)
 	);
 
-	// Mesma faixa de três colunas para os dois perfis: só o rótulo do primeiro
-	// muda, porque quem aguarda é diferente — o prestador precisa agir, o cliente
-	// está esperando a resposta dele.
-	const indicadores = $derived([
-		{
-			rotulo: ehPrestador ? 'Aguardando' : 'Solicitados',
-			valor: pendentes.length,
-			destaque: ehPrestador && pendentes.length > 0
-		},
-		{ rotulo: 'Confirmados', valor: proximos.length },
-		{ rotulo: 'Realizados no mês', valor: realizadosNoMes.length }
-	]);
+	// A faixa do topo é a fila de agora: o que espera ação, e por isso pode ser
+	// lida da própria lista — pendentes e futuros são sempre recentes, e cabem
+	// na primeira página. O que olha para trás é o resumo do período abaixo,
+	// que vem somado da API: contar "realizados" aqui pararia de bater no dia
+	// em que o histórico passasse de uma página.
+	//
+	// O rótulo do primeiro muda por perfil porque quem aguarda é diferente — o
+	// prestador precisa agir, o cliente está esperando a resposta dele.
+	const indicadores = $derived(
+		ehPrestador
+			? [
+					{ rotulo: 'Aguardando', valor: pendentes.length, destaque: pendentes.length > 0 },
+					{ rotulo: 'Confirmados', valor: proximos.length }
+				]
+			: [
+					{ rotulo: 'Solicitados', valor: pendentes.length },
+					{ rotulo: 'Confirmados', valor: proximos.length },
+					{ rotulo: 'Realizados no mês', valor: realizadosNoMes.length }
+				]
+	);
 
 	// O prestador precisa confirmar; o cliente está do outro lado da mesma espera.
 	const tituloPendentes = $derived(
@@ -129,6 +138,13 @@
 			</a>
 		{/if}
 	</div>
+{/if}
+
+<!-- Sem nenhum agendamento no período, o resumo seria uma parede de zeros: quem
+     está começando não aprende nada com ela, e o cartão do link logo abaixo já
+     diz o que fazer. -->
+{#if data.metricas && data.metricas.total > 0}
+	<ResumoDoPeriodo metricas={data.metricas} />
 {/if}
 
 {#if ehPrestador}

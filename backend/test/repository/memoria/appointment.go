@@ -100,6 +100,15 @@ func (r *AppointmentMemoria) ListarOcupantesPorPeriodo(providerID string, de, at
 	})
 }
 
+// ListarPorPeriodo devolve todos os agendamentos do prestador entre as datas
+// (inclusive), em qualquer status.
+func (r *AppointmentMemoria) ListarPorPeriodo(providerID string, de, ate time.Time) ([]*appointment.Appointment, error) {
+	return r.listar(func(a *appointment.Appointment) bool {
+		return a.ProviderID == providerID &&
+			!a.Data.Before(de) && !a.Data.After(ate)
+	})
+}
+
 // ListarConfirmadosSemLembrete devolve os agendamentos CONFIRMADOs cuja data
 // está entre de e ate (inclusive) e cujo lembrete ainda não foi enviado.
 func (r *AppointmentMemoria) ListarConfirmadosSemLembrete(de, ate time.Time) ([]*appointment.Appointment, error) {
