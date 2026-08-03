@@ -15,6 +15,9 @@ set -euo pipefail
 PASTA_STACK="${PASTA_STACK:-$HOME/agendago}"
 PASTA_BACKUP="${PASTA_BACKUP:-$HOME/backups}"
 RETENCAO_DIAS="${RETENCAO_DIAS:-7}"
+# Sobrescrito por scripts/testar-rollback.sh, que exercita este script contra um
+# stack descartável. Em produção nunca muda.
+ARQUIVO_COMPOSE="${ARQUIVO_COMPOSE:-$PASTA_STACK/docker-compose.prod.yml}"
 # URL_HEARTBEAT (opcional): endereço pingado ao final de uma execução bem
 # sucedida, para um monitor externo alertar quando o ping parar de chegar.
 
@@ -29,7 +32,15 @@ set -a
 . ./.env
 set +a
 
-compose() { docker compose -f "$PASTA_STACK/docker-compose.prod.yml" "$@"; }
+compose() { docker compose -f "$ARQUIVO_COMPOSE" "$@"; }
+
+# campo_manifesto lê um campo do manifesto de um backup anterior. sed em vez de
+# jq porque a VPS não tem jq instalado, e o JSON aqui é gerado por este próprio
+# script — formato fixo, sem aninhamento.
+campo_manifesto() {
+	[ -f "$1" ] || return 0
+	sed -n "s/.*\"$2\": *\"\([^\"]*\)\".*/\1/p" "$1"
+}
 
 # O dump cru é temporário: só o .gz fica guardado.
 temporario=$(mktemp -d)
@@ -61,10 +72,35 @@ fi
 # mesmo hash, que seria o erro perigoso.
 hash=$(grep -v '^\\\(un\)\?restrict ' "$bruto" | sha256sum | cut -d' ' -f1)
 
+# Versão do schema e da imagem que produziram este dump — é o que transforma o
+# arquivo num ponto de restauração COMPLETO. Sem isso, descobrir a que versão do
+# código um backup pertence exige restaurá-lo e ler o flyway_schema_history, e a
+# hora de fazer essa arqueologia costuma ser a hora do incidente.
+schema_version=$(compose exec -T postgres psql -tAX -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+	-c "SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank DESC LIMIT 1" \
+	2>/dev/null | tr -d '[:space:]')
+schema_version=${schema_version:-desconhecida}
+
+# A imagem EM EXECUÇÃO é a verdade, não o .env: o deploy do CI passa IMAGE_TAG
+# por variável de ambiente e não toca no arquivo, então ler o .env devolveria
+# `latest` num servidor que está rodando um SHA fixo.
+image_tag=desconhecida
+container_api=$(compose ps -q api 2>/dev/null | head -1)
+if [ -n "$container_api" ]; then
+	image_tag=$(docker inspect --format '{{.Config.Image}}' "$container_api" 2>/dev/null | sed 's/.*://')
+	image_tag=${image_tag:-desconhecida}
+fi
+
 anterior=$(find "$PASTA_BACKUP" -maxdepth 1 -name 'agendago-*.sql.gz' -printf '%T@ %p\n' 2>/dev/null |
 	sort -rn | head -1 | cut -d' ' -f2-)
 
-if [ -n "$anterior" ] && [ "$hash" = "$(cat "$anterior.sha256" 2>/dev/null)" ]; then
+# Três condições, não uma. Dado idêntico sob um schema ou uma imagem NOVA merece
+# ponto de restauração próprio: é justamente o retrato pré-migration que o
+# rollback vai querer, e ele desapareceria se a deduplicação olhasse só o hash.
+if [ -n "$anterior" ] &&
+	[ "$hash" = "$(cat "$anterior.sha256" 2>/dev/null)" ] &&
+	[ "$schema_version" = "$(campo_manifesto "$anterior.json" schema_version)" ] &&
+	[ "$image_tag" = "$(campo_manifesto "$anterior.json" image_tag)" ]; then
 	# Nada mudou no banco: não faz sentido guardar um segundo arquivo idêntico.
 	#
 	# O `touch` não é detalhe — é o que impede a rotação de apagar, dias depois,
@@ -72,22 +108,37 @@ if [ -n "$anterior" ] && [ "$hash" = "$(cat "$anterior.sha256" 2>/dev/null)" ]; 
 	# sem isto você terminaria com zero backups. A data de que o backup rodou
 	# fica no log, já que o nome do arquivo passa a não representá-la.
 	touch "$anterior" "$anterior.sha256"
+	if [ -f "$anterior.json" ]; then
+		touch "$anterior.json"
+	fi
 	log "sem alteração desde $(basename "$anterior"); nenhum backup novo criado"
 else
 	# Segundos no nome: sem eles, duas execuções no mesmo minuto (um backup
 	# manual logo após o do cron, por exemplo) sobrescreveriam uma à outra.
-	arquivo="$PASTA_BACKUP/agendago-$(date +%F-%H%M%S).sql.gz"
+	# A versão do schema entra no nome para ser legível sem abrir nada — os
+	# globs de deduplicação, rotação e restore continuam casando.
+	arquivo="$PASTA_BACKUP/agendago-$(date +%F-%H%M%S)-schema$schema_version.sql.gz"
 	# -n omite nome e timestamp do cabeçalho gzip, para o .gz ser reprodutível.
 	gzip -9n <"$bruto" >"$arquivo.parcial"
 	mv "$arquivo.parcial" "$arquivo"
 	printf '%s\n' "$hash" >"$arquivo.sha256"
+	cat >"$arquivo.json" <<JSON
+{
+  "arquivo": "$(basename "$arquivo")",
+  "criado_em": "$(date -Is)",
+  "schema_version": "$schema_version",
+  "image_tag": "$image_tag",
+  "sha256": "$hash"
+}
+JSON
 	# O dump contém email e telefone de pessoas reais: leitura só para o dono.
-	chmod 600 "$arquivo" "$arquivo.sha256"
-	log "ok: $(du -h "$arquivo" | cut -f1) em $arquivo"
+	chmod 600 "$arquivo" "$arquivo.sha256" "$arquivo.json"
+	log "ok: $(du -h "$arquivo" | cut -f1) em $arquivo (schema $schema_version, imagem $image_tag)"
 fi
 
 # Rotação por idade. -print antes de -delete para conseguir contar o que saiu.
-removidos=$(find "$PASTA_BACKUP" -maxdepth 1 \( -name 'agendago-*.sql.gz' -o -name 'agendago-*.sql.gz.sha256' \) \
+removidos=$(find "$PASTA_BACKUP" -maxdepth 1 \
+	\( -name 'agendago-*.sql.gz' -o -name 'agendago-*.sql.gz.sha256' -o -name 'agendago-*.sql.gz.json' \) \
 	-mtime "+$RETENCAO_DIAS" -print -delete | wc -l)
 if [ "$removidos" -gt 0 ]; then
 	log "rotação: $removidos arquivo(s) com mais de $RETENCAO_DIAS dias removido(s)"

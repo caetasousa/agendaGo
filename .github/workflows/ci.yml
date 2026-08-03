@@ -518,9 +518,20 @@ jobs:
           # revisados, em vez de virarem arquivos soltos que ninguém sabe de onde
           # vieram. backup.sh roda por cron; testar-restore.sh é manual, e é o que
           # prova que o backup volta — verificar integridade do dump não prova.
+          # rollback.sh e restaurar.sh são os dois caminhos de volta, e precisam
+          # estar no servidor ANTES do incidente que os torna necessários.
+          # lib-banco.sh vai junto porque os dois últimos a carregam (não recebe
+          # +x: é sourced, nunca executada).
+          #
+          # testar-rollback.sh NÃO vem, e não é esquecimento: ele monta o
+          # ambiente de ensaio a partir de backend/migrations, que por desenho
+          # nunca existe aqui — o host guarda três arquivos de configuração, não
+          # o código-fonte. É teste de máquina de desenvolvimento e de CI.
           scp -4 -o ConnectTimeout=15 -i ~/.ssh/id_deploy -P "$PORTA" \
-            scripts/backup.sh scripts/testar-restore.sh "$USUARIO@$HOST:~/agendago/scripts/"
-          ssh -4 -o ConnectTimeout=15 -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" 'chmod +x ~/agendago/scripts/backup.sh ~/agendago/scripts/testar-restore.sh'
+            scripts/backup.sh scripts/testar-restore.sh scripts/rollback.sh \
+            scripts/restaurar.sh scripts/lib-banco.sh "$USUARIO@$HOST:~/agendago/scripts/"
+          ssh -4 -o ConnectTimeout=15 -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" \
+            'chmod +x ~/agendago/scripts/backup.sh ~/agendago/scripts/testar-restore.sh ~/agendago/scripts/rollback.sh ~/agendago/scripts/restaurar.sh'
 
       # Fixa a tag no SHA deste commit: o servidor sobe exatamente o artefato
       # que passou nos testes, não um `latest` que pode ter mudado no meio.
@@ -529,6 +540,29 @@ jobs:
       # reescrever a linha, vira MILHARES de linhas de "Downloading 10.49MB" no
       # log — e o erro, quando existe, se perde no meio delas. O teto de tempo
       # do job é que protege contra um pull travado, não a barra de progresso.
+      # Retrato do banco ANTES da migration deste deploy. O cron das 03:00
+      # sozinho deixa uma janela de até 23 horas: um deploy ruim ao meio-dia
+      # teria como ponto de retorno mais recente o estado da madrugada, e tudo
+      # que entrou no meio se perderia junto. Aqui a janela vira o deploy.
+      #
+      # A deduplicação por conteúdo do backup.sh evita arquivo extra quando nada
+      # mudou desde o último — e como ela também olha schema e imagem, este
+      # backup nasce carimbado com a versão que está saindo, que é exatamente o
+      # par que restaurar.sh precisa para desfazer.
+      #
+      # Não trava o deploy: no primeiro deploy a stack ainda não existe, e um
+      # backup ausente não é motivo para impedir a aplicação de subir.
+      - name: backup do banco antes de migrar
+        if: steps.cfg.outputs.configurado == 'true'
+        env:
+          HOST: ${{ secrets.VPS_HOST }}
+          USUARIO: ${{ secrets.VPS_USER }}
+          PORTA: ${{ secrets.VPS_PORT || '22' }}
+        run: |
+          ssh -4 -o ConnectTimeout=15 -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" \
+            '~/agendago/scripts/backup.sh' \
+            || echo "::warning::backup pré-deploy não executado (a stack já existe na VPS?)"
+
       - name: puxa as imagens e sobe a stack
         if: steps.cfg.outputs.configurado == 'true'
         env:

@@ -31,6 +31,9 @@ if [ -f "$PASTA_STACK/.env" ]; then
 	USUARIO_TESTE="${do_env:-teste}"
 fi
 
+# shellcheck source=lib-banco.sh
+. "$(dirname "$0")/lib-banco.sh"
+
 arquivo="${1:-}"
 if [ -z "$arquivo" ]; then
 	arquivo=$(find "$PASTA_BACKUP" -maxdepth 1 -name 'agendago-*.sql.gz' -printf '%T@ %p\n' 2>/dev/null |
@@ -90,26 +93,23 @@ fi
 
 consultar() { docker exec "$CONTAINER" psql -tAX -U "$USUARIO_TESTE" -d restore_teste -c "$1"; }
 
-# Sanidade: as tabelas do domínio existem e o histórico do Flyway veio junto.
-# Sem checar o histórico, um dump de um banco sem migrations aplicadas passaria.
-esperadas="providers clients appointments date_exceptions sessions admins"
-faltando=""
-for tabela in $esperadas; do
-	existe=$(consultar "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='$tabela'")
-	[ "$existe" = "1" ] || faltando="$faltando $tabela"
-done
-if [ -n "$faltando" ]; then
-	log "ERRO: tabelas ausentes após o restore:$faltando"
-	exit 1
+# Sanidade compartilhada com restaurar.sh (ver scripts/lib-banco.sh): as tabelas
+# do domínio existem e o histórico do Flyway veio junto.
+resumo=$(validar_banco) || exit 1
+
+# O manifesto é o que liga o dump à versão de código que o gerou. Um manifesto
+# que discorda do banco restaurado é pior do que manifesto nenhum: seria seguido
+# no dia do incidente, subindo a imagem errada por cima do dado certo.
+if [ -f "$arquivo.json" ]; then
+	declarado=$(campo_manifesto "$arquivo.json" schema_version)
+	real=$(versao_de_schema)
+	if [ "$declarado" != "$real" ]; then
+		log "ERRO: o manifesto declara schema V$declarado, mas o dump restaurou V$real"
+		exit 1
+	fi
+	log "manifesto confere: schema V$real, imagem $(campo_manifesto "$arquivo.json" image_tag)"
+else
+	log "AVISO: backup sem manifesto (.json) — anterior ao carimbo de versão"
 fi
 
-migrations=$(consultar "SELECT count(*) FROM flyway_schema_history WHERE success" 2>/dev/null || echo 0)
-if [ "$migrations" -lt 1 ]; then
-	log "ERRO: nenhuma migration bem sucedida no histórico do Flyway"
-	exit 1
-fi
-
-prestadores=$(consultar "SELECT count(*) FROM providers")
-agendamentos=$(consultar "SELECT count(*) FROM appointments")
-
-log "ok: restore íntegro — $migrations migrations, $prestadores prestador(es), $agendamentos agendamento(s)"
+log "ok: $resumo"
