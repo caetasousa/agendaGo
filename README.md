@@ -144,6 +144,7 @@ Ele entra pela [mesma tela de login](http://localhost:5173/login) e cai no paine
 | `POST` | [`/providers/me/ocupacoes`](http://localhost:8080/swagger/index.html#/ocupacoes/post_providers_me_ocupacoes) | Registrar compromisso pessoal (sai da oferta sem mexer no expediente) |
 | `DELETE` | [`/providers/me/ocupacoes/{id}`](http://localhost:8080/swagger/index.html#/ocupacoes/delete_providers_me_ocupacoes__id_) | Remover compromisso pessoal |
 | `GET` | [`/providers/me/agendamentos`](http://localhost:8080/swagger/index.html#/appointments/get_providers_me_agendamentos) | Listar agendamentos recebidos (paginado) |
+| `GET` | [`/providers/me/metricas`](http://localhost:8080/swagger/index.html#/analytics/get_providers_me_metricas) | Resumo analítico do período (funil de status, ocupação e comparecimento) |
 | `GET` | [`/providers/me/slots`](http://localhost:8080/swagger/index.html#/appointments/get_providers_me_slots) | Slots livres da própria agenda (inclusive fechada ao público) |
 | `POST` | [`/providers/me/agendamentos`](http://localhost:8080/swagger/index.html#/appointments/post_providers_me_agendamentos) | Marcar para um cliente que ligou |
 | `GET` | [`/providers/me/membros`](http://localhost:8080/swagger/index.html#/membros/get_providers_me_membros) | Listar quem opera a agenda e os convites pendentes |

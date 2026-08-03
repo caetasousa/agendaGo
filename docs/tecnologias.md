@@ -342,6 +342,63 @@ Dois detalhes que a paginação obriga a acertar:
 **Para estudar:**
 - [Use The Index, Luke! — Paginação](https://use-the-index-luke.com/sql/partial-results/fetch-next-page) (por que OFFSET fica caro e o que é paginação por keyset)
 
+### Números do painel: agregar no servidor, nunca contar na tela
+
+Toda métrica é um `count` sobre o conjunto **inteiro**, e o navegador nunca tem
+o conjunto inteiro — tem uma página. É a armadilha que nasce da seção anterior:
+a home do prestador contava "realizados no mês" filtrando a lista já carregada,
+o que dá o número certo enquanto o histórico cabe em 100 itens e passa a dar o
+número errado, calado, no dia em que não cabe mais. Um teste não pega isso: o
+código está correto, os dados é que chegam pela metade.
+
+O resumo do período virou rota própria — `GET /providers/me/metricas`, servida
+por `internal/usecase/analytics/`. Três decisões sustentam o desenho:
+
+- **O recorte é a data do atendimento, não a da criação.** "Julho" quer dizer
+  os horários de julho, inclusive os marcados em junho. É como o prestador lê a
+  própria agenda.
+- **A conta é em Go, não em SQL.** O repositório devolve os agendamentos do
+  período (`ListarPorPeriodo`) e o usecase soma. Poderia ser um `GROUP BY`, mas
+  aí a regra de que uma solicitação vencida conta como expirada moraria no
+  `CASE` de uma query, longe do domínio que a define. O limite de 92 dias é o
+  que substitui a paginação aqui: o período **é** o teto.
+- **O relatório não escreve.** A listagem efetiva a expiração lazy e persiste;
+  o resumo aplica a mesma regra do domínio sobre uma cópia (`statusEfetivo`) e
+  não toca no banco. Abrir a home nunca deve mudar o estado de um agendamento.
+
+A ocupação (`minutos reservados ÷ minutos ofertados`) reaproveita
+`ConsultarAgendaUseCase` em vez de recalcular expediente: o denominador é o
+mesmo expediente que a tela de disponibilidade mostra, menos os compromissos
+pessoais — bloquear a tarde para ir ao médico não pode virar ociosidade. O
+numerador é a interseção dos agendamentos com esses blocos, e não a soma crua
+das durações: é o que garante que a razão signifique "quanto do que eu ofereci
+foi usado" e nunca passe de 100%.
+
+Taxas são ponteiros (`*float64`, `null` no JSON) porque **"0%" e "não há o que
+medir" são leituras diferentes**. Um prestador sem nenhum atendimento concluído
+não tem 0% de comparecimento; ele não tem comparecimento. A tela mostra um
+travessão.
+
+**O que este desenho ainda não responde**, e por quê:
+
+- **Tempo de resposta do prestador** (pedido → confirmação). `atualizado_em` é
+  sobrescrito a cada transição, então em `SOLICITADO → CONFIRMADO → REALIZADO`
+  o instante da confirmação se perde. Exige um histórico de transições
+  (`appointment_events`); a trilha de `auditoria` não serve, porque por decisão
+  ela só registra moderação e LGPD.
+- **Receita, ticket médio, mix de serviços.** Não há preço em lugar nenhum — a
+  agenda tem uma duração única (`DuracaoAtendimentoMinutos`). Depende do
+  domínio de serviços.
+- **O expediente não é versionado.** Exceções de data são históricas, guardadas
+  por data; o expediente padrão é o atual. Mudar o horário de trabalho hoje
+  reescreve o denominador de ontem. É o preço de não versionar configuração,
+  aceitável para métrica de tendência e inaceitável no dia em que virar
+  cobrança.
+
+**Para estudar:**
+- [Martin Fowler — CQRS](https://martinfowler.com/bliki/CQRS.html) (por que o modelo de leitura pode divergir do de escrita, e quando essa separação se paga)
+- [PostgreSQL — Aggregate Functions](https://www.postgresql.org/docs/current/functions-aggregate.html) (para quando o volume não couber mais na conta em memória)
+
 ### Flyway
 
 Cada mudança de schema é um arquivo SQL versionado (`backend/migrations/V1__...sql`, `V2__...sql`) aplicado em ordem, uma única vez, e nunca editado depois de mergeado. É o princípio de **migrations imutáveis**, que garante que qualquer ambiente (dev, CI, produção) chegue ao mesmo schema pela mesma sequência de passos.
