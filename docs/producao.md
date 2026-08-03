@@ -661,15 +661,49 @@ gracioso (até 10s para as requisições em andamento terminarem), então o rede
 
 <br>
 
-O CI tagueia cada imagem com o SHA do commit:
+O CI tagueia cada imagem com o SHA do commit, então voltar código é trocar uma
+variável. **A pergunta que decide o caminho é uma só: houve migration entre as
+duas versões?**
 
-```bash
-echo 'IMAGE_TAG=<sha-do-commit-bom>' >> .env
-docker compose -f docker-compose.prod.yml up -d
+```
+                    ┌─ não ─→  ./scripts/rollback.sh <sha-bom>
+houve migration? ───┤
+                    └─ sim ─→  ./scripts/restaurar.sh <backup> --sim-eu-quero
 ```
 
-⚠️ **Migrations não voltam sozinhas.** Se o commit ruim adicionou uma, o rollback
-do schema é manual.
+**Sem migration no meio** — segundos:
+
+```bash
+~/agendago/scripts/rollback.sh <sha-do-commit-bom>
+~/agendago/scripts/rollback.sh latest   # volta a acompanhar o deploy
+```
+
+O script recusa o rollback quando o banco está à frente da imagem, que é a
+quebra silenciosa que ele existe para impedir: o `up -d` subiria sem erro e o
+defeito só apareceria no primeiro `INSERT`, com usuário na frente.
+
+**Com migration no meio** — o Flyway é forward-only e não desfaz. O caminho é
+restaurar o backup carimbado, que já traz de volta a imagem que o gerou:
+
+```bash
+~/agendago/scripts/restaurar.sh                    # mostra o que vai fazer, sem executar
+~/agendago/scripts/restaurar.sh <arquivo> --sim-eu-quero
+```
+
+Antes de sobrescrever, ele grava um backup do estado ATUAL — se restaurar for a
+decisão errada, esse é o caminho de volta.
+
+> [!TIP]
+> **O melhor rollback é o que não precisa do banco.** Migration que aperta
+> (`SET NOT NULL`, `DROP COLUMN`) exige dois deploys — ver a regra no `CLAUDE.md`
+> e o ciclo em `docs/tecnologias.md`. Respeitada, todo rollback cai no caminho
+> curto.
+
+Para ensaiar os dois caminhos sem tocar em produção:
+
+```bash
+./scripts/testar-rollback.sh
+```
 
 </details>
 
@@ -850,16 +884,43 @@ sincronizado pelo CI:
 ~/agendago/scripts/testar-restore.sh caminho.gz   # um arquivo específico
 ```
 
-Ele confere o `.sha256`, sobe um Postgres descartável, restaura com
-`ON_ERROR_STOP=1`, verifica que as tabelas do domínio existem e que o histórico
-do Flyway veio junto, e destrói o container ao final. Saída de um restore são:
+Ele confere o `.sha256`, sobe um Postgres descartável **com o mesmo papel de
+produção** (o dump traz `OWNER TO`, e restaurar sob outro nome falha com `role
+does not exist`), restaura com `ON_ERROR_STOP=1`, verifica que as tabelas do
+domínio existem, que o histórico do Flyway veio junto e que **o manifesto não
+mente** sobre a versão do dump, e destrói o container ao final:
 
 ```
-2026-07-28 09:14:02  testando o restore de agendago-2026-07-28-030001.sql.gz
+2026-07-28 09:14:02  testando o restore de agendago-2026-07-28-030001-schema19.sql.gz
 2026-07-28 09:14:02  hash confere
 2026-07-28 09:14:09  restaurando
-2026-07-28 09:14:10  ok: restore íntegro — 13 migrations, 4 prestador(es), 27 agendamento(s)
+2026-07-28 09:14:10  manifesto confere: schema V19, imagem 3328e02
+2026-07-28 09:14:10  ok: restore íntegro — 19 migrations, 4 prestador(es), 27 agendamento(s)
 ```
+
+### O carimbo de versão
+
+Cada backup vem com um `.json` ao lado do `.sha256`, e a versão do schema entra
+no nome do arquivo:
+
+```json
+{
+  "arquivo": "agendago-2026-07-28-030001-schema19.sql.gz",
+  "criado_em": "2026-07-28T03:00:01-03:00",
+  "schema_version": "19",
+  "image_tag": "3328e02…",
+  "sha256": "…"
+}
+```
+
+É o que fecha o ciclo com o rollback: sem ele, descobrir a que versão do código
+um dump pertence exige restaurá-lo e ler o `flyway_schema_history` — arqueologia
+no meio de um incidente. Com ele, `restaurar.sh` sobe de volta o **par** que
+funcionava junto, sem ninguém precisar lembrar qual imagem era.
+
+Por isso a deduplicação olha três coisas, não só o hash do conteúdo: dado
+idêntico sob um schema ou uma imagem nova merece ponto de restauração próprio —
+é justamente o retrato pré-migration que o rollback vai querer.
 
 Nada disso toca a produção: o container é próprio, sem porta publicada, e some no
 fim. O `ON_ERROR_STOP=1` não é detalhe — sem ele o `psql` segue depois de um erro

@@ -13,6 +13,31 @@ Constraints permitidas nas migrations:
 Não usar nas migrations:
 - `DEFAULT` com valores que representam regras de negócio — essa responsabilidade é do domínio
 - `CHECK` constraints que validam regras de negócio — essa responsabilidade é do domínio
+- `UPDATE`, `INSERT` ou `DELETE` — **migration não escreve dado**. Todo backfill
+  precisa decidir com que valor as linhas antigas ficam, e essa decisão é do
+  domínio; em SQL ela vira uma segunda fonte da verdade, sem teste e sem
+  conserto, porque migration aplicada não se corrige. O CI reprova (job
+  `backend`, passo "migrations não podem escrever dado").
+
+### Migration que aperta exige dois deploys
+
+`SET NOT NULL`, `DROP COLUMN`, `RENAME` e `UNIQUE` novo quebram a versão
+ANTERIOR da aplicação, que continua no ar durante o deploy e é para onde um
+rollback volta. Como o Flyway é forward-only, o banco não volta junto com a
+imagem — e o rollback sobe sem erro, quebrando no primeiro `INSERT`.
+
+O ciclo é de três passos, e o do meio não é opcional:
+
+1. **Expand** (migration): coluna nova entra **anulável**. As duas versões do
+   código funcionam contra este schema.
+2. **Código novo em produção**: passa a escrever a coluna em todos os caminhos.
+   As linhas legadas são preenchidas por um comando pontual que roda **pelo
+   domínio** — nunca por SQL na migration.
+3. **Contract** (migration do deploy seguinte): só o `SET NOT NULL`.
+
+`backend/test/repository/compatibilidade_schema_test.go` transforma isso em
+falha de build: compara o schema antes e depois e acusa coluna nova obrigatória,
+coluna removida e coluna apertada.
 
 ---
 

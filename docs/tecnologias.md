@@ -418,13 +418,30 @@ O padrão **expand/contract** divide a mudança em dois deploys:
 1. **Expand** — só adiciona. Cria as tabelas novas, copia os dados, e **afrouxa** o que o código novo vai parar de preencher. Nada é removido, então as duas versões do código funcionam ao mesmo tempo. O rollback é voltar a imagem.
 2. **Contract** — só depois de confirmado que ninguém lê mais o que ficou para trás, um deploy seguinte remove. É o passo irreversível, e por isso ele espera.
 
-**Nenhuma migration deste repositório segue esse padrão**, e isso é decisão, não esquecimento. Coluna obrigatória entra `NOT NULL` de uma vez (`V13`, `V17`, `V19`), e a `V14__separa_identidade_de_provider.sql` cria `usuarios` e `provider_membros` e remove a identidade de `providers` no mesmo passo, sem converter prestador nenhum.
+**As migrations até a V19 não seguem esse padrão** — coluna obrigatória entra `NOT NULL` de uma vez, e a `V14__separa_identidade_de_provider.sql` cria `usuarios` e `provider_membros` e remove a identidade de `providers` no mesmo passo. Era coerente com um banco descartável, e o banco foi recriado. **Da V20 em diante o padrão é obrigatório**, porque a pergunta mudou: rollback de código só é rápido enquanto a versão anterior continua funcionando contra o schema já migrado.
 
 O que se ganha é o assunto do CLAUDE.md: **migration nenhuma escreve dado**. Todo backfill precisa decidir com que valor as linhas antigas ficam, e essa decisão é do domínio; escrita em SQL ela vira uma segunda fonte da verdade — sem teste, e sem conserto, porque migration aplicada não se corrige. A V17 é o caso mais claro: preencher `slug` a partir do nome exigiria reimplementar `provider.GerarSlug` em SQL, com dobra de acentos, formato aceito e desempate de homônimos. A V14 tinha a sua: decidir que todo prestador convertido vira `'dono'` da própria agenda é regra de `internal/domain/membro`, não de um `INSERT ... SELECT`.
 
 Some junto o passo que mais dói esquecer no expand/contract — soltar o `NOT NULL` das colunas que o código novo parou de preencher. Removendo-as no mesmo ato, não há janela em que a versão antiga e a nova precisem conviver. O teste de integração da V14 continua verificando o resultado: aplica a migration num Postgres real e insere um prestador só com dados de agenda.
 
-O preço é explícito: `ADD COLUMN ... NOT NULL` sem `DEFAULT` **falha se a tabela tiver linhas**. Toda mudança de schema passa a exigir banco recriado (`docker compose down -v`), e o dia em que houver base real esse atalho morre junto com o "banco descartável" — a divisão em dois deploys volta a ser obrigatória, e o backfill sai do SQL para um comando que fale com o domínio.
+### Como fica o ciclo, sem trazer regra de volta para o SQL
+
+O passo *contract* precisa que as linhas escritas pela versão anterior já tenham
+valor — e preencher dado em migration é justamente o que a regra proíbe. A saída
+é o backfill **sair** do SQL, não voltar para ele:
+
+1. **Expand** (migration): `ADD COLUMN x ...` **anulável**. Nenhum dado escrito.
+2. **Código novo em produção**: escreve `x` em todos os caminhos; as linhas
+   legadas são preenchidas por um comando pontual que passa pelo domínio.
+3. **Contract** (migration seguinte): só `ALTER COLUMN x SET NOT NULL`.
+
+As duas regras sobrevivem: migration nenhuma escreve dado, e N e N-1 funcionam
+contra o mesmo schema. `backend/test/repository/compatibilidade_schema_test.go`
+compara o schema antes e depois e reprova o build quando alguma migration nova
+quebra a propriedade — inclusive provando, contra mudanças sintéticas, que o
+verificador acusa de verdade.
+
+O preço do atalho antigo era explícito: `ADD COLUMN ... NOT NULL` sem `DEFAULT` **falha se a tabela tiver linhas**, então toda mudança de schema exigia banco recriado (`docker compose down -v`). É esse atalho que a compatibilidade N/N-1 aposenta.
 
 **Para estudar:**
 - [Martin Fowler — ParallelChange (expand/contract)](https://martinfowler.com/bliki/ParallelChange.html) (a formulação original do padrão)
