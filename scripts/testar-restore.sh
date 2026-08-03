@@ -14,11 +14,22 @@
 
 set -euo pipefail
 
+PASTA_STACK="${PASTA_STACK:-$HOME/agendago}"
 PASTA_BACKUP="${PASTA_BACKUP:-$HOME/backups}"
 IMAGEM_POSTGRES="${IMAGEM_POSTGRES:-postgres:16-alpine}"
 CONTAINER="agendago_teste_restore_$$"
 
 log() { printf '%s  %s\n' "$(date '+%F %T')" "$*"; }
+
+# O papel do container descartável precisa ser o MESMO de produção. O pg_dump
+# escreve `ALTER TABLE ... OWNER TO <dono>` no arquivo, e restaurar sob outro
+# nome falha com `role "..." does not exist` — o ensaio reprovaria um backup
+# perfeitamente bom, ou (pior) nunca teria chance de aprovar nenhum.
+USUARIO_TESTE=teste
+if [ -f "$PASTA_STACK/.env" ]; then
+	do_env=$(sed -n 's/^POSTGRES_USER=//p' "$PASTA_STACK/.env" | tail -1)
+	USUARIO_TESTE="${do_env:-teste}"
+fi
 
 arquivo="${1:-}"
 if [ -z "$arquivo" ]; then
@@ -51,18 +62,18 @@ trap limpar EXIT
 
 docker run -d --name "$CONTAINER" \
 	-e POSTGRES_DB=restore_teste \
-	-e POSTGRES_USER=teste \
+	-e POSTGRES_USER="$USUARIO_TESTE" \
 	-e POSTGRES_PASSWORD=teste \
 	"$IMAGEM_POSTGRES" >/dev/null
 
 log "aguardando o Postgres descartável subir"
 for _ in $(seq 1 30); do
-	if docker exec "$CONTAINER" pg_isready -U teste >/dev/null 2>&1; then
+	if docker exec "$CONTAINER" pg_isready -U "$USUARIO_TESTE" >/dev/null 2>&1; then
 		break
 	fi
 	sleep 1
 done
-if ! docker exec "$CONTAINER" pg_isready -U teste >/dev/null 2>&1; then
+if ! docker exec "$CONTAINER" pg_isready -U "$USUARIO_TESTE" >/dev/null 2>&1; then
 	log "ERRO: o Postgres descartável não subiu"
 	exit 1
 fi
@@ -72,12 +83,12 @@ log "restaurando"
 # o que faria um restore quebrado passar por bom — exatamente o que este script
 # existe para impedir.
 if ! gunzip -c "$arquivo" | docker exec -i "$CONTAINER" \
-	psql -v ON_ERROR_STOP=1 -U teste -d restore_teste >/dev/null; then
+	psql -v ON_ERROR_STOP=1 -U "$USUARIO_TESTE" -d restore_teste >/dev/null; then
 	log "ERRO: a restauração falhou"
 	exit 1
 fi
 
-consultar() { docker exec "$CONTAINER" psql -tAX -U teste -d restore_teste -c "$1"; }
+consultar() { docker exec "$CONTAINER" psql -tAX -U "$USUARIO_TESTE" -d restore_teste -c "$1"; }
 
 # Sanidade: as tabelas do domínio existem e o histórico do Flyway veio junto.
 # Sem checar o histórico, um dump de um banco sem migrations aplicadas passaria.
