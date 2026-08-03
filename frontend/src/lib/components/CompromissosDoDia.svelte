@@ -13,6 +13,7 @@
 		removerOcupacao,
 		type Ocupacao
 	} from '$lib/api/ocupacoes';
+	import TimeSelect from '$lib/components/TimeSelect.svelte';
 
 	// data no formato YYYY-MM-DD; podeEditar espelha a regra de antecedência da
 	// página, para o formulário não oferecer o que o backend vai recusar.
@@ -23,14 +24,9 @@
 	let erro = $state<string | null>(null);
 	let salvando = $state(false);
 
-	let inicio = $state('14:00');
-	let fim = $state('15:00');
+	let inicio = $state(14 * 60);
+	let fim = $state(15 * 60);
 	let titulo = $state('');
-
-	function hhmmParaMinutos(hhmm: string): number {
-		const [h, m] = hhmm.split(':').map(Number);
-		return h * 60 + m;
-	}
 
 	function minutosParaHHMM(minutos: number): string {
 		const h = Math.floor(minutos / 60)
@@ -64,8 +60,8 @@
 		try {
 			await criarOcupacao({
 				data,
-				inicioMinutos: hhmmParaMinutos(inicio),
-				fimMinutos: hhmmParaMinutos(fim),
+				inicioMinutos: inicio,
+				fimMinutos: fim,
 				titulo
 			});
 			titulo = '';
@@ -135,29 +131,39 @@
 
 	{#if podeEditar}
 		<div class="mt-4 flex flex-wrap items-end gap-2">
-			<label class="flex flex-col gap-1">
-				<span class="text-xs font-medium tracking-wide text-mute uppercase">Início</span>
-				<input type="time" step="900" bind:value={inicio} class="campo-linha h-9 w-28 px-2 text-sm" />
-			</label>
-			<label class="flex flex-col gap-1">
-				<span class="text-xs font-medium tracking-wide text-mute uppercase">Fim</span>
-				<input type="time" step="900" bind:value={fim} class="campo-linha h-9 w-28 px-2 text-sm" />
-			</label>
-			<label class="flex min-w-40 flex-1 flex-col gap-1">
-				<span class="text-xs font-medium tracking-wide text-mute uppercase">Descrição</span>
+			<div class="flex w-28 flex-col gap-1">
+				<label for="compromisso-inicio" class="text-xs font-medium tracking-wide text-mute uppercase">
+					Início
+				</label>
+				<TimeSelect id="compromisso-inicio" bind:valor={inicio} />
+			</div>
+			<div class="flex w-28 flex-col gap-1">
+				<label for="compromisso-fim" class="text-xs font-medium tracking-wide text-mute uppercase">
+					Fim
+				</label>
+				<TimeSelect id="compromisso-fim" bind:valor={fim} minimo={15} maximo={24 * 60} />
+			</div>
+			<div class="flex min-w-40 flex-1 flex-col gap-1">
+				<label
+					for="compromisso-titulo"
+					class="text-xs font-medium tracking-wide text-mute uppercase"
+				>
+					Descrição
+				</label>
 				<input
+					id="compromisso-titulo"
 					type="text"
 					maxlength="120"
 					placeholder="Opcional"
 					bind:value={titulo}
-					class="campo-linha h-9 px-2 text-sm"
+					class="h-10 w-full rounded-md border border-hairline-strong bg-surface-card px-3 text-sm text-ink outline-none transition placeholder:text-mute focus:border-ink"
 				/>
-			</label>
+			</div>
 			<button
 				type="button"
 				disabled={salvando}
 				onclick={adicionar}
-				class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-on transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+				class="inline-flex h-10 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-on transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
 			>
 				{salvando ? 'Salvando…' : 'Adicionar'}
 			</button>
