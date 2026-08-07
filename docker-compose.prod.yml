@@ -204,7 +204,7 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       # Blocos de site dos outros projetos do mesmo VPS (ver o import no fim do
       # Caddyfile). Só leitura: o Caddy nunca escreve aqui.
-      - /opt/caddy/sites:/etc/caddy/sites:ro
+      - /home/deploy/caddy/sites:/etc/caddy/sites:ro
       - caddy_data:/data # certificados (persistem entre restarts)
       - caddy_config:/config
     # `borda` é a rede compartilhada por onde o Caddy alcança os containers dos
@@ -218,8 +218,9 @@ services:
       - web
 
 networks:
-  # Criada uma vez no host, fora do ciclo de vida de qualquer stack:
-  #   docker network create borda
+  # Externa porque vive fora do ciclo de vida desta stack: um `down` aqui não
+  # pode levar embora a rede que os outros projetos do VPS usam. Quem a cria é
+  # o job `implantar` do CI, antes do `up` (external = o Compose não cria).
   borda:
     external: true
 
