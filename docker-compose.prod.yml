@@ -202,11 +202,26 @@ services:
       DOMINIO: ${DOMINIO}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Blocos de site dos outros projetos do mesmo VPS (ver o import no fim do
+      # Caddyfile). Só leitura: o Caddy nunca escreve aqui.
+      - /opt/caddy/sites:/etc/caddy/sites:ro
       - caddy_data:/data # certificados (persistem entre restarts)
       - caddy_config:/config
+    # `borda` é a rede compartilhada por onde o Caddy alcança os containers dos
+    # outros projetos. Só ELE participa das duas: api, web e postgres do
+    # agendaGo continuam isolados na rede default deste compose.
+    networks:
+      - default
+      - borda
     depends_on:
       - api
       - web
+
+networks:
+  # Criada uma vez no host, fora do ciclo de vida de qualquer stack:
+  #   docker network create borda
+  borda:
+    external: true
 
 volumes:
   postgres_data:

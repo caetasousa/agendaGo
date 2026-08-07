@@ -52,3 +52,14 @@
 		reverse_proxy web:3000
 	}
 }
+
+# Outros sites hospedados no mesmo VPS trazem o próprio bloco, num arquivo
+# .caddy que cada projeto instala em /opt/caddy/sites do host. É o que permite
+# a esta configuração não saber que eles existem: o agendaGo não precisa ser
+# editado (nem reimplantado) quando um vizinho entra ou sai.
+#
+# Os containers deles são alcançados pela rede Docker `borda`, declarada como
+# externa no compose. Crie-a uma vez no host:
+#
+#   docker network create borda
+import /etc/caddy/sites/*.caddy
