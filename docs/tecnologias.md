@@ -559,7 +559,7 @@ A separação tem duas metades, e as duas estão no `Caddyfile` e no `docker-com
 
 | Metade | Como funciona |
 |---|---|
-| **Configuração** | O `Caddyfile` termina com `import /etc/caddy/sites/*.caddy`. Cada projeto instala o próprio bloco em `/opt/caddy/sites` no host, montado read-only no container. Glob que não casa nada é só um `warn` no Caddy — o diretório vazio não derruba a config (caminho literal ausente, esse sim, seria erro) |
+| **Configuração** | O `Caddyfile` termina com `import /etc/caddy/sites/*.caddy`. Cada projeto instala o próprio bloco em `/home/deploy/caddy/sites` no host, montado read-only no container. Glob que não casa nada é só um `warn` no Caddy — o diretório vazio não derruba a config (caminho literal ausente, esse sim, seria erro) |
 | **Rede** | Os containers dos vizinhos são alcançados pela rede Docker `borda`. **Só o Caddy** participa das duas redes: `api`, `web` e `postgres` continuam isolados na rede default deste compose, invisíveis para qualquer vizinho |
 
 `borda` é declarada `external: true` porque não pertence a esta stack — um `docker compose down` daqui não pode levar embora a rede que os outros projetos usam. Em compensação, `external` significa que o Compose **não a cria**: se não existir, o deploy falha inteiro com `network borda declared as external, but could not be found`. Por isso o job `implantar` do CI a garante antes de subir a stack, com `docker network inspect borda || docker network create borda` — deixar isso como passo manual esconderia a dependência até o dia de um host novo, ou de um `docker network prune` numa faxina.
