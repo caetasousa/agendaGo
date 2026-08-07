@@ -575,6 +575,25 @@ jobs:
             '~/agendago/scripts/backup.sh' \
             || echo "::warning::backup pré-deploy não executado (a stack já existe na VPS?)"
 
+      # A rede `borda` — por onde o Caddy alcança os containers dos outros
+      # projetos do VPS — é declarada `external` no compose, e external significa
+      # que o Compose NÃO a cria: ele só falha com "network borda declared as
+      # external, but could not be found". Criar aqui, e não uma vez na mão,
+      # porque a rede vive fora do ciclo de vida de qualquer stack: um host novo,
+      # ou um `docker network prune` numa faxina, deixaria o deploy quebrado sem
+      # nada no repositório explicando o que restaurar.
+      #
+      # Idempotente pelo inspect: `network create` de rede existente é erro.
+      - name: garante a rede compartilhada do Caddy
+        if: steps.cfg.outputs.configurado == 'true'
+        env:
+          HOST: ${{ secrets.VPS_HOST }}
+          USUARIO: ${{ secrets.VPS_USER }}
+          PORTA: ${{ secrets.VPS_PORT || '22' }}
+        run: |
+          ssh -4 -o ConnectTimeout=15 -i ~/.ssh/id_deploy -p "$PORTA" "$USUARIO@$HOST" \
+            'docker network inspect borda >/dev/null 2>&1 || docker network create borda'
+
       - name: puxa as imagens e sobe a stack
         if: steps.cfg.outputs.configurado == 'true'
         env:
