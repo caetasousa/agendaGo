@@ -551,6 +551,24 @@ Em produção, um único Caddy termina o TLS (certificado Let's Encrypt **autom�
 - [Caddy — HTTPS automático](https://caddyserver.com/docs/automatic-https)
 - [MDN — SameSite cookies](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite) (por que a mesma origem importa)
 
+### Vários sites no mesmo VPS, sem o agendaGo saber deles
+
+O mesmo servidor hospeda outros projetos, e só pode haver **um** processo escutando nas portas 80/443 — então o Caddy do agendaGo é o proxy de todos. O jeito ingênuo seria escrever os blocos dos vizinhos dentro do `Caddyfile` daqui, mas isso amarra projetos independentes: entrar ou sair um vizinho viraria commit e deploy **neste** repositório.
+
+A separação tem duas metades, e as duas estão no `Caddyfile` e no `docker-compose.prod.yml`:
+
+| Metade | Como funciona |
+|---|---|
+| **Configuração** | O `Caddyfile` termina com `import /etc/caddy/sites/*.caddy`. Cada projeto instala o próprio bloco em `/opt/caddy/sites` no host, montado read-only no container. Glob que não casa nada é só um `warn` no Caddy — o diretório vazio não derruba a config (caminho literal ausente, esse sim, seria erro) |
+| **Rede** | Os containers dos vizinhos são alcançados pela rede Docker `borda`. **Só o Caddy** participa das duas redes: `api`, `web` e `postgres` continuam isolados na rede default deste compose, invisíveis para qualquer vizinho |
+
+`borda` é declarada `external: true` porque não pertence a esta stack — um `docker compose down` daqui não pode levar embora a rede que os outros projetos usam. Em compensação, `external` significa que o Compose **não a cria**: se não existir, o deploy falha inteiro com `network borda declared as external, but could not be found`. Por isso o job `implantar` do CI a garante antes de subir a stack, com `docker network inspect borda || docker network create borda` — deixar isso como passo manual esconderia a dependência até o dia de um host novo, ou de um `docker network prune` numa faxina.
+
+**Para estudar:**
+- [Caddy — a diretiva `import`](https://caddyserver.com/docs/caddyfile/directives/import)
+- [Docker Compose — `networks` de nível raiz e redes externas](https://docs.docker.com/reference/compose-file/networks/)
+- [Docker — redes bridge definidas pelo usuário](https://docs.docker.com/engine/network/drivers/bridge/) (por que containers numa rede nomeada se enxergam pelo nome do serviço, e os de fora não)
+
 ### Logging estruturado: log/slog
 
 O sistema usa o `log/slog` (structured logging da biblioteca padrão, Go 1.21+) em vez do `log` puro — configurado em `internal/pkg/logging/logging.go`. Em **produção** emite JSON (uma linha = um objeto, parseável campo a campo por agregadores como Loki/CloudWatch/Datadog); em **desenvolvimento**, texto legível no terminal. A escolha entre os dois é `APP_ENV=production`.
