@@ -5,7 +5,7 @@
 # Note que aqui NÃO há swag: a doc interativa fica atrás da build tag `swagger`
 # e não entra nesta imagem. Antes ela entrava — eram 10 MB de assets da UI e da
 # spec, 37% do binário, para servir uma rota que produção nunca expôs.
-FROM golang:1.26-alpine AS build
+FROM golang:1.27-alpine AS build
 
 WORKDIR /app
 
