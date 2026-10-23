@@ -13,7 +13,7 @@
 #      banco, que é a quebra silenciosa que o script existe para impedir.
 #
 # Sobe o próprio Postgres e a própria imagem de migrations, e destrói os dois no
-# fim. Não lê nem escreve nada da VPS.
+# fim. Não lê nem escreve nada do servidor.
 
 set -euo pipefail
 

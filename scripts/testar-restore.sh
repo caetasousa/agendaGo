@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Restaura o backup mais recente num Postgres descartável e confere se o banco
-# volta utilizável. Rode na VPS, junto de scripts/backup.sh:
+# volta utilizável. Rode no servidor, junto de scripts/backup.sh:
 #
 #   ./scripts/testar-restore.sh
 #

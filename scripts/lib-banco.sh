@@ -47,7 +47,7 @@ versao_de_schema() {
 }
 
 # campo_manifesto lê um campo do manifesto .json de um backup. sed em vez de jq
-# porque a VPS não tem jq, e o JSON é gerado por backup.sh — formato fixo.
+# porque o servidor não tem jq, e o JSON é gerado por backup.sh — formato fixo.
 campo_manifesto() {
 	[ -f "$1" ] || return 0
 	sed -n "s/.*\"$2\": *\"\([^\"]*\)\".*/\1/p" "$1"

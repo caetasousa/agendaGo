@@ -1,18 +1,18 @@
-# Stack de PRODUÇÃO: um único host rodando tudo atrás do Caddy, que termina o
-# TLS (HTTPS automático via Let's Encrypt) e serve frontend e API na MESMA
-# origem — Caddy roteia /api/* para a API e todo o resto para o frontend. Como
-# é uma origem só, o cookie de sessão (SameSite=Lax) funciona sem mudança de
-# código, e não há CORS entre front e API.
+# Stack de PRODUÇÃO: roda no Docker rootless do usuário `agendago`, na distro
+# `ubuntu-server` do WSL, publicada pelo túnel da Cloudflare. O Caddy serve
+# frontend e API na MESMA origem — roteia /api/* para a API e todo o resto para
+# o frontend. Como é uma origem só, o cookie de sessão (SameSite=Lax) funciona
+# sem mudança de código, e não há CORS entre front e API.
 #
 # Diferente do docker-compose.yml (dev): imagens de produção prontas, sem hot
-# reload, sem Mailpit (usa SMTP real), Postgres sem porta pública.
+# reload, sem Mailpit (usa SMTP real), nenhuma porta fora de 127.0.0.1.
 #
-# As imagens são buildadas pelo CI e publicadas no GHCR — este arquivo NÃO
-# builda nada. Por isso o host de produção só precisa de três arquivos
-# (docker-compose.prod.yml, Caddyfile e .env), nunca do código-fonte.
+# As imagens são buildadas na máquina de desenvolvimento e entregues ao
+# servidor por scripts/implantar.sh — este arquivo NÃO builda nada. Por isso o
+# servidor só precisa de três arquivos (docker-compose.prod.yml, Caddyfile e
+# .env), nunca do código-fonte.
 #
-# Sobe com:  docker compose -f docker-compose.prod.yml pull && \
-#            docker compose -f docker-compose.prod.yml up -d
+# Sobe com:  docker compose -f docker-compose.prod.yml up -d
 # Consome as variáveis de um arquivo .env (veja .env.prod.example).
 
 # Rotação de log (driver json-file): sem isto, o log do Docker cresce sem
@@ -58,11 +58,18 @@ services:
       timeout: 5s
       retries: 5
 
+  # As imagens da aplicação só existem no daemon local, carregadas por
+  # scripts/implantar.sh: `pull_policy: never` faz uma imagem ausente virar erro
+  # em vez de uma busca no registry. O prefixo `localhost/` é a segunda trava —
+  # sem ele, `agendago/agendago-api` seria um nome do Docker Hub, que qualquer
+  # um pode registrar e que um `pull` acabaria baixando.
+  #
   # Job pontual: aplica as migrations e sai. A API só sobe depois que ele
   # termina com sucesso (depends_on: service_completed_successfully). Os .sql
   # vêm dentro da imagem (backend/Dockerfile.migrations), não de um bind mount.
   flyway:
-    image: ${IMAGE_REPO:-ghcr.io/caetasousa}/agendago-migrations:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REPO:-localhost/agendago}/agendago-migrations:${IMAGE_TAG:-latest}
+    pull_policy: never
     command: migrate
     environment:
       FLYWAY_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
@@ -75,7 +82,8 @@ services:
         condition: service_healthy
 
   api:
-    image: ${IMAGE_REPO:-ghcr.io/caetasousa}/agendago-api:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REPO:-localhost/agendago}/agendago-api:${IMAGE_TAG:-latest}
+    pull_policy: never
     restart: unless-stopped
     logging: *logging
     # Sem `healthcheck` aqui de propósito: a imagem já traz o dela
@@ -106,15 +114,15 @@ services:
       DB_USER: ${DB_USER:-${POSTGRES_USER}}
       DB_PASSWORD: ${DB_PASSWORD:-${POSTGRES_PASSWORD}}
       # Limites do pool. Ausentes, valem os padrões do projeto — que já são uma
-      # decisão, ao contrário do padrão do pgx (max(4, núcleos), ou seja 4 numa
-      # VPS de 1 vCPU).
+      # decisão, ao contrário do padrão do pgx (max(4, núcleos)), que faria o
+      # teto de concorrência depender da máquina.
       DB_MAX_CONNS: ${DB_MAX_CONNS:-10}
       DB_MIN_CONNS: ${DB_MIN_CONNS:-2}
       DB_MAX_CONN_LIFETIME_MIN: ${DB_MAX_CONN_LIFETIME_MIN:-60}
       DB_MAX_CONN_IDLE_MIN: ${DB_MAX_CONN_IDLE_MIN:-30}
       DB_HEALTHCHECK_SEC: ${DB_HEALTHCHECK_SEC:-60}
       # production liga o atributo Secure do cookie de sessão (exige HTTPS,
-      # que o Caddy fornece).
+      # que a Cloudflare fornece na borda).
       APP_ENV: production
       # Origem pública do frontend: usada no CORS E como base dos links nos
       # emails (recuperação de senha, cadastro, cancelamento). Como front e API
@@ -150,7 +158,8 @@ services:
   # A imagem já vem com PUBLIC_API_URL=/api assado no build (relativo, portanto
   # independente do domínio — o Caddy serve front e API na mesma origem).
   web:
-    image: ${IMAGE_REPO:-ghcr.io/caetasousa}/agendago-web:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REPO:-localhost/agendago}/agendago-web:${IMAGE_TAG:-latest}
+    pull_policy: never
     restart: unless-stopped
     logging: *logging
     security_opt:
@@ -175,8 +184,8 @@ services:
       start_period: 10s
       retries: 3
     environment:
-      # adapter-node atrás de proxy: conhece a origem pública e confia nos
-      # cabeçalhos X-Forwarded-* do Caddy.
+      # adapter-node atrás de proxy: a origem pública vem de ORIGIN, que
+      # vence os cabeçalhos X-Forwarded-*.
       ORIGIN: https://${DOMINIO}
       PROTOCOL_HEADER: x-forwarded-proto
       HOST_HEADER: x-forwarded-host
@@ -185,8 +194,8 @@ services:
     image: caddy:2-alpine
     restart: unless-stopped
     logging: *logging
-    # Precisa só de NET_BIND_SERVICE, para abrir as portas 80 e 443 (abaixo de
-    # 1024). Escreve em /data (certificados), então não pode ser read_only.
+    # Precisa só de NET_BIND_SERVICE, para abrir a porta 80 dentro do
+    # container. Escreve em /data e /config, então não pode ser read_only.
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -195,34 +204,18 @@ services:
       - NET_BIND_SERVICE
     pids_limit: 256
     mem_limit: 128m
+    # Só em 127.0.0.1: quem chega aqui é o cloudflared da ubuntu-server (rota
+    # do túnel: HTTP → localhost:8481). É isso que torna confiável o
+    # CF-Connecting-IP lido no Caddyfile. A 8480 é do nginx do studygo.
     ports:
-      - '80:80'
-      - '443:443'
-    environment:
-      DOMINIO: ${DOMINIO}
+      - '127.0.0.1:${PORTA_CADDY:-8481}:80'
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      # Blocos de site dos outros projetos do mesmo VPS (ver o import no fim do
-      # Caddyfile). Só leitura: o Caddy nunca escreve aqui.
-      - /home/deploy/caddy/sites:/etc/caddy/sites:ro
-      - caddy_data:/data # certificados (persistem entre restarts)
+      - caddy_data:/data
       - caddy_config:/config
-    # `borda` é a rede compartilhada por onde o Caddy alcança os containers dos
-    # outros projetos. Só ELE participa das duas: api, web e postgres do
-    # agendaGo continuam isolados na rede default deste compose.
-    networks:
-      - default
-      - borda
     depends_on:
       - api
       - web
-
-networks:
-  # Externa porque vive fora do ciclo de vida desta stack: um `down` aqui não
-  # pode levar embora a rede que os outros projetos do VPS usam. Quem a cria é
-  # o job `implantar` do CI, antes do `up` (external = o Compose não cria).
-  borda:
-    external: true
 
 volumes:
   postgres_data:

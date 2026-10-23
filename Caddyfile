@@ -1,6 +1,11 @@
-# Proxy reverso de produção. O Caddy pega um certificado Let's Encrypt
-# automaticamente para {$DOMINIO} (precisa das portas 80/443 abertas e do
-# domínio apontando para o IP do host) e serve tudo numa origem só:
+# Proxy reverso de produção. Fica atrás do túnel da Cloudflare: quem termina o
+# HTTPS é a Cloudflare, e o `cloudflared` da ubuntu-server repassa a visita em
+# HTTP para cá (127.0.0.1:8481 no host, :80 dentro do container). Por isso não
+# há certificado nem Let's Encrypt aqui, e o site escuta em qualquer nome: só o
+# túnel chega nesta porta, e quem decide que domínio aponta para ela é a rota
+# do túnel no painel da Cloudflare.
+#
+# Continua servindo tudo numa origem só:
 #
 #   /api/*  -> API Go (o prefixo /api é removido antes de repassar)
 #   /*      -> frontend SvelteKit (servidor Node do adapter-node)
@@ -8,11 +13,12 @@
 # Origem única = o cookie de sessão SameSite=Lax funciona sem mudança de código
 # e não há CORS entre frontend e API.
 
-{$DOMINIO} {
+:80 {
 	encode gzip zstd
 
 	# Cabeçalhos de segurança seguros (não quebram o app). HSTS assume
-	# compromisso com HTTPS — correto atrás do Caddy.
+	# compromisso com HTTPS — correto: o navegador só fala com a Cloudflare, e
+	# ela só serve HTTPS.
 	#
 	# A Content-Security-Policy NÃO fica aqui: ela é emitida pelo SvelteKit
 	# (kit.csp no vite.config.ts), que sabe o hash dos scripts que gera a cada
@@ -39,11 +45,14 @@
 		respond @swagger 404
 
 		reverse_proxy api:8080 {
-			# passa o IP real do cliente ({remote_host} é o peer da conexão,
-			# não forjável) para a API logar e limitar por IP corretamente —
-			# sem isto ela veria sempre o IP do container do Caddy. header_up
-			# substitui qualquer X-Real-IP que o cliente tente enviar.
-			header_up X-Real-IP {remote_host}
+			# Passa o IP real do visitante para a API logar e limitar por IP —
+			# sem isto ela veria sempre o IP do container do Caddy. Atrás do
+			# túnel, o par da conexão é o cloudflared, então o IP vem do
+			# CF-Connecting-IP, que a Cloudflare reescreve em toda requisição.
+			# Confiar nele é seguro porque a porta só escuta em 127.0.0.1, onde
+			# só o túnel chega. header_up substitui qualquer X-Real-IP que o
+			# cliente tente enviar.
+			header_up X-Real-IP {http.request.header.CF-Connecting-IP}
 		}
 	}
 
@@ -52,12 +61,3 @@
 		reverse_proxy web:3000
 	}
 }
-
-# Outros sites hospedados no mesmo VPS trazem o próprio bloco, num arquivo
-# .caddy que cada projeto instala em /home/deploy/caddy/sites do host. É o que
-# permite a esta configuração não saber que eles existem: o agendaGo não precisa
-# ser editado (nem reimplantado) quando um vizinho entra ou sai.
-#
-# Os containers deles são alcançados pela rede Docker `borda`, declarada como
-# externa no compose e criada pelo job `implantar` do CI.
-import /etc/caddy/sites/*.caddy

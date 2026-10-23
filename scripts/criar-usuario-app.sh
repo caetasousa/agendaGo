@@ -7,7 +7,7 @@
 # SELECT/INSERT/UPDATE/DELETE — e nenhum DDL. Quem aplica migration continua
 # sendo o dono, pelo Flyway.
 #
-# Rode na VPS, dentro da pasta da stack, como o usuário `deploy`:
+# Rode no servidor, dentro da pasta da stack, como o usuário `agendago`:
 #
 #   ./scripts/criar-usuario-app.sh
 #

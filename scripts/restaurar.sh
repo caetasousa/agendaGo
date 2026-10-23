@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Restaura um backup NO BANCO DE PRODUÇÃO e devolve a stack à versão de código
-# que gerou aquele dump. Rode na VPS:
+# que gerou aquele dump. Rode no servidor, como o usuário agendago:
 #
 #   ./scripts/restaurar.sh                        # o backup mais recente
 #   ./scripts/restaurar.sh <arquivo.sql.gz>       # um backup específico
@@ -46,6 +46,19 @@ fi
 schema_do_backup=$(campo_manifesto "$arquivo.json" schema_version)
 imagem_do_backup=$(campo_manifesto "$arquivo.json" image_tag)
 criado_em=$(campo_manifesto "$arquivo.json" criado_em)
+
+# A imagem do backup precisa existir AQUI antes de qualquer coisa ser apagada:
+# não há registry de onde buscá-la, e descobrir a falta depois do DROP SCHEMA
+# deixaria o banco restaurado sem código que fale com ele.
+repo="${IMAGE_REPO:-localhost/agendago}"
+if [ -n "$imagem_do_backup" ] && [ "$imagem_do_backup" != "desconhecida" ]; then
+	for imagem in agendago-api agendago-web; do
+		if ! docker image inspect "$repo/$imagem:$imagem_do_backup" >/dev/null 2>&1; then
+			log "ERRO: $repo/$imagem:$imagem_do_backup não existe neste servidor; nada foi tocado"
+			exit 1
+		fi
+	done
+fi
 
 cd "$PASTA_STACK"
 set -a
@@ -131,24 +144,20 @@ if [ -n "$imagem_do_backup" ] && [ "$imagem_do_backup" != "desconhecida" ]; then
 	else
 		printf 'IMAGE_TAG=%s\n' "$imagem_do_backup" >>.env
 	fi
-	IMAGE_TAG="$imagem_do_backup" compose pull --quiet api web
 else
 	log "AVISO: o backup não registra a imagem; subindo com o IMAGE_TAG atual do .env"
 fi
 
 compose up -d
 
-if [ -n "${DOMINIO:-}" ]; then
-	for _ in $(seq 1 12); do
-		if curl -fsS "https://$DOMINIO/api/health" >/dev/null 2>&1 &&
-			curl -fsS -o /dev/null "https://$DOMINIO/" 2>/dev/null; then
-			log "ok: aplicação no ar com o banco restaurado"
-			exit 0
-		fi
-		sleep 5
-	done
-	log "ERRO: a aplicação não respondeu após a restauração"
-	exit 1
-fi
-
-log "ok: stack no ar (DOMINIO não definido; verificação HTTP pulada)"
+# Pelo Caddy local, sem depender do túnel da Cloudflare.
+for _ in $(seq 1 12); do
+	if curl -fsS -o /dev/null "http://127.0.0.1:${PORTA_CADDY:-8481}/api/health" 2>/dev/null &&
+		curl -fsS -o /dev/null "http://127.0.0.1:${PORTA_CADDY:-8481}/" 2>/dev/null; then
+		log "ok: aplicação no ar com o banco restaurado"
+		exit 0
+	fi
+	sleep 5
+done
+log "ERRO: a aplicação não respondeu após a restauração"
+exit 1

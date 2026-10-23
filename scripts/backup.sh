@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Backup completo do banco de produção: dump lógico comprimido, com verificação
 # de integridade, deduplicação por conteúdo e rotação. Feito para rodar por cron
-# na VPS, como o usuário `deploy`:
+# no servidor, como o usuário `agendago` (scripts/implantar.sh agenda):
 #
-#   0 3 * * * /home/deploy/agendago/scripts/backup.sh >> /home/deploy/backups/backup.log 2>&1
+#   0 3 * * * /home/agendago/agendago/scripts/backup.sh >> /home/agendago/backups/backup.log 2>&1
 #
 # Por que dump lógico (pg_dump) e não backup físico ou incremental: o banco é
 # pequeno, o arquivo resultante é portátil entre versões do Postgres e entre
@@ -35,7 +35,7 @@ set +a
 compose() { docker compose -f "$ARQUIVO_COMPOSE" "$@"; }
 
 # campo_manifesto lê um campo do manifesto de um backup anterior. sed em vez de
-# jq porque a VPS não tem jq instalado, e o JSON aqui é gerado por este próprio
+# jq porque o servidor não tem jq instalado, e o JSON aqui é gerado por este próprio
 # script — formato fixo, sem aninhamento.
 campo_manifesto() {
 	[ -f "$1" ] || return 0
@@ -81,7 +81,7 @@ schema_version=$(compose exec -T postgres psql -tAX -U "$POSTGRES_USER" -d "$POS
 	2>/dev/null | tr -d '[:space:]')
 schema_version=${schema_version:-desconhecida}
 
-# A imagem EM EXECUÇÃO é a verdade, não o .env: o deploy do CI passa IMAGE_TAG
+# A imagem EM EXECUÇÃO é a verdade, não o .env: implantar.sh passa IMAGE_TAG
 # por variável de ambiente e não toca no arquivo, então ler o .env devolveria
 # `latest` num servidor que está rodando um SHA fixo.
 image_tag=desconhecida
@@ -148,7 +148,7 @@ fi
 #
 # O alerta nasce da AUSÊNCIA do ping, não da presença de um erro — é o que
 # resolve o problema registrado em docs/producao.md: "cron esquecido não avisa".
-# Um cron desativado, uma VPS desligada e um dump que falhou produzem o mesmo
+# Um cron desativado, um servidor desligado e um dump que falhou produzem o mesmo
 # silêncio, e todos os três merecem alerta.
 #
 # Por isso o ping fica na última linha: com `set -e`, qualquer falha acima

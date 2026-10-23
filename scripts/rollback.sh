@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Volta a stack para uma versão publicada, com a checagem que impede o rollback
-# silenciosamente quebrado. Rode na VPS:
+# Volta a stack para uma versão já implantada, com a checagem que impede o
+# rollback silenciosamente quebrado. Rode no servidor, como o usuário agendago:
 #
 #   ./scripts/rollback.sh <sha-do-commit>   # fixa aquela versão
 #   ./scripts/rollback.sh latest            # volta a acompanhar o deploy
 #
-# O CI publica cada imagem no GHCR com a tag do SHA, então voltar código é
-# trocar uma variável e subir de novo — segundos. O que NÃO volta sozinho é o
+# scripts/implantar.sh entrega cada imagem com a tag do SHA, e o servidor guarda
+# as anteriores, então voltar código é trocar uma variável e subir de novo —
+# segundos. Só dá para voltar para um SHA que já passou por um deploy aqui. O que NÃO volta sozinho é o
 # banco: o Flyway é forward-only, e uma migration já aplicada continua aplicada.
 #
 # Por isso este script compara a versão de schema que a imagem alvo espera com a
@@ -40,18 +41,23 @@ set +a
 
 compose() { docker compose -f "$COMPOSE_FILE" "$@"; }
 
-repo="${IMAGE_REPO:-ghcr.io/caetasousa}"
+repo="${IMAGE_REPO:-localhost/agendago}"
 
 # ── A checagem que dá sentido ao script ──────────────────────────────────────
 #
-# Vem ANTES de puxar o resto das imagens, de propósito: um rollback que vai ser
-# recusado não deveria custar o download da stack inteira.
+# Vem ANTES de mexer em qualquer coisa, de propósito: um rollback recusado não
+# deixa nada para trás.
 #
 # A imagem de migrations carrega os .sql dentro dela, então a maior versão que
 # ela conhece é a versão de schema daquela release. Comparar com o que o banco
 # tem responde a única pergunta que importa antes de voltar código.
 imagem_migrations="$repo/agendago-migrations:$alvo"
-docker image inspect "$imagem_migrations" >/dev/null 2>&1 || docker pull -q "$imagem_migrations" >/dev/null
+# Sem `docker pull` de fallback: as imagens não estão em registry nenhum, e um
+# pull só iria procurar o nome em outro lugar.
+if ! docker image inspect "$imagem_migrations" >/dev/null 2>&1; then
+	log "ERRO: $imagem_migrations não existe neste servidor (docker image ls $repo/agendago-migrations)"
+	exit 1
+fi
 
 versao_da_imagem=$(docker run --rm --entrypoint sh "$imagem_migrations" \
 	-c "ls /flyway/sql | sed -n 's/^V\([0-9]\+\)__.*/\1/p' | sort -n | tail -1" 2>/dev/null || true)
@@ -83,6 +89,13 @@ AVISO
 	log "AVISO: prosseguindo por --forcar, com o banco à frente do código"
 fi
 
+for imagem in agendago-api agendago-web; do
+	if ! docker image inspect "$repo/$imagem:$alvo" >/dev/null 2>&1; then
+		log "ERRO: $repo/$imagem:$alvo não existe neste servidor (docker image ls $repo/$imagem)"
+		exit 1
+	fi
+done
+
 # ── Fixa a tag ───────────────────────────────────────────────────────────────
 #
 # Reescreve a linha em vez de acrescentar. Um `>> .env` repetido acumula várias
@@ -95,30 +108,34 @@ else
 fi
 log "IMAGE_TAG fixado em $alvo no .env"
 
-log "puxando as imagens da versão $alvo"
-IMAGE_TAG="$alvo" compose pull --quiet
+log "subindo a versão $alvo"
 IMAGE_TAG="$alvo" compose up -d
 
 # ── Verificação ──────────────────────────────────────────────────────────────
 #
-# Mesma checagem do deploy: API e frontend. Rollback que sobe quebrado sem
-# ninguém perceber é o mesmo problema do deploy no escuro.
-if [ -n "${DOMINIO:-}" ]; then
+# Mesma checagem do deploy: API e frontend, pelo Caddy local — sem depender do
+# túnel. Rollback que sobe quebrado sem ninguém perceber é o mesmo problema do
+# deploy no escuro. Pulada quando a stack não tem Caddy (o ensaio de
+# scripts/testar-rollback.sh).
+if compose config --services | grep -qx caddy; then
+	no_ar=false
 	for _ in $(seq 1 12); do
-		if curl -fsS "https://$DOMINIO/api/health" >/dev/null 2>&1 &&
-			curl -fsS -o /dev/null "https://$DOMINIO/" 2>/dev/null; then
-			log "ok: aplicação no ar na versão $alvo"
-			exit 0
+		if curl -fsS -o /dev/null "http://127.0.0.1:${PORTA_CADDY:-8481}/api/health" 2>/dev/null &&
+			curl -fsS -o /dev/null "http://127.0.0.1:${PORTA_CADDY:-8481}/" 2>/dev/null; then
+			no_ar=true
+			break
 		fi
 		sleep 5
 	done
-	log "ERRO: a aplicação não respondeu após o rollback"
-	exit 1
+	if [ "$no_ar" = false ]; then
+		log "ERRO: a aplicação não respondeu após o rollback"
+		exit 1
+	fi
+	log "ok: aplicação no ar na versão $alvo"
+else
+	log "ok: stack no ar na versão $alvo (sem Caddy nesta stack; verificação HTTP pulada)"
 fi
 
-log "ok: stack no ar na versão $alvo (DOMINIO não definido; verificação HTTP pulada)"
-
-# O próximo deploy do CI passa IMAGE_TAG por ambiente, e ambiente vence o .env
-# no Compose: o pin sobrevive a um `up -d` manual, mas NÃO ao próximo push na
-# main. Voltar a acompanhar o deploy é `./scripts/rollback.sh latest`.
-log "lembrete: o próximo deploy do CI ignora este pin — reverta o commit ruim na main"
+# implantar.sh passa IMAGE_TAG por ambiente, e ambiente vence o .env no
+# Compose: o pin sobrevive a um `up -d` manual, mas NÃO ao próximo deploy.
+log "lembrete: o próximo scripts/implantar.sh ignora este pin — reverta o commit ruim antes"
