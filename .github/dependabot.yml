@@ -13,8 +13,10 @@
 #
 # Os alertas de SEGURANÇA não passam por aqui: eles são configurados em
 # Settings → Code security e chegam assim que a CVE é publicada, sem esperar o
-# ciclo mensal. É esse canal que fecha o ciclo com a varredura do CI — o resto
-# é higiene de versão.
+# ciclo mensal. O resto é higiene de versão.
+#
+# Sem esteira no GitHub, nenhum PR daqui é testado nem mesclado sozinho: rode
+# `make test` no branch do PR antes de mesclar.
 #
 # `prefix: chore` para os PRs nascerem dentro da convenção de commits do
 # projeto (Conventional Commits em português).
@@ -81,18 +83,3 @@ updates:
     ignore:
       - dependency-name: node
         versions: ['25.x', '27.x', '29.x']
-
-  # As próprias actions do CI. Sem isto elas envelhecem em silêncio até uma
-  # runtime antiga ser desligada e o workflow parar de rodar sem ninguém ter
-  # mexido em nada.
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-      interval: monthly
-    open-pull-requests-limit: 2
-    commit-message:
-      prefix: chore
-      include: scope
-    groups:
-      actions:
-        update-types: [minor, patch]
