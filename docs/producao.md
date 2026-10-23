@@ -1,20 +1,21 @@
 # 🚀 Produção
 
 > Como o agendaGo vai para o ar, **na ordem em que as coisas precisam acontecer**.
-> Este é o roteiro que foi realmente percorrido no primeiro deploy — com os erros
-> que apareceram no caminho e o que os causou.
+> O servidor é a distro **`ubuntu-server`** do WSL desta mesma máquina, publicada
+> por um **túnel da Cloudflare** — o mesmo servidor e o mesmo túnel do studygo.
 
+![Cloudflare](https://img.shields.io/badge/Cloudflare-Tunnel-F38020?logo=cloudflare&logoColor=white)
+![WSL](https://img.shields.io/badge/WSL2-ubuntu--server-E95420?logo=ubuntu&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-rootless-2496ED?logo=docker&logoColor=white)
 ![Caddy](https://img.shields.io/badge/Caddy-2-1F88C0?logo=caddy&logoColor=white)
-![Let's Encrypt](https://img.shields.io/badge/TLS-Let's%20Encrypt-003A70?logo=letsencrypt&logoColor=white)
-![GHCR](https://img.shields.io/badge/Registry-GHCR-181717?logo=github&logoColor=white)
-![Deploy](https://img.shields.io/badge/Deploy-CI%20automático-2088FF?logo=githubactions&logoColor=white)
 
 | | |
 |---|---|
-| **Onde roda** | uma VPS pequena (1 vCPU / 4 GB dá folga) |
-| **O que fica no servidor** | 3 arquivos — nunca o código-fonte |
-| **Como atualiza** | `git push` na `main` |
-| **Quanto demora um deploy** | segundos (é só download de imagem) |
+| **Onde roda** | distro `ubuntu-server` do WSL, usuário `agendago`, Docker rootless |
+| **Endereço** | `https://agendago.d4ffy.com` |
+| **O que fica no servidor** | as imagens prontas + 3 arquivos — nunca o código-fonte |
+| **Como atualiza** | `./scripts/implantar.sh`, da distro de desenvolvimento |
+| **Quando está no ar** | com o PC ligado e a `ubuntu-server` de pé |
 
 > [!NOTE]
 > O `docker-compose.yml` da raiz é **só para desenvolvimento** (hot reload,
@@ -26,77 +27,113 @@
 
 ```mermaid
 flowchart TD
-    U([🌐 Internet]) -->|HTTPS| C
+    U([🌐 Internet]) -->|HTTPS| CF["☁️ <b>Cloudflare</b><br/><i>termina o TLS</i>"]
+    CF -->|"túnel aberto<br/>de dentro para fora"| T
 
-    subgraph VPS["🖥️ VPS — uma única máquina"]
-        C["🔐 <b>Caddy</b><br/>:80 · :443<br/><i>TLS automático</i>"]
-        C -->|"/api/*<br/>(prefixo removido)"| A["⚙️ <b>API</b> · Go<br/>:8080"]
-        C -->|"/*"| W["🎨 <b>Web</b> · SvelteKit<br/>:3000"]
-        A --> P[("🐘 <b>Postgres</b><br/>sem porta pública")]
+    subgraph S["🖥️ ubuntu-server (WSL)"]
+        T["🔌 <b>cloudflared</b><br/><i>serviço do sistema</i>"]
+        T -->|"HTTP<br/>127.0.0.1:8481"| C
+        subgraph D["🐳 Docker rootless do usuário agendago"]
+            C["🔀 <b>Caddy</b><br/>:80"]
+            C -->|"/api/*<br/>(prefixo removido)"| A["⚙️ <b>API</b> · Go<br/>:8080"]
+            C -->|"/*"| W["🎨 <b>Web</b> · SvelteKit<br/>:3000"]
+            A --> P[("🐘 <b>Postgres</b><br/>sem porta publicada")]
+        end
     end
 
-    A -.->|SMTP| S([📧 Brevo])
+    A -.->|SMTP| B([📧 Brevo])
 
+    style CF fill:#f38020,stroke:#c25e00,color:#fff
     style C fill:#1f88c0,stroke:#0d5a85,color:#fff
     style A fill:#00add8,stroke:#007d9c,color:#fff
     style W fill:#ff3e00,stroke:#c33000,color:#fff
     style P fill:#4169e1,stroke:#2a4bb0,color:#fff
 ```
 
-O Caddy serve **frontend e API na mesma origem**: `/api/*` vai para a API (o
-prefixo é removido antes de repassar) e todo o resto vai para o frontend.
+**Nenhuma porta aberta para a internet.** O PC está atrás do roteador de casa,
+sem IP fixo, e o WSL nem publica portas na rede local. Quem abre a conexão é o
+`cloudflared`, de dentro para fora; a Cloudflare termina o HTTPS com o
+certificado dela — não há Let's Encrypt para emitir nem renovar.
+
+O Caddy continua na frente da aplicação, e serve **frontend e API na mesma
+origem**: `/api/*` vai para a API (o prefixo é removido antes de repassar) e
+todo o resto vai para o frontend. Ele escuta só em `127.0.0.1:8481` — a 8480 é
+do nginx do studygo.
 
 > [!IMPORTANT]
 > **Origem única não é estética.** O cookie de sessão é `SameSite=Lax`, e é a
 > origem única que faz o navegador enviá-lo de volta nas chamadas do front para
 > a API — sem mudar código e sem CORS. Se front e API ficassem em domínios
 > diferentes, **o login quebraria silenciosamente**. Essa decisão também é o que
-> permite o frontend usar `/api` relativo, e a imagem publicada não ficar
-> amarrada a um domínio.
+> permite o frontend usar `/api` relativo, e a imagem não ficar amarrada a um
+> domínio.
+
+**O IP do visitante** vem do cabeçalho `CF-Connecting-IP`, que a Cloudflare
+reescreve em toda requisição: o Caddy o repassa como `X-Real-IP` para a API, que
+loga e limita por ele. Confiar no cabeçalho é seguro porque a porta do Caddy só
+escuta em `127.0.0.1`, onde só o túnel chega. Sem isso, toda visita chegaria com
+o IP do `cloudflared` — e o limite de tentativas de login valeria para o site
+inteiro de uma vez.
+
+### Por que Docker rootless, e um usuário só para o agendaGo
+
+**Todas as distros do WSL2 dividem a mesma rede** — o mesmo IP, as mesmas
+portas, o mesmo iptables. A distro de desenvolvimento roda o Docker do dia a
+dia; um segundo Docker de sistema na `ubuntu-server` brigaria com ele pelo
+`docker0` e pelo iptables. O Docker rootless de cada usuário tem rede própria
+(slirp4netns), imagens e volumes próprios, e só publica as portas pedidas, em
+localhost. O studygo roda no do usuário `studygo`; o agendaGo, no do
+`agendago` — um não enxerga nem derruba o outro.
+
+O `agendago` **não tem sudo**: o deploy só fala com o próprio Docker e escreve
+no próprio home.
 
 ---
 
-## 📦 O host não recebe o código-fonte
+## 📦 O servidor não recebe o código-fonte
 
 ```mermaid
 flowchart LR
-    G["📝 git push<br/><i>main</i>"] --> CI
+    G["💻 Ubuntu-24.04<br/><i>distro de dev</i>"] --> B["🔨 build das<br/>3 imagens<br/><i>tag = SHA</i>"]
+    B -->|"docker save | ssh<br/>docker load"| V
+    G -->|"scp compose,<br/>Caddyfile, scripts"| V
 
-    subgraph CI["⚡ GitHub Actions"]
-        T["✅ testes"] --> B["🔨 build das<br/>3 imagens"]
+    subgraph V["🖥️ ubuntu-server · agendago"]
+        D["docker compose<br/>up -d"]
     end
 
-    B --> R[("📦 <b>GHCR</b><br/>ghcr.io/caetasousa")]
-    CI -->|SSH| V
-
-    subgraph V["🖥️ VPS"]
-        D["docker compose<br/>pull + up -d"]
-    end
-
-    R -.->|pull| D
-
-    style CI fill:#2088ff,stroke:#0366d6,color:#fff
-    style R fill:#181717,stroke:#000,color:#fff
+    style G fill:#2088ff,stroke:#0366d6,color:#fff
     style V fill:#7b4397,stroke:#5a2f6f,color:#fff
 ```
 
-As imagens são buildadas pelo **CI** e publicadas no **GHCR**. O
-`docker-compose.prod.yml` só as consome — ele não tem nenhuma diretiva `build`.
-Na VPS ficam **três arquivos**, e nada além disso:
+As imagens são buildadas na distro de desenvolvimento por
+**`scripts/implantar.sh`** e entregues ao Docker do `agendago` por SSH. O
+`docker-compose.prod.yml` só as consome — não tem nenhuma diretiva `build`, e
+cada imagem da aplicação tem `pull_policy: never`. No servidor ficam:
 
 ```
-~/agendago/
-├── 📄 docker-compose.prod.yml   ← sincronizado pelo CI
-├── 📄 Caddyfile                 ← sincronizado pelo CI
-└── 🔒 .env                      ← só você. Nunca sai daqui
+/home/agendago/
+├── agendago/
+│   ├── 📄 docker-compose.prod.yml   ← sincronizado por implantar.sh
+│   ├── 📄 Caddyfile                 ← sincronizado por implantar.sh
+│   ├── 📁 scripts/                  ← backup, restore, rollback
+│   └── 🔒 .env                      ← só lá. Nunca sai de lá
+└── backups/                         ← dumps diários (cron)
 ```
 
 > [!TIP]
-> **Por que isso importa:** buildar no servidor exigiria repositório, toolchain
-> Go e Node, e RAM/CPU para compilar — num plano de 1 vCPU, cada deploy
-> competiria com o site no ar por vários minutos. Puxando imagem pronta, o
-> deploy é um download de segundos, e o que roda em produção é **exatamente o
-> artefato que passou no CI**, não uma recompilação que pode divergir.
+> **Por que não buildar no servidor:** exigiria repositório e toolchain Go e
+> Node lá dentro, e cada deploy compilaria competindo com o site no ar pela
+> mesma VM do WSL (4 GB divididos entre as distros). Entregando a imagem
+> pronta, o que roda em produção é **exatamente o artefato** que saiu daquele
+> commit.
+
+> [!IMPORTANT]
+> **As imagens se chamam `localhost/agendago/agendago-*`.** Sem o prefixo
+> `localhost/`, `agendago/agendago-api` seria um nome do Docker Hub — que
+> qualquer um pode registrar, e que um `pull` acabaria baixando no lugar da
+> imagem que faltou. Com ele, e com `pull_policy: never`, imagem ausente vira
+> erro, nunca download.
 
 ---
 
@@ -104,199 +141,127 @@ Na VPS ficam **três arquivos**, e nada além disso:
 
 ```mermaid
 flowchart LR
-    F1["1️⃣ Domínio<br/><i>DNS → IP</i>"] --> F2["2️⃣ Servidor<br/><i>Docker + firewall</i>"]
-    F2 --> F3["3️⃣ Imagens<br/><i>públicas no GHCR</i>"]
-    F3 --> F4["4️⃣ Stack<br/><i>3 arquivos + up</i>"]
-    F4 --> F5["5️⃣ Conferir<br/><i>TLS + saúde</i>"]
+    F1["1️⃣ Servidor<br/><i>usuário agendago</i>"] --> F2["2️⃣ .env<br/><i>segredos</i>"]
+    F2 --> F3["3️⃣ Deploy<br/><i>implantar.sh</i>"]
+    F3 --> F4["4️⃣ Rota no túnel<br/><i>agendago.d4ffy.com</i>"]
+    F4 --> F5["5️⃣ Conferir"]
     F5 --> F6["6️⃣ Google<br/><i>callback</i>"]
 
     style F1 fill:#f9a825,color:#000
     style F5 fill:#43a047,color:#fff
 ```
 
----
-
-## 1️⃣ Um nome de domínio
+A `ubuntu-server` em si — a distro, o sshd na 2222, o `cloudflared` com o
+token do túnel e a tarefa do Windows que a mantém de pé — foi montada pelo
+studygo (`~/studygo/docs/deploy.md` e `docs/cloudflare-tunnel.md` de lá). Este
+roteiro parte dela pronta.
 
 > [!CAUTION]
-> **Não dá para usar o IP puro.** Nenhuma autoridade pública emite certificado
-> para endereço IP. O Caddy cai na CA interna dele — e o handshake TLS falha na
-> prática, porque clientes **não enviam SNI** quando o destino é um IP, e sem SNI
-> o servidor não sabe qual certificado apresentar. O resultado é um redirect para
-> HTTPS que morre em `tlsv1 alert internal error`.
->
-> **E HTTP puro também não resolve:** com `APP_ENV=production` o cookie de sessão
-> vai com o atributo `Secure`, e o navegador se recusa a guardar cookie `Secure`
-> recebido por HTTP. O site abriria e **ninguém conseguiria logar** — sem
-> mensagem de erro.
-
-Sem domínio próprio, a saída gratuita é o **[DuckDNS](https://www.duckdns.org)**:
-entre com GitHub, crie um subdomínio e coloque o IP da VPS no campo *current ip*.
-
-**Confirme antes de seguir:**
-
-```bash
-curl -s https://api.ipify.org; echo          # o IP público da VPS
-getent hosts SEU_SUBDOMINIO.duckdns.org      # tem que devolver o mesmo IP
-```
-
-<table><tr><td>
-
-💡 **Por que `getent` e não `dig`?** O `dig` não vem instalado no Ubuntu mínimo;
-o `getent` sempre existe.
-
-</td></tr></table>
-
-> [!WARNING]
-> **Não pule esta verificação.** Se o Caddy tentar emitir com o DNS errado, o
-> Let's Encrypt bloqueia novas tentativas **por uma hora** depois de cinco falhas.
+> **Não instale ufw, fail2ban nem o Docker de sistema na `ubuntu-server`.** A
+> rede é a mesma da distro de desenvolvimento: um "deny by default" fecharia as
+> duas, e um dockerd de sistema brigaria com o de lá. Nenhuma porta precisa
+> abrir — o túnel só faz conexões de saída.
 
 ---
 
-## 2️⃣ Preparar o servidor
+## 1️⃣ Preparar o servidor
 
-**Instale o Docker** (como root):
-
-```bash
-curl -fsSL https://get.docker.com | sh
-```
-
-**Crie um usuário sem privilégios** para a aplicação e o deploy:
+Uma chave SSH só para o deploy do agendaGo, na distro de desenvolvimento:
 
 ```bash
-adduser --disabled-password --gecos '' deploy
-usermod -aG docker deploy
+ssh-keygen -t ed25519 -N '' -C 'agendago@ubuntu-server' -f ~/.ssh/agendago_servidor
 ```
 
-| Flag | O que faz |
+E o usuário `agendago` no servidor, pelo SSH do administrador que já existe lá
+(o `studygo`, que tem sudo):
+
+```bash
+ssh -i ~/.ssh/studygo_ci -p 2222 studygo@127.0.0.1 \
+  sudo bash -s -- agendago "\"$(cat ~/.ssh/agendago_servidor.pub)\"" \
+  < scripts/preparar-servidor.sh
+```
+
+O `scripts/preparar-servidor.sh` é idempotente e diz o que mudou:
+
+| Faz | Por quê |
 |---|---|
-| `--disabled-password` | ninguém entra nesse usuário por senha, só por chave SSH |
-| `--gecos ''` | pula o formulário interativo (nome, telefone, sala) |
-| `-aG docker` | **a**crescenta ao grupo (sem o `a`, os grupos atuais seriam substituídos) |
-
-> [!WARNING]
-> **`sudo` não funciona para o `deploy`** — ele não tem senha e não está no grupo
-> `sudo`. Qualquer tentativa falha com *"3 incorrect password attempts"*. É
-> intencional: **root** para comandos de sistema, **deploy** para Docker e
-> aplicação.
-
-**Firewall com o mínimo aberto:**
-
-```bash
-ufw allow 22/tcp && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable
-```
-
-| Porta | Para quê |
-|---|---|
-| **22** | SSH — seu acesso. Esquecer essa **tranca você para fora** |
-| **80** | desafio do Let's Encrypt + redirect. **Não é opcional** |
-| **443** | o site |
-
-Postgres (5432) e API (8080) **não** são expostos — os containers conversam por
-uma rede interna do Docker.
+| garante `docker.io`, `docker-compose-v2`, `rootlesskit`, `uidmap`, `slirp4netns`, `cron`, `curl` | o rootless, o backup diário e a verificação do deploy |
+| cria o `agendago`, **sem sudo**, só com a chave de deploy | o mínimo para subir a stack |
+| `loginctl enable-linger agendago` | sem isso, o Docker do usuário morre no primeiro logout |
+| instala e liga o Docker rootless dele | ver *Por que Docker rootless* acima |
+| cria o contexto `rootless` como padrão | o SSH não interativo e o cron não leem o `.bashrc`; sem o contexto, `docker` procuraria o daemon de sistema, desligado |
 
 **Confira:**
 
 ```bash
-docker --version && ufw status && id deploy
+ssh -i ~/.ssh/agendago_servidor -p 2222 agendago@127.0.0.1 'docker context show && docker ps'
 ```
 
-✅ O `id deploy` precisa mostrar `docker` entre os grupos.
+✅ `rootless` e uma lista (vazia) de containers.
 
 ---
 
-## 3️⃣ Liberar as imagens no GHCR
+## 2️⃣ O `.env` do servidor
 
-> [!IMPORTANT]
-> Pacotes publicados no GHCR nascem **privados**, mesmo em repositório público.
-> Sem este passo o `docker compose up` falha com **`denied`**.
-
-**GitHub → seu perfil → Packages →** cada `agendago-*` **→ Package settings →
-Danger Zone → Change visibility → Public**
-
-<details>
-<summary><b>🔐 Isso é uma falha de segurança?</b></summary>
-
-<br>
-
-**Com repositório público, não.** A imagem é o código-fonte compilado, e o fonte
-já está aberto. O que vai dentro delas:
-
-| Imagem | Conteúdo |
-|---|---|
-| `agendago-api` | só o binário, em alpine, usuário não-root |
-| `agendago-web` | só o `build/` — o mesmo bundle que qualquer visitante baixa |
-| `agendago-migrations` | os `.sql`, que já estão no repositório |
-
-**Nenhum segredo entra nas imagens:** os Dockerfiles buildam a partir de
-`./backend` e `./frontend`, onde não existe arquivo `.env`.
-
-A alternativa (pacotes privados) exige `docker login` na VPS com um PAT, que fica
-gravado **em texto quase claro** em `~/.docker/config.json` e expira sem avisar —
-você trocaria "meu código já público pode ser baixado" por "existe uma credencial
-do meu GitHub guardada no servidor".
-
-⚠️ **Se um dia o repositório virar privado, torne os pacotes privados junto.**
-
-</details>
-
----
-
-## 4️⃣ Instalar a stack
-
-**Como `deploy`:**
+O modelo é o `.env.prod.example`. Ele vai para `/home/agendago/agendago/.env`,
+com `chmod 600` — tem a senha do banco, a do admin e as credenciais de SMTP e
+OAuth:
 
 ```bash
-su - deploy
-mkdir -p ~/agendago && cd ~/agendago
-
-BASE=https://raw.githubusercontent.com/caetasousa/agendaGo/main
-curl -O $BASE/docker-compose.prod.yml
-curl -O $BASE/Caddyfile
-curl -o .env $BASE/.env.prod.example
-```
-
-<table><tr><td>
-
-💡 O `-` em `su - deploy` carrega o ambiente de login **do zero**, o que inclui a
-participação nova no grupo `docker`. `-O` salva com o nome original; `-o .env`
-renomeia o exemplo para o arquivo real.
-
-</td></tr></table>
-
-**Gere as senhas e preencha:**
-
-```bash
-openssl rand -base64 24    # POSTGRES_PASSWORD
-openssl rand -base64 24    # ADMIN_SENHA
-nano .env
-chmod 600 .env
+ssh -i ~/.ssh/agendago_servidor -p 2222 agendago@127.0.0.1 \
+  'mkdir -p ~/agendago && umask 077 && cat > ~/agendago/.env' < .env.prod.example
+ssh -t -i ~/.ssh/agendago_servidor -p 2222 agendago@127.0.0.1 'nano ~/agendago/.env'
 ```
 
 No mínimo: `DOMINIO`, `POSTGRES_PASSWORD`, `ADMIN_EMAIL`, `ADMIN_SENHA` e
-`GOOGLE_REDIRECT_URL`.
-
-🔒 O `chmod 600` restringe a leitura ao dono — o arquivo tem a senha do banco, a
-do admin e as credenciais de SMTP e OAuth.
-
-**Suba — de dentro da pasta:**
-
-```bash
-cd ~/agendago
-docker compose -f docker-compose.prod.yml up -d
-```
+`GOOGLE_REDIRECT_URL`. Senhas com `openssl rand -base64 24`.
 
 > [!CAUTION]
 > **O Compose lê o `.env` do diretório atual**, não do diretório onde está o
 > arquivo de compose. Rodando de outro lugar, **todas** as variáveis chegam
-> vazias: o Caddy pede certificado para um domínio em branco e o Postgres sobe
-> sem senha — e nada disso diz *"faltou o .env"*.
+> vazias — e nada diz *"faltou o .env"*. Os scripts fazem `cd ~/agendago`
+> antes; à mão, faça o mesmo.
 
-Para ver a configuração já resolvida, **sem subir nada**:
+---
+
+## 3️⃣ Deploy
+
+Da raiz do repositório, na distro de desenvolvimento, com tudo commitado:
 
 ```bash
-docker compose -f docker-compose.prod.yml config | grep -E "DOMINIO|image:"
+make test                 # sem esteira, ninguém mais roda os testes por você
+./scripts/implantar.sh
 ```
+
+```mermaid
+flowchart LR
+    A["🔒 árvore<br/>limpa?"] --> B["🔨 build<br/>tag = SHA"]
+    B --> C["📤 save | ssh | load"]
+    C --> D["📄 compose, Caddyfile<br/>e scripts"]
+    D --> E["💾 backup<br/>pré-migration"]
+    E --> F["🚀 up -d"]
+    F --> G["⏰ cron do<br/>backup"]
+    G --> H{"/api/health e /<br/>respondem?"}
+    H -->|sim| I["🟢 ok"]
+    H -->|não| J["🔴 falha + ps"]
+
+    style I fill:#43a047,color:#fff
+    style J fill:#e53935,color:#fff
+```
+
+| Decisão | Por quê |
+|---|---|
+| **Recusa árvore suja** | a tag é o SHA do commit, e é ela que o backup carimba e o rollback usa. Com alteração não commitada, a imagem levaria um SHA que não contém o que está nela |
+| **Um `docker save` para as três** | as camadas em comum atravessam uma vez |
+| **`latest` acompanha o deploy** | um `up -d` manual e o backup do cron enxergam a versão no ar |
+| **Backup antes do `up`** | o cron das 03:00 sozinho deixaria o ponto de retorno mais recente na madrugada; não trava o primeiro deploy, quando a stack ainda não existe |
+| **`IMAGE_TAG` pelo ambiente** | vence o `.env`, então sobrescreve um pin deixado pelo `rollback.sh` |
+| **Verifica em `127.0.0.1:8481`, no próprio servidor** | um problema no túnel ou no DNS não reprova um deploy que subiu. API **e** página inicial — só a API deixaria passar um `web` quebrado |
+| **Nunca toca no `.env`** | é lá que vivem os segredos |
+
+Variáveis do script, todas com padrão: `SERVIDOR` (`agendago@127.0.0.1`),
+`PORTA_SSH` (`2222`), `CHAVE_SSH` (`~/.ssh/agendago_servidor`), `PORTA_CADDY`
+(`8481`) e `AGENDA_BACKUP` (`0 3 * * *`).
 
 ### 🔐 Usuário de banco sem poder de DDL
 
@@ -304,13 +269,10 @@ Por padrão a API se conecta com o **dono** do banco, que pode criar, alterar e
 derrubar qualquer tabela — uma falha de execução remota na API herdaria esse
 poder. O script abaixo cria um usuário só com `SELECT/INSERT/UPDATE/DELETE`.
 Rode **uma vez**, com a stack no ar (é idempotente: rodar de novo só atualiza a
-senha e reaplica os GRANTs):
+senha e reaplica os GRANTs). No servidor, como `agendago`:
 
 ```bash
 cd ~/agendago
-curl -o scripts/criar-usuario-app.sh $BASE/scripts/criar-usuario-app.sh
-chmod +x scripts/criar-usuario-app.sh
-
 DB_PASSWORD=$(openssl rand -base64 24) ./scripts/criar-usuario-app.sh
 ```
 
@@ -339,7 +301,34 @@ docker compose -f docker-compose.prod.yml exec -T postgres \
 
 ---
 
+## 4️⃣ Rota no túnel da Cloudflare
+
+O túnel com token da `ubuntu-server` já existe (é o do studygo). O agendaGo é
+só **mais uma rota** nele:
+
+**[Cloudflare](https://dash.cloudflare.com) → Zero Trust → Networks → Tunnels →
+o túnel → Routes** (nas versões antigas do painel, *Public Hostname*) **→ Add**:
+
+| Campo | Valor |
+|---|---|
+| Subdomain | `agendago` |
+| Domain | `d4ffy.com` |
+| Type | `HTTP` |
+| URL | `localhost:8481` |
+
+A Cloudflare cria o registro DNS sozinha. Não há nada a mudar no servidor: o
+`cloudflared` recebe a rota nova pelo próprio túnel.
+
+> [!WARNING]
+> **`HTTP`, não `HTTPS`.** O Caddy escuta HTTP puro em `127.0.0.1:8481`; o HTTPS
+> é o da Cloudflare, entre o navegador e ela. Com `HTTPS` na rota o túnel tenta
+> um handshake TLS que o Caddy não oferece, e a página vira **502**.
+
+---
+
 ## 5️⃣ Conferir
+
+No servidor:
 
 ```bash
 docker compose -f docker-compose.prod.yml ps -a
@@ -349,7 +338,7 @@ docker compose -f docker-compose.prod.yml ps -a
 |---|---|
 | `postgres` | 🟢 Up (healthy) |
 | `api` | 🟢 Up (healthy) |
-| `web` | 🟢 Up |
+| `web` | 🟢 Up (healthy) |
 | `caddy` | 🟢 Up |
 | `flyway` | ⚪ **Exited (0)** |
 
@@ -358,37 +347,17 @@ docker compose -f docker-compose.prod.yml ps -a
 > migrations e sai — **sair é o comportamento correto**. O `-a` no `ps` existe
 > justamente para você conseguir enxergá-lo.
 
-**O certificado saiu?**
+De qualquer lugar:
 
 ```bash
-docker compose -f docker-compose.prod.yml logs caddy | grep -i certificate
-```
-
-| O que aparece | Significa |
-|---|---|
-| `certificate obtained successfully` + `issuer` com **letsencrypt** | ✅ certificado público, tudo certo |
-| `"issuer":"local"` | ❌ emissão falhou, caiu na CA interna |
-
-Se falhou: DNS errado ou porta 80 bloqueada. Na Hostinger, confira também o
-**firewall do painel**, que é separado do `ufw`.
-
-**A aplicação responde?**
-
-```bash
-curl -s https://SEU_DOMINIO/api/health         # {"status":"ok"}
-curl -sI http://SEU_DOMINIO/ | head -1         # 308 Permanent Redirect
-curl -sI https://SEU_DOMINIO/ | grep -i strict-transport
-curl -so /dev/null -w '%{http_code}\n' https://SEU_DOMINIO/api/swagger/index.html   # 404 (a doc não é compilada em produção)
+curl -s https://agendago.d4ffy.com/api/health        # {"status":"ok"}
+curl -sI https://agendago.d4ffy.com/ | grep -iE 'strict-transport|content-security'
+curl -so /dev/null -w '%{http_code}\n' https://agendago.d4ffy.com/api/swagger/index.html   # 404
 ```
 
 > [!WARNING]
-> **Use GET, não HEAD.** `curl -I` manda HEAD, e `/health` é registrada como
-> `GET` — a resposta é **405**, que parece defeito e não é.
-
-> [!TIP]
-> **Repare na ausência do `-k`.** No ensaio local ele é necessário (certificado
-> interno). Aqui, a ausência dele **é o próprio teste**: se responder, o
-> certificado é publicamente confiável e nenhum visitante verá aviso.
+> **Use GET, não HEAD, no `/health`.** `curl -I` manda HEAD, e `/health` é
+> registrada como `GET` — a resposta é **405**, que parece defeito e não é.
 
 No navegador, confirme no DevTools que o cookie **`__Host-agendago_session`**
 veio com **Secure**, **HttpOnly**, **SameSite=Lax**, `Path=/` e **sem Domain** —
@@ -396,20 +365,22 @@ o prefixo `__Host-` é justamente o contrato que exige esses atributos, e o
 navegador ignora o cookie se algum faltar. Em desenvolvimento o nome é
 `agendago_session`, sem prefixo: não há HTTPS, logo não há `Secure`.
 
-Confirme também que as chamadas XHR vão para `https://SEU_DOMINIO/api/...` —
-nunca para `localhost:8080` — e que o **Console não acusa violação de CSP** em
+Confirme também que as chamadas XHR vão para `https://agendago.d4ffy.com/api/...`
+— nunca para `localhost:8080` — e que o **Console não acusa violação de CSP** em
 nenhuma tela.
 
 ---
 
 ## 6️⃣ Login social com Google
 
-Cadastre a URL de callback em *Authorized redirect URIs*, no cliente OAuth do
-[Google Cloud Console](https://console.cloud.google.com/apis/credentials):
+No cliente OAuth do
+[Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+(tipo *Web application*), cadastre:
 
-```
-https://SEU_DOMINIO/api/auth/google/callback
-```
+| Campo | Valor |
+|---|---|
+| Authorized JavaScript origins | `https://agendago.d4ffy.com` |
+| Authorized redirect URIs | `https://agendago.d4ffy.com/api/auth/google/callback` |
 
 > [!CAUTION]
 > **O `/api` é obrigatório.** O callback é rota da **API**, e atrás do Caddy a
@@ -418,19 +389,22 @@ https://SEU_DOMINIO/api/auth/google/callback
 > depois de a conta já ter sido vinculada do lado do Google.
 
 O Google compara a URL **caractere a caractere**; divergiu, recusa com
-`redirect_uri_mismatch`. O mesmo cliente aceita várias URIs, então os três
-ambientes convivem:
+`redirect_uri_mismatch`. O mesmo cliente aceita várias URIs, então dev e
+produção convivem:
 
 | Ambiente | URI |
 |---|---|
 | Dev (API direta) | `http://localhost:8080/auth/google/callback` |
-| Ensaio local | `https://localhost/api/auth/google/callback` |
-| Produção | `https://SEU_DOMINIO/api/auth/google/callback` |
+| Produção | `https://agendago.d4ffy.com/api/auth/google/callback` |
+
+Com o app em modo *Testing* na tela de consentimento, só entram as contas
+listadas em *Test users* (até 100); para abrir a todos, publique o app — o
+escopo de login (`openid email profile`) não exige verificação do Google.
 
 **Conferir sem abrir o navegador:**
 
 ```bash
-curl -sD - -o /dev/null https://SEU_DOMINIO/api/auth/client/google/start | grep -i location
+curl -sD - -o /dev/null https://agendago.d4ffy.com/api/auth/client/google/start | grep -i location
 ```
 
 ---
@@ -443,10 +417,9 @@ curl -sD - -o /dev/null https://SEU_DOMINIO/api/auth/client/google/start | grep 
 > rejeitada. É preciso um endereço de **domínio próprio** autenticado na Brevo
 > (SPF + DKIM).
 >
-> **Um subdomínio DuckDNS não resolve** — você não controla o DNS de
-> `duckdns.org` e não consegue publicar os registros. Sem domínio próprio,
-> confirmação de cadastro, recuperação de senha e cancelamento por link **não
-> chegam de forma confiável**.
+> Com o `d4ffy.com` na Cloudflare, os registros SPF e DKIM que a Brevo pedir
+> entram no DNS de lá. Sem isso, confirmação de cadastro, recuperação de senha
+> e cancelamento por link **não chegam de forma confiável**.
 
 Credenciais SMTP ficam em **Brevo → SMTP & API → SMTP** (não é a senha da conta).
 
@@ -463,10 +436,10 @@ printf 'EHLO teste\r\nAUTH LOGIN\r\n%s\r\n%s\r\nQUIT\r\n' "$U" "$P" \
   | openssl s_client -quiet -starttls smtp -connect smtp-relay.brevo.com:587 2>/dev/null | grep '^235'
 ```
 
-**Ver os emails que o app gera**, com um Mailpit local:
+**Ver os emails que o app gera**, com um Mailpit no servidor:
 
 ```bash
-docker run -d --name mailpit --network agendago_default -p 8025:8025 axllent/mailpit
+docker run -d --name mailpit --network agendago_default -p 127.0.0.1:8025:8025 axllent/mailpit
 SMTP_HOST=mailpit SMTP_PORT=1025 SMTP_STARTTLS=false SMTP_USER= SMTP_PASSWORD= \
   docker compose -f docker-compose.prod.yml up -d api
 # caixa de entrada em http://localhost:8025
@@ -474,164 +447,41 @@ SMTP_HOST=mailpit SMTP_PORT=1025 SMTP_STARTTLS=false SMTP_USER= SMTP_PASSWORD= \
 
 ⚠️ **Zere `SMTP_USER` e `SMTP_PASSWORD` junto.** O Mailpit não faz AUTH, e a API
 falha com `server does not support SMTP AUTH` se as credenciais continuarem lá.
+A 8025 é a mesma do Mailpit de desenvolvimento — derrube um antes de subir o
+outro.
 
 </details>
-
----
-
-# 🤖 Deploy automático (CI → VPS)
-
-O job `implantar` do `.github/workflows/ci.yml` fecha o ciclo:
-
-```mermaid
-flowchart LR
-    A["✅ testes<br/>passaram"] --> B["📦 imagens<br/>publicadas"]
-    B --> C["📄 sincroniza<br/>compose + Caddyfile"]
-    C --> D["⬇️ pull fixado<br/>no SHA"]
-    D --> E["🚀 up -d"]
-    E --> F{"/api/health<br/>respondeu?"}
-    F -->|sim| G["🟢 deploy ok"]
-    F -->|não| H["🔴 job falha"]
-
-    style G fill:#43a047,color:#fff
-    style H fill:#e53935,color:#fff
-```
-
-**Três coisas que ele não faz, de propósito:**
-
-| Não faz | Por quê |
-|---|---|
-| Enviar código-fonte | as imagens vêm do GHCR |
-| Tocar no `.env` do servidor | é lá que vivem os segredos |
-| Rodar sem os segredos | passa com aviso, para o repo funcionar antes de a VPS existir |
-
-> [!TIP]
-> A tag puxada é o **SHA do commit**, não `latest`. O servidor sobe exatamente o
-> artefato que passou nos testes — sem a janela em que outro push republica a
-> tag entre a publicação e o `pull`.
-
-### Configuração
-
-**1. Chave SSH exclusiva do CI**, na sua máquina:
-
-```bash
-ssh-keygen -t ed25519 -f ~/.ssh/agendago_deploy -N '' -C 'github-actions'
-```
-
-**2. Autorizar a chave pública**, na VPS como root:
-
-```bash
-mkdir -p /home/deploy/.ssh
-echo 'CONTEUDO_DE_agendago_deploy.pub' >> /home/deploy/.ssh/authorized_keys
-chown -R deploy:deploy /home/deploy/.ssh
-chmod 700 /home/deploy/.ssh && chmod 600 /home/deploy/.ssh/authorized_keys
-```
-
-> [!WARNING]
-> **As permissões não são detalhe.** O SSH **recusa a chave silenciosamente** se
-> a pasta ou o arquivo estiverem legíveis por outros usuários. É a causa mais
-> comum de "a chave não funciona e não diz por quê".
-
-**Teste antes de seguir:**
-
-```bash
-ssh -i ~/.ssh/agendago_deploy deploy@SEU_IP 'docker ps --format "{{.Names}}"'
-```
-
-✅ Listar os containers prova três coisas de uma vez: a chave funciona, o usuário
-entra sem senha, e tem acesso ao Docker.
-
-**3. Cadastrar no GitHub** (*Settings → Secrets and variables → Actions*):
-
-| Nome | Aba | Conteúdo |
-|---|---|---|
-| `VPS_HOST` | 🔒 Secrets | IP ou hostname da VPS |
-| `VPS_USER` | 🔒 Secrets | `deploy` |
-| `VPS_SSH_KEY` | 🔒 Secrets | a chave **privada**, com as linhas `BEGIN`/`END` |
-| `VPS_PORT` | 🔒 Secrets | opcional, padrão `22` |
-| `VPS_KNOWN_HOSTS` | 🔒 Secrets | **obrigatório**; saída de `ssh-keyscan -H SEU_IP` |
-| `DOMINIO` | 📢 Variables | seu domínio, para a verificação pós-deploy |
-| `BACKUP_CRON` | 📢 Variables | opcional; horário do backup diário (padrão `0 3 * * *`) |
-
-> [!IMPORTANT]
-> `VPS_KNOWN_HOSTS` **era opcional e deixou de ser**. Sem ele, o CI aceitava a
-> identidade que o servidor apresentasse na hora — a cada deploy, não só no
-> primeiro contato — e entregava a chave de deploy em seguida, o que abre janela
-> para **man-in-the-middle**. Hoje o job falha com a instrução no próprio erro.
->
-> ```bash
-> ssh-keyscan -H SEU_IP          # porta 22
-> ssh-keyscan -p 2222 -H SEU_IP  # porta customizada
-> ```
->
-> Cole a saída inteira (várias linhas, uma por tipo de chave) no segredo.
-
-**4. Testar sem commit:** *Actions → CI → **Run workflow***, habilitado pelo
-`workflow_dispatch`.
 
 ---
 
 # 🧪 Ensaiar na sua máquina antes
 
-> [!TIP]
-> A stack inteira roda local com `DOMINIO=localhost`. Foi assim que **quatro
-> defeitos que só se manifestariam em produção** apareceram antes do deploy.
-
-Reproduza o host: uma pasta **fora do repositório**, com os mesmos três arquivos.
-O comando fica idêntico ao do servidor e o `.env` de desenvolvimento fica
-intocado.
-
-```bash
-mkdir -p ~/agendago-vps && cd ~/agendago-vps
-cp ~/agendaGo/docker-compose.prod.yml ~/agendaGo/Caddyfile .
-cp ~/agendaGo/.env.prod.example .env
-# no .env: DOMINIO=localhost e senhas descartáveis
-docker compose -f docker-compose.prod.yml up -d
-```
-
-<details>
-<summary><b>🔨 Buildar as imagens localmente</b> (enquanto o CI não publicou)</summary>
-
-<br>
-
-É o único passo que **não** existe na VPS de verdade — lá o `up` puxa do GHCR
-sozinho.
+A stack de produção roda inteira na distro de desenvolvimento, sem túnel. Uma
+pasta **fora do repositório**, com os mesmos três arquivos, deixa o comando
+idêntico ao do servidor e o `.env` de desenvolvimento intocado:
 
 ```bash
 cd ~/agendaGo
-docker build -t ghcr.io/caetasousa/agendago-api:latest        -f backend/Dockerfile.prod       backend/
-docker build -t ghcr.io/caetasousa/agendago-web:latest        -f frontend/Dockerfile.prod      frontend/
-docker build -t ghcr.io/caetasousa/agendago-migrations:latest -f backend/Dockerfile.migrations backend/
+docker build -t localhost/agendago/agendago-api:latest        -f backend/Dockerfile.prod       backend/
+docker build -t localhost/agendago/agendago-web:latest        -f frontend/Dockerfile.prod      frontend/
+docker build -t localhost/agendago/agendago-migrations:latest -f backend/Dockerfile.migrations backend/
+
+mkdir -p ~/agendago-ensaio && cd ~/agendago-ensaio
+cp ~/agendaGo/docker-compose.prod.yml ~/agendaGo/Caddyfile .
+cp ~/agendaGo/.env.prod.example .env
+# no .env: DOMINIO=localhost:8491, PORTA_CADDY=8491 e senhas descartáveis
+docker compose -f docker-compose.prod.yml up -d
+# http://localhost:8491
 ```
 
-</details>
+O navegador trata `http://localhost` como contexto seguro: aceita o cookie
+`Secure` sem HTTPS, então o login funciona no ensaio. Em qualquer outro host,
+HTTP puro deixaria o site abrir e **ninguém conseguir logar** — sem mensagem de
+erro.
 
-<details>
-<summary><b>🔓 Fazer o navegador aceitar o certificado local</b></summary>
-
-<br>
-
-Com `DOMINIO=localhost` o Caddy emite um certificado da **CA interna** dele — daí
-o `curl -k` nos testes locais.
-
-No navegador o certificado gera aviso, e o cabeçalho **HSTS faz o Chrome remover
-o botão de prosseguir**. Duas saídas:
-
-**Rápida:** digitar `thisisunsafe` na tela de erro (não existe campo — é só
-digitar).
-
-**Definitiva:** instalar a CA do Caddy:
-
-```bash
-docker cp agendago-vps-caddy-1:/data/caddy/pki/authorities/local/root.crt .
-# Windows (repositório do usuário, não exige admin):
-certutil.exe -user -addstore Root root.crt
-```
-
-⚠️ A confiança **quebra se você apagar o volume** — `down -v` recria a CA. Nada
-disso existe em produção, onde o certificado é público.
-
-</details>
+> [!WARNING]
+> **A porta do ensaio não pode ser a 8481.** As distros do WSL dividem a rede:
+> a 8481 do ensaio e a do servidor são a mesma porta, e uma das stacks não sobe.
 
 ---
 
@@ -642,12 +492,10 @@ disso existe em produção, onde o certificado é público.
 
 <br>
 
-Com o deploy automático, um push na `main` que passe nos testes já sobe a versão
-nova. Manualmente:
+Da distro de desenvolvimento, com o commit novo na árvore:
 
 ```bash
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d
+make test && ./scripts/implantar.sh
 ```
 
 O Flyway aplica só as migrations novas; a API sobe depois. O desligamento é
@@ -661,8 +509,10 @@ gracioso (até 10s para as requisições em andamento terminarem), então o rede
 
 <br>
 
-O CI tagueia cada imagem com o SHA do commit, então voltar código é trocar uma
-variável. **A pergunta que decide o caminho é uma só: houve migration entre as
+O `implantar.sh` tagueia cada imagem com o SHA do commit, e o servidor guarda as
+anteriores, então voltar código é trocar uma variável. Só dá para voltar para
+um SHA que já passou por um deploy (`docker image ls localhost/agendago/agendago-api`
+lista quais). **A pergunta que decide o caminho é uma só: houve migration entre as
 duas versões?**
 
 ```
@@ -733,8 +583,8 @@ de acesso ao erro correspondente.
 
 <br>
 
-O script `scripts/backup.sh` é **versionado e sincronizado pelo CI** — chega em
-`~/agendago/scripts/backup.sh` a cada deploy. Ele faz um dump lógico completo,
+O script `scripts/backup.sh` é **versionado e sincronizado pelo `implantar.sh`**
+— chega em `~/agendago/scripts/backup.sh` a cada deploy. Ele faz um dump lógico completo,
 comprime, **verifica a integridade**, **pula backups idênticos** e aplica rotação.
 
 ```bash
@@ -742,23 +592,22 @@ comprime, **verifica a integridade**, **pula backups idênticos** e aplica rota�
 ```
 
 > [!TIP]
-> **O agendamento é instalado pelo próprio deploy.** O job `implantar` registra
-> a entrada no crontab do usuário `deploy` de forma idempotente — reescreve só a
+> **O agendamento é instalado pelo próprio deploy.** O `implantar.sh` registra
+> a entrada no crontab do usuário `agendago` de forma idempotente — reescreve só a
 > linha do agendaGo e preserva qualquer outra tarefa. Não há passo manual: um
 > cron esquecido não avisa, e a descoberta viria no dia em que o backup fosse
 > necessário.
 
-Para mudar o horário, crie a variável de repositório **`BACKUP_CRON`**
-(*Settings → Secrets and variables → Actions → Variables*) com uma expressão
-cron, por exemplo `30 4 * * *`. O padrão é `0 3 * * *`.
+Para mudar o horário, rode o deploy com **`AGENDA_BACKUP`**, por exemplo
+`AGENDA_BACKUP='30 4 * * *' ./scripts/implantar.sh`. O padrão é `0 3 * * *`.
 
 > [!CAUTION]
-> **A expressão é interpretada no fuso do servidor**, e uma VPS costuma vir em
-> `Etc/UTC`. O cron do Debian/Ubuntu (`3.0pl1`) **não suporta `CRON_TZ`** —
+> **A expressão é interpretada no fuso do servidor** — a `ubuntu-server` está
+> em `America/Sao_Paulo`, mas uma distro nova costuma vir em `Etc/UTC`. O cron do Debian/Ubuntu (`3.0pl1`) **não suporta `CRON_TZ`** —
 > verificado no binário —, então não há como declarar o fuso dentro do crontab.
 > Num host em UTC, `0 1 * * *` dispara às **22h de Brasília**.
 >
-> Acerte o fuso do host uma vez, como root:
+> Se precisar acertar o fuso, uma vez, como root:
 >
 > ```bash
 > timedatectl set-timezone America/Sao_Paulo
@@ -777,8 +626,9 @@ cron, por exemplo `30 4 * * *`. O padrão é `0 3 * * *`.
 > ```
 
 > [!WARNING]
-> Como o crontab passa a ser gerenciado pelo CI, **editar a linha do agendaGo à
-> mão na VPS não adianta** — o próximo deploy a reescreve. Mude pela variável.
+> Como o crontab passa a ser gerenciado pelo deploy, **editar a linha do
+> agendaGo à mão no servidor não adianta** — o próximo deploy a reescreve. Mude
+> pela variável.
 
 Variáveis opcionais do script: `PASTA_BACKUP` (padrão `~/backups`),
 `RETENCAO_DIAS` (padrão `7`) e `URL_HEARTBEAT` (sem padrão — ver abaixo).
@@ -787,7 +637,7 @@ Variáveis opcionais do script: `PASTA_BACKUP` (padrão `~/backups`),
 
 O script termina pingando `URL_HEARTBEAT`, se ela estiver definida. **O alerta
 nasce da ausência do ping**, não da presença de um erro — e é isso que resolve o
-problema do "cron esquecido não avisa": um cron desativado, uma VPS desligada e
+problema do "cron esquecido não avisa": um cron desativado, um PC desligado e
 um dump que falhou produzem exatamente o mesmo silêncio, e os três merecem
 alerta.
 
@@ -800,7 +650,7 @@ Serve qualquer monitor de *heartbeat* (Uptime Kuma no modo "push", Healthchecks.
 Better Stack). Configure a janela esperada com folga sobre o horário do cron.
 
 > [!IMPORTANT]
-> O monitor precisa rodar **fora da VPS**. Se ele mora na mesma máquina, a queda
+> O monitor precisa rodar **fora desta máquina**. Se ele mora no mesmo PC, a queda
 > da máquina leva junto quem deveria avisar — vale para o heartbeat do backup e
 > para a sonda de `/ready`.
 
@@ -854,20 +704,21 @@ inverso (dados diferentes com o mesmo hash) não acontece.
 
 O `.sha256` tem um segundo uso, mais valioso que a deduplicação: **verificar
 corrupção silenciosa** do arquivo com o tempo, e conferir se a cópia enviada para
-fora da VPS chegou íntegra.
+fora do servidor chegou íntegra.
 
 > [!CAUTION]
-> **Backup que mora só na VPS morre com a VPS.** Se o disco corromper ou a conta
-> for suspensa, os sete dumps vão junto. Puxe uma cópia para fora, da sua
-> máquina:
+> **Backup que mora só no servidor morre com ele.** A `ubuntu-server` é um
+> disco virtual dentro do Windows: se ele corromper, ou a distro for
+> reinstalada, os sete dumps vão junto. Puxe uma cópia para fora — por
+> exemplo, para o disco do Windows, a partir da distro de desenvolvimento:
 >
 > ```bash
-> rsync -avz -e "ssh -i ~/.ssh/agendago_deploy" \
->   deploy@SEU_IP:~/backups/ ~/agendago-backups/
+> rsync -avz -e "ssh -i ~/.ssh/agendago_servidor -p 2222" \
+>   agendago@127.0.0.1:backups/ /mnt/c/Users/sousa/agendago-backups/
 > ```
 >
 > E lembre que o dump tem **email e telefone de pessoas reais** — o script já
-> aplica `chmod 600`, mas fora da VPS a proteção é sua.
+> aplica `chmod 600`, mas fora do servidor a proteção é sua.
 
 ### Testar a restauração
 
@@ -877,7 +728,7 @@ fora da VPS chegou íntegra.
 > volta. São coisas diferentes, e só a segunda importa no dia em que importa.
 
 O `scripts/testar-restore.sh` faz isso sozinho, e também é versionado e
-sincronizado pelo CI:
+sincronizado pelo `implantar.sh`:
 
 ```bash
 ~/agendago/scripts/testar-restore.sh              # o backup mais recente
@@ -928,9 +779,9 @@ e ainda termina com status 0, o que faria um restore quebrado passar por bom.
 
 Rode ao menos uma vez, e sempre que mudar algo no processo de backup.
 
-⚠️ **Backup de VM do provedor não substitui isto.** Ele restaura a máquina
-inteira — serve para desastre, não para "recuperar o banco de ontem" nem para
-levar os dados para outro lugar.
+⚠️ **Exportar a distro (`wsl --export`) não substitui isto.** Ela restaura a
+máquina inteira — serve para desastre, não para "recuperar o banco de ontem" nem
+para levar os dados para outro lugar.
 
 </details>
 
@@ -939,7 +790,32 @@ levar os dados para outro lugar.
 
 <br>
 
-O Caddy renova sozinho; os certificados persistem no volume `caddy_data`.
+Não há nenhum no servidor: o HTTPS é o da Cloudflare, que emite e renova o
+certificado de `agendago.d4ffy.com` sozinha. O Caddy fala só HTTP, em
+`127.0.0.1`.
+
+</details>
+
+<details>
+<summary><b>🔌 Ligar, desligar e o túnel</b></summary>
+
+<br>
+
+O site só fica no ar **com o PC ligado e a `ubuntu-server` de pé**. A tarefa
+agendada do Windows criada pelo studygo (`studygo-servidor`) mantém a distro
+acordada a partir do logon; com a distro de pé, o `docker` rootless do
+`agendago` sobe sozinho (linger) e os containers voltam pelo
+`restart: unless-stopped`.
+
+| Sintoma | Causa provável | O que fazer |
+|---|---|---|
+| 502 da Cloudflare | o túnel chegou ao servidor, mas o Caddy não respondeu | `docker compose -f docker-compose.prod.yml ps -a` no servidor; confira se a rota é `HTTP` → `localhost:8481` |
+| 1033 / túnel indisponível | o `cloudflared` caiu ou a distro está parada | `wsl.exe -l -v`; no servidor, `systemctl status cloudflared` (pelo usuário `studygo`, que tem sudo) |
+| Nada responde, nem em `127.0.0.1:8481` | o Docker do `agendago` não está de pé | `systemctl --user status docker`, como `agendago` |
+
+O `cloudflared` e o token do túnel pertencem ao servidor, não a este
+repositório: são montados pelo Ansible do studygo
+(`~/studygo/docs/cloudflare-tunnel.md`).
 
 </details>
 
@@ -973,26 +849,27 @@ O Caddy renova sozinho; os certificados persistem no volume `caddy_data`.
 > de 1 GB isso pede swap; com 4 GB não é preocupação. O rate limit por IP existe
 > exatamente para conter esse pico.
 
-Uma VPS de **1 vCPU e 4 GB atende com folga**: o recurso escasso passa a ser CPU,
-e ainda sobram ordens de grandeza para o perfil de uso de um app de agendamento.
-Como o host não compila nada, o requisito de RAM caiu — era o build que exigia
-2 GB.
+Na `ubuntu-server`, logo após o primeiro deploy, a stack ocupou **~240 MiB**
+(o `web` é o maior, ~110 MiB). A VM do WSL tem 4 GB divididos entre a distro de
+desenvolvimento, o studygo e o agendaGo — os `mem_limit` do compose são o teto
+que impede um deles de tomar a memória dos outros. Como o servidor não compila
+nada, o pico de RAM do build fica na distro de desenvolvimento.
 
 ---
 
 # ✅ Checklist de go-live
 
 - [ ] **`APP_ENV=production`** — já fixado no compose; liga `Secure` e o prefixo `__Host-` no cookie
-- [ ] **Certificado da Let's Encrypt** — `curl` **sem** `-k` responde
+- [ ] **Rota do túnel** — `agendago.d4ffy.com` → `HTTP` → `localhost:8481`, e `curl https://agendago.d4ffy.com/api/health` responde
 - [ ] **Rate limit > 0** — nenhum `RATE_LIMIT_*` pode ser `0` (são cinco: IP, conta e sessão)
 - [ ] **`ADMIN_SENHA` e `POSTGRES_PASSWORD` fortes** — `openssl rand -base64 24`
 - [ ] **`DB_USER` sem DDL** — `scripts/criar-usuario-app.sh` rodado e `DB_USER`/`DB_PASSWORD` no `.env`
 - [ ] **`.env` com `chmod 600`**
 - [ ] **SMTP com remetente de domínio autenticado** — se já usou a chave em outro lugar, **rotacione**
 - [ ] **SMTP funcionando de verdade** — sem email, ninguém mais cria conta: prestador **e** cliente dependem do link de confirmação
-- [ ] **Postgres sem porta pública** — o compose não expõe; confirme o firewall
+- [ ] **Nenhuma porta fora de `127.0.0.1`** — o compose só publica a do Caddy, em localhost
 - [ ] **Swagger fora do ar** — duas camadas: a API não monta a rota em produção **e** o Caddy responde 404
-- [ ] **CSP e cabeçalhos de segurança** — `curl -I https://SEU_DOMINIO` mostra `content-security-policy`, `strict-transport-security`, `permissions-policy` e `cross-origin-opener-policy`
+- [ ] **CSP e cabeçalhos de segurança** — `curl -I https://agendago.d4ffy.com` mostra `content-security-policy`, `strict-transport-security`, `permissions-policy` e `cross-origin-opener-policy`
 - [ ] **Sem violação de CSP no Console** — abra painel, admin e a página pública de agendamento
 - [ ] **Backup do banco agendado**
 
@@ -1007,12 +884,14 @@ Como o host não compila nada, o requisito de RAM caiu — era o build que exigi
 | `405` no `/api/health` | `curl -I` manda HEAD; a rota é `GET` |
 | `flyway` como *Exited* | ✅ é o esperado: job pontual que roda e sai |
 | Variáveis vazias no compose | rodou de fora da pasta que contém o `.env` |
-| `denied` ao puxar imagens | pacotes do GHCR ainda privados |
-| `"issuer":"local"` no log do Caddy | DNS errado ou porta 80 fechada |
+| `pull access denied` / imagem não encontrada | a imagem não está no Docker do `agendago`: rode o `implantar.sh` (as imagens nunca vêm de registry) |
+| `implantar.sh` recusa rodar | há alteração não commitada — a tag seria um SHA que não contém o que está na imagem |
+| 502 da Cloudflare | rota do túnel com `HTTPS` em vez de `HTTP`, ou a stack fora do ar |
+| `docker` não acha o daemon por SSH ou cron | falta o contexto `rootless` como padrão — rode o `preparar-servidor.sh` de novo |
 | Login social em 404 após consentimento | `GOOGLE_REDIRECT_URL` sem o prefixo `/api` |
 | `redirect_uri_mismatch` | URL não cadastrada, ou diferente, no Google Console |
 | Chave SSH ignorada sem erro claro | permissões frouxas em `~/.ssh` ou `authorized_keys` |
-| `sudo` falha para o `deploy` | 🔒 intencional: sem senha e fora do grupo `sudo` |
+| `sudo` falha para o `agendago` | 🔒 intencional: o usuário de deploy não tem sudo |
 | API não sobe, erro de parse de URL | senha do banco com caractere reservado — *corrigido: DSN montada com `net/url`* |
 | Frontend chamando `localhost:8080` | `PUBLIC_API_URL` não exposta no build — *corrigido: `envPrefix` no `vite.config.ts`* |
 
@@ -1025,9 +904,10 @@ Como o host não compila nada, o requisito de RAM caiu — era o build que exigi
 
 | Variável | Obrigatória | Padrão | Para quê |
 |---|---|---|---|
-| `DOMINIO` | ✅ | — | hostname público; usado pelo Caddy (TLS) e como `FRONTEND_ORIGIN` |
-| `IMAGE_REPO` | — | `ghcr.io/caetasousa` | de onde vêm as imagens |
-| `IMAGE_TAG` | — | `latest` | versão das imagens (use o SHA para fixar/rollback) |
+| `DOMINIO` | ✅ | — | hostname público (a rota do túnel); vira `FRONTEND_ORIGIN` e a origem do frontend |
+| `PORTA_CADDY` | — | `8481` | porta do Caddy em `127.0.0.1`, para onde a rota do túnel aponta |
+| `IMAGE_REPO` | — | `localhost/agendago` | prefixo das imagens no Docker do servidor |
+| `IMAGE_TAG` | — | `latest` | versão das imagens (`rollback.sh` fixa um SHA aqui) |
 | `POSTGRES_DB/USER/PASSWORD` | ✅ | — | banco (a API recebe como `DB_*`) |
 | `APP_ENV` | ✅ | `production` (fixo) | liga `Secure` no cookie, log em JSON e **remove a rota do Swagger** |
 | `FRONTEND_ORIGIN` | ✅ | `https://${DOMINIO}` (fixo) | origem no CORS e base dos links dos emails |

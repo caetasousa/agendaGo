@@ -16,8 +16,8 @@ Não usar nas migrations:
 - `UPDATE`, `INSERT` ou `DELETE` — **migration não escreve dado**. Todo backfill
   precisa decidir com que valor as linhas antigas ficam, e essa decisão é do
   domínio; em SQL ela vira uma segunda fonte da verdade, sem teste e sem
-  conserto, porque migration aplicada não se corrige. O CI reprova (job
-  `backend`, passo "migrations não podem escrever dado").
+  conserto, porque migration aplicada não se corrige. O `make test` reprova
+  (alvo `checar-migrations`).
 
 ### Migration que aperta exige dois deploys
 

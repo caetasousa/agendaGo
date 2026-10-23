@@ -6,8 +6,7 @@
 ![Svelte](https://img.shields.io/badge/Svelte-5-FF3E00?logo=svelte&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
-![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
-![Deploy](https://img.shields.io/badge/Deploy-GHCR%20→%20VPS-181717?logo=github&logoColor=white)
+![Deploy](https://img.shields.io/badge/Deploy-WSL%20+%20Cloudflare%20Tunnel-F38020?logo=cloudflare&logoColor=white)
 
 ```mermaid
 flowchart LR
@@ -35,7 +34,7 @@ flowchart LR
 | 🐘 Banco | PostgreSQL 16 · [Flyway](https://flywaydb.org/) (migrations) |
 | 🟠 Frontend | [Svelte 5](https://svelte.dev) · SvelteKit · TypeScript · Tailwind CSS 4 |
 | 🧪 Testes | Go testing · [Testcontainers](https://testcontainers.com/) · [Vitest](https://vitest.dev/) · [Playwright](https://playwright.dev/) |
-| 🚀 Produção | [Caddy](https://caddyserver.com/) (HTTPS automático) · imagens no GHCR · deploy pelo CI |
+| 🚀 Produção | servidor no WSL (Docker rootless) · [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) · [Caddy](https://caddyserver.com/) · deploy por `scripts/implantar.sh` |
 
 > [!TIP]
 > O "porquê" de cada escolha, com fontes primárias para estudo, está em
@@ -218,8 +217,8 @@ Guia completo (build tags, Testcontainers, Playwright): **[docs/testes.md](docs/
 | 🧰 **[tecnologias.md](docs/tecnologias.md)** | guia de estudo: o que é cada tecnologia, por que está aqui, fontes oficiais |
 | 🧪 **[testes.md](docs/testes.md)** | como rodar cada camada de teste |
 | 📐 **[regra-de-negocio.md](docs/regra-de-negocio.md)** | modelo de negócio: disponibilidade, slots, ciclo de vida do agendamento |
-| 🚀 **[producao.md](docs/producao.md)** | deploy do zero ao ar: VPS, HTTPS, imagens no GHCR, CI → servidor |
-| 🔄 **[entrega-continua.md](docs/entrega-continua.md)** | o pipeline do commit até o ar e a varredura de vulnerabilidades, com casos reais |
+| 🚀 **[producao.md](docs/producao.md)** | deploy do zero ao ar: servidor no WSL, túnel da Cloudflare, `implantar.sh`, backup e rollback |
+| 🔄 **[entrega-continua.md](docs/entrega-continua.md)** | *histórico:* a esteira do GitHub Actions que existiu até 23/10/2026 e a varredura de vulnerabilidades, com casos reais |
 
 ---
 

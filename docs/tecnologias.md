@@ -13,7 +13,7 @@ terceiros.
 | [1. Linguagem e arquitetura](#1-linguagem-e-arquitetura-do-backend) | Go, hexagonal |
 | [2. Backend HTTP](#2-backend-http) | chi, validator, Swaggo |
 | [3. Segurança](#3-segurança-e-autenticação) | Argon2id, sessões, OIDC, rate limiting |
-| [4. Banco e infra](#4-banco-de-dados-e-infraestrutura) | Postgres, pgx, Flyway, Docker, Caddy, GHCR, slog |
+| [4. Banco e infra](#4-banco-de-dados-e-infraestrutura) | Postgres, pgx, Flyway, Docker rootless, Caddy, Cloudflare Tunnel, slog |
 | [5. Frontend](#5-frontend) | Svelte 5, TypeScript, Vite, Tailwind, adapter-node |
 | [6. Testes](#6-testes) | Go testing, Testcontainers, Vitest, Playwright |
 | [7. Email](#7-notificações-por-email) | go-mail, Mailpit, Brevo, worker |
@@ -48,7 +48,8 @@ terceiros.
 | Testes unitários (frontend) | [Vitest](https://vitest.dev/) | Testes do cliente HTTP e da store de sessão | 4.1 |
 | Testes E2E | [Playwright](https://playwright.dev/) | Fluxos de cadastro/login/sessão no browser real | 1.61 |
 | Orquestração local | [Docker Compose](https://docs.docker.com/compose/) | Sobe banco + migrations + API + web juntos | — |
-| Proxy reverso (produção) | [Caddy](https://caddyserver.com/) | HTTPS automático e origem única para frontend e API | 2 (alpine) |
+| Proxy reverso (produção) | [Caddy](https://caddyserver.com/) | Origem única para frontend e API, cabeçalhos de segurança | 2 (alpine) |
+| Borda (produção) | [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) | HTTPS e endereço público sem abrir porta no servidor | — |
 
 </details>
 
@@ -244,7 +245,7 @@ Duas decisões de projeto no teto por conta (`internal/adapter/http/handler/rate
 
 Estourado o teto, a janela barra **também a senha certa** — barrar só a senha errada não pararia o atacante que acerta na enésima tentativa. Isso admite um abuso conhecido: quem sabe o email de alguém consegue mantê-lo trancado enquanto insistir. A escolha é deliberada — a janela é curta e se renova sozinha, então o pior caso é um atraso de minutos, contra o risco de uma conta tomada.
 
-O IP vem do `X-Real-IP` que o Caddy escreve (`internal/adapter/http/middleware/real_ip.go`) — o cliente não consegue forjá-lo, porque o proxy sobrescreve o cabeçalho. A chave é canonizada com `httprate.CanonicalizeIP`, que agrupa a faixa /64 de um cliente IPv6: sem isso, trocar de endereço dentro da própria faixa zeraria o contador.
+O IP vem do `X-Real-IP` que o Caddy escreve a partir do `CF-Connecting-IP` da Cloudflare (`internal/adapter/http/middleware/real_ip.go`) — o cliente não consegue forjá-lo, porque o proxy sobrescreve o cabeçalho e a Cloudflare reescreve o dela. A chave é canonizada com `httprate.CanonicalizeIP`, que agrupa a faixa /64 de um cliente IPv6: sem isso, trocar de endereço dentro da própria faixa zeraria o contador.
 
 Os limites vêm de env vars (`RATE_LIMIT_*`, 0 desliga cada um — ver `config/server.go`); os testes e2e desligam todos, porque a suíte dispara centenas de requisições do mesmo IP em poucos minutos.
 
@@ -270,30 +271,29 @@ No Caddy ficam os cabeçalhos que não dependem do build: HSTS, `X-Content-Type-
 
 ### Varredura de dependências: govulncheck, npm audit e Trivy
 
-Num projeto pequeno em produção, a via mais provável de comprometimento não é uma falha escrita aqui — é uma CVE numa biblioteca que ninguém percebeu que envelheceu. O CI (`.github/workflows/ci.yml`, jobs `seguranca-codigo` e `seguranca-imagens`) cobre as três camadas onde isso mora, porque nenhuma ferramenta enxerga a camada da outra:
+Num projeto pequeno em produção, a via mais provável de comprometimento não é uma falha escrita aqui — é uma CVE numa biblioteca que ninguém percebeu que envelheceu. Três ferramentas cobrem as três camadas onde isso mora, porque nenhuma enxerga a camada da outra:
+
+> [!WARNING]
+> **Desde 23/10/2026 nada disto roda sozinho.** As três varreduras viviam na esteira do GitHub Actions, removida junto com a VPS. Até haver outra esteira, são comandos manuais antes de um deploy importante:
+>
+> ```bash
+> (cd backend && go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...)
+> (cd frontend && npm audit --omit=dev --audit-level=high)
+> docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.76.1 image --severity CRITICAL,HIGH localhost/agendago/agendago-api:$(git rev-parse HEAD)
+> ```
 
 - **[govulncheck](https://go.dev/blog/govulncheck)** — suas libs Go e a stdlib. O diferencial é a análise de alcançabilidade: só acusa vulnerabilidade em código **realmente chamado** a partir do binário, em vez de listar tudo que existe na árvore de dependências. Por isso o que ele aponta trava o deploy.
-- **`npm audit`** — dependências JS. Roda duas vezes: `--omit=dev` (só o que vai para a imagem) travando o CI, e completo em modo relatório, porque uma CVE no Vite ou no Playwright não roda em produção e não pode barrar um deploy de correção.
-- **[Trivy](https://trivy.dev/)** — a imagem pronta: sistema base (alpine, node) e bibliotecas de sistema, que os dois anteriores não enxergam. Roda numa matriz sobre as **três** imagens que vão para produção, inclusive a de migrations. `CRITICAL` trava a publicação; `HIGH` sai como relatório.
+- **`npm audit`** — dependências JS. Roda duas vezes: `--omit=dev` (só o que vai para a imagem) como portão, e completo em modo relatório, porque uma CVE no Vite ou no Playwright não roda em produção e não pode barrar um deploy de correção.
+- **[Trivy](https://trivy.dev/)** — a imagem pronta: sistema base (alpine, node) e bibliotecas de sistema, que os dois anteriores não enxergam. Vale para as **três** imagens que vão para produção, inclusive a de migrations. `CRITICAL` é motivo para não implantar; `HIGH` costuma não ter correção na base e fica como relatório.
 
-Os jobs rodam a cada push e também num `schedule` semanal — sem isso, uma CVE publicada numa semana sem commit passaria despercebida até o próximo push.
+Na esteira, os jobs rodavam a cada push e num `schedule` semanal — sem isso, uma CVE publicada numa semana sem commit passa despercebida até alguém rodar a varredura. É exatamente o buraco que ficou aberto.
 
 > [!TIP]
-> Este é o resumo. O documento **[entrega-continua.md](entrega-continua.md)** destrincha cada ferramenta, explica o que fazer quando o job fica vermelho e traz quatro casos reais deste projeto (uma correção por atualização, uma por remoção, uma no compilador e uma por troca de imagem base EOL).
+> O documento **[entrega-continua.md](entrega-continua.md)**, hoje histórico, destrincha cada ferramenta, explica o que fazer quando a varredura acusa algo e traz casos reais deste projeto (uma correção por atualização, uma por remoção, uma no compilador e uma por troca de imagem base EOL) — tudo isso continua valendo fora da esteira.
 
 **Para estudar:**
 - [Go — Vulnerability Management](https://go.dev/doc/security/vuln/) (como o banco de vulnerabilidades e a análise de chamadas funcionam)
 - [OWASP — Vulnerable and Outdated Components](https://owasp.org/Top10/A06_2021-Vulnerable_and_Outdated_Components/) (o item do Top 10 que essas ferramentas atacam)
-
-### Code scanning: os achados do Trivy em SARIF
-
-Varredura cujo resultado só existe no log de um job tem um problema prático: o achado se perde no scroll e desaparece na execução seguinte. Não dá para responder *"essa CVE apareceu quando?"* nem *"já não tínhamos resolvido isso?"*.
-
-O Trivy exporta em **SARIF** (*Static Analysis Results Interchange Format*), o formato padrão para resultado de análise estática, e o `github/codeql-action/upload-sarif` publica na aba **Security** do repositório — com histórico, deduplicação e a data do primeiro aparecimento. É gratuito em repositório público, e exige `permissions: security-events: write` no job (ver `seguranca-imagens` em `.github/workflows/ci.yml`).
-
-**Para estudar:**
-- [GitHub — Code scanning com SARIF](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning) (como um relatório vira alerta rastreável)
-- [SARIF — a especificação](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) (por que existe um formato comum entre ferramentas)
 
 ### Dependabot: atualização de dependências com o volume sob controle
 
@@ -301,7 +301,7 @@ O Dependabot abre PR quando sai versão nova de uma dependência. Já esteve con
 
 A divisão de trabalho com a varredura é o ponto: o Dependabot avisa que **saiu versão nova**; a varredura avisa que **a versão que você tem virou um problema** — o que também acontece sem ninguém publicar nada, como quando sai uma CVE de stdlib do Go. Os alertas de *segurança* do Dependabot não seguem o ciclo mensal: chegam assim que a CVE é publicada.
 
-Abrir o PR é metade do trabalho: **CI verde não mescla nada sozinho**. O `.github/workflows/dependabot-auto-merge.yml` mescla os PRs de patch/minor que passarem no CI e deixa **major sempre para revisão manual** — o PR do TypeScript 6 → 7 quebrou o `svelte-check` e o E2E, e teria ido para a `main` se a regra não existisse.
+Abrir o PR é metade do trabalho, e sem esteira é a única metade automática: **nenhum PR do Dependabot é testado nem mesclado sozinho**. Antes de mesclar, `make test` no branch do PR — e major sempre com leitura atenta: o PR do TypeScript 6 → 7 quebrou o `svelte-check` e o E2E de uma vez.
 
 > [!TIP]
 > O histórico completo da remoção e da volta está em **[entrega-continua.md](entrega-continua.md)**, seção *Dependabot: removido, e depois readmitido com coleira*.
@@ -505,7 +505,7 @@ recusa cai junto.
 
 ### Docker Compose
 
-Orquestra Postgres + Flyway + API (com hot reload via [Air](https://github.com/air-verse/air)) + frontend em um único `docker compose up`, documentado no `docker-compose.yml` da raiz. Produção tem um compose próprio (`docker-compose.prod.yml`) que **não builda nada**: consome as imagens já publicadas no GHCR e põe o Caddy na frente — ver `docs/producao.md`.
+Orquestra Postgres + Flyway + API (com hot reload via [Air](https://github.com/air-verse/air)) + frontend em um único `docker compose up`, documentado no `docker-compose.yml` da raiz. Produção tem um compose próprio (`docker-compose.prod.yml`) que **não builda nada**: consome as imagens que `scripts/implantar.sh` entregou ao servidor e põe o Caddy na frente — ver `docs/producao.md`.
 
 **Para estudar:**
 - [Docker Compose — visão geral](https://docs.docker.com/compose/)
@@ -518,7 +518,7 @@ Container não é fronteira de segurança por si só — ele é o que o `docker 
 | Ajuste | O que muda |
 |---|---|
 | `no-new-privileges:true` | um binário `setuid` dentro da imagem não consegue escalar privilégio |
-| `cap_drop: [ALL]` | API e frontend rodam sem capability nenhuma; Postgres fica com as cinco que o entrypoint precisa para largar privilégio, e o Caddy só com `NET_BIND_SERVICE`, para abrir as portas 80/443 |
+| `cap_drop: [ALL]` | API e frontend rodam sem capability nenhuma; Postgres fica com as cinco que o entrypoint precisa para largar privilégio, e o Caddy só com `NET_BIND_SERVICE`, para abrir a porta 80 dentro do container |
 | `read_only: true` + `tmpfs: /tmp` | API e frontend não escrevem em disco: um comprometimento não deixa nada gravado no container |
 | `pids_limit` / `mem_limit` | um laço acidental (ou provocado) não leva o host junto |
 
@@ -529,45 +529,50 @@ Do lado do banco, a API se conecta com um usuário que **só faz DML** — sem `
 - [OWASP — Docker Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html)
 - [PostgreSQL — GRANT](https://www.postgresql.org/docs/current/sql-grant.html) (e `ALTER DEFAULT PRIVILEGES`, que estende os GRANTs às tabelas que ainda vão nascer)
 
-### Registry de imagens: GHCR (GitHub Container Registry)
+### Entrega das imagens: `docker save` por SSH, sem registry
 
-O CI builda as três imagens de produção (`agendago-api`, `agendago-web`, `agendago-migrations`) e publica no GHCR a cada push na `main` que passa nos testes — job `publicar-imagens` em `.github/workflows/ci.yml`. É por isso que o `docker-compose.prod.yml` só tem `image:` e nenhum `build:`.
+`scripts/implantar.sh` builda as três imagens de produção (`agendago-api`, `agendago-web`, `agendago-migrations`) na distro de desenvolvimento, com a tag do SHA do commit, e as entrega ao servidor com `docker save | ssh | docker load`. É por isso que o `docker-compose.prod.yml` só tem `image:` e nenhum `build:`.
 
-A decisão é sobre **o que precisa existir no servidor**. Buildando no host, a VPS precisaria do repositório inteiro, de toolchain Go e Node, e de RAM/CPU para compilar — num plano de 1 vCPU, cada deploy competiria com o site no ar por minutos. Puxando imagem pronta, o host guarda três arquivos (`docker-compose.prod.yml`, `Caddyfile`, `.env`), o deploy é um `pull` de segundos, e o que roda em produção é exatamente o artefato que passou no CI — não uma recompilação que pode divergir. Como brinde, a tag por SHA do commit dá rollback sem rebuild.
+A decisão é sobre **o que precisa existir no servidor**. Buildando lá, ele precisaria do repositório inteiro, de toolchain Go e Node, e de RAM/CPU para compilar — dividindo a VM do WSL com o site no ar. Entregando a imagem pronta, o servidor guarda três arquivos (`docker-compose.prod.yml`, `Caddyfile`, `.env`) e o que roda é exatamente o artefato daquele commit. A tag por SHA dá rollback sem rebuild: as imagens anteriores ficam no Docker do servidor.
 
-Detalhe que morde: pacotes no GHCR nascem **privados** mesmo em repositório público — ou a visibilidade é trocada nas configurações do pacote, ou o host precisa de `docker login` com um PAT de `read:packages`.
+Sem registry, uma imagem ausente não pode virar download. Os nomes levam o prefixo `localhost/` (sem ele, `agendago/agendago-api` seria um nome do Docker Hub, que qualquer um pode registrar) e o compose declara `pull_policy: never`.
+
+Até 23/10/2026 o caminho era outro: o GitHub Actions publicava as imagens no GHCR e a VPS dava `pull`. Ao trocar a VPS por um servidor na própria máquina, o registry virou uma volta pela internet para levar a imagem de uma distro do WSL para a outra.
 
 **Para estudar:**
-- [GitHub Packages — Working with the Container registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
-- [docker/build-push-action](https://github.com/docker/build-push-action)
-- [GitHub Actions — permissões do GITHUB_TOKEN](https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication) (por que o job declara `packages: write`)
+- [docker image save](https://docs.docker.com/reference/cli/docker/image/save/) e [docker image load](https://docs.docker.com/reference/cli/docker/image/load/)
+- [Compose — `pull_policy`](https://docs.docker.com/reference/compose-file/services/#pull_policy)
+
+### Docker rootless (o servidor no WSL)
+
+O servidor é a distro `ubuntu-server` do WSL, e **todas as distros do WSL2 dividem a mesma rede** — IP, portas e iptables. Um segundo Docker de sistema ali brigaria com o da distro de desenvolvimento pelo `docker0` e pelo iptables. O Docker **rootless** roda como um usuário comum, com rede própria (slirp4netns), imagens e volumes próprios, e só publica as portas pedidas. Cada projeto do servidor tem o seu usuário: o agendaGo roda no daemon do `agendago`, o studygo no do `studygo`.
+
+`scripts/preparar-servidor.sh` monta isso: cria o usuário (sem sudo), liga o `linger` (sem ele, o daemon do usuário morre no primeiro logout) e cria o contexto `rootless` como padrão — o SSH não interativo e o cron não leem o `.bashrc`, e sem o contexto o `docker` procuraria o daemon de sistema, desligado. Os `mem_limit` e `pids_limit` do compose continuam valendo porque o systemd do servidor delega os controladores `memory` e `pids` ao usuário.
+
+**Para estudar:**
+- [Docker — Rootless mode](https://docs.docker.com/engine/security/rootless/) (pré-requisitos, limitações e o porquê do `linger`)
+- [Docker — contexts](https://docs.docker.com/engine/manage-resources/contexts/)
+
+### Cloudflare Tunnel (a borda)
+
+O servidor está atrás do roteador de casa, sem IP fixo, e o WSL nem publica portas na rede local. O **túnel da Cloudflare** inverte a conexão: o `cloudflared`, rodando no servidor, abre uma conexão de **saída** até a Cloudflare, e as visitas a `agendago.d4ffy.com` chegam por ela. Nenhuma porta de entrada, nenhum firewall a configurar, e o HTTPS é o da Cloudflare — sem Let's Encrypt para emitir nem renovar.
+
+O túnel é do servidor, não deste projeto (montado pelo Ansible do studygo). O agendaGo é uma **rota** nele: `agendago.d4ffy.com` → `HTTP` → `localhost:8481`, onde o Caddy escuta (`docker-compose.prod.yml`, serviço `caddy`).
+
+Atrás do túnel, o par da conexão que chega ao Caddy é sempre o `cloudflared`. O IP do visitante vem do cabeçalho `CF-Connecting-IP`, que a Cloudflare reescreve em toda requisição; o `Caddyfile` o repassa como `X-Real-IP`. Confiar nele só é seguro porque a porta escuta em `127.0.0.1`, onde só o túnel chega.
+
+**Para estudar:**
+- [Cloudflare Tunnel — visão geral](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)
+- [Cloudflare — cabeçalhos HTTP (`CF-Connecting-IP`)](https://developers.cloudflare.com/fundamentals/reference/http-headers/)
 
 ### Caddy (proxy reverso de produção)
 
-Em produção, um único Caddy termina o TLS (certificado Let's Encrypt **automático**) e serve frontend e API na **mesma origem**: `/api/*` vai para a API (o prefixo é removido antes de repassar) e o resto para o frontend. Origem única não é detalhe estético — é o que faz o cookie de sessão `SameSite=Lax` ser enviado nas chamadas do front para a API sem precisar mudar código nem afrouxar o cookie para `SameSite=None`. Ver `Caddyfile` e `docs/producao.md`.
+Em produção, um único Caddy serve frontend e API na **mesma origem**: `/api/*` vai para a API (o prefixo é removido antes de repassar) e o resto para o frontend. Origem única não é detalhe estético — é o que faz o cookie de sessão `SameSite=Lax` ser enviado nas chamadas do front para a API sem precisar mudar código nem afrouxar o cookie para `SameSite=None`. Ele também aplica os cabeçalhos de segurança e esconde o Swagger. O TLS ficou com a Cloudflare: o Caddy fala só HTTP, em `127.0.0.1`. Ver `Caddyfile` e `docs/producao.md`.
 
 **Para estudar:**
 - [Caddy — Getting Started](https://caddyserver.com/docs/getting-started)
-- [Caddy — HTTPS automático](https://caddyserver.com/docs/automatic-https)
+- [Caddy — `reverse_proxy` e `header_up`](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy)
 - [MDN — SameSite cookies](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite) (por que a mesma origem importa)
-
-### Vários sites no mesmo VPS, sem o agendaGo saber deles
-
-O mesmo servidor hospeda outros projetos, e só pode haver **um** processo escutando nas portas 80/443 — então o Caddy do agendaGo é o proxy de todos. O jeito ingênuo seria escrever os blocos dos vizinhos dentro do `Caddyfile` daqui, mas isso amarra projetos independentes: entrar ou sair um vizinho viraria commit e deploy **neste** repositório.
-
-A separação tem duas metades, e as duas estão no `Caddyfile` e no `docker-compose.prod.yml`:
-
-| Metade | Como funciona |
-|---|---|
-| **Configuração** | O `Caddyfile` termina com `import /etc/caddy/sites/*.caddy`. Cada projeto instala o próprio bloco em `/home/deploy/caddy/sites` no host, montado read-only no container. Glob que não casa nada é só um `warn` no Caddy — o diretório vazio não derruba a config (caminho literal ausente, esse sim, seria erro) |
-| **Rede** | Os containers dos vizinhos são alcançados pela rede Docker `borda`. **Só o Caddy** participa das duas redes: `api`, `web` e `postgres` continuam isolados na rede default deste compose, invisíveis para qualquer vizinho |
-
-`borda` é declarada `external: true` porque não pertence a esta stack — um `docker compose down` daqui não pode levar embora a rede que os outros projetos usam. Em compensação, `external` significa que o Compose **não a cria**: se não existir, o deploy falha inteiro com `network borda declared as external, but could not be found`. Por isso o job `implantar` do CI a garante antes de subir a stack, com `docker network inspect borda || docker network create borda` — deixar isso como passo manual esconderia a dependência até o dia de um host novo, ou de um `docker network prune` numa faxina.
-
-**Para estudar:**
-- [Caddy — a diretiva `import`](https://caddyserver.com/docs/caddyfile/directives/import)
-- [Docker Compose — `networks` de nível raiz e redes externas](https://docs.docker.com/reference/compose-file/networks/)
-- [Docker — redes bridge definidas pelo usuário](https://docs.docker.com/engine/network/drivers/bridge/) (por que containers numa rede nomeada se enxergam pelo nome do serviço, e os de fora não)
 
 ### Logging estruturado: log/slog
 
@@ -579,7 +584,7 @@ Três decisões tornam o log útil em produção, não só ruído:
 - **O erro real nunca some**: o cliente recebe sempre `{"erro":"erro interno"}` num 500 (não vaza detalhes internos), mas `responderErroInterno` (`internal/adapter/http/handler/provider.go`) loga o erro de verdade (ex.: falha de conexão com o Postgres) em nível ERROR, com o request_id — sem isso, um 500 em produção seria uma caixa-preta.
 - **Rota, não caminho**: o log de acesso registra o padrão da rota (`/agendamentos/cancelar/{token}`), não o caminho real, para que tokens em path não vão parar nos logs.
 
-Eventos de segurança (login falho, tentativa de conta banida) saem em **WARN** com tipo/email/IP — a senha nunca é logada —, para permitir detectar brute-force. O IP real do cliente chega via `X-Real-IP` que o Caddy define de forma não-forjável (`internal/adapter/http/middleware/real_ip.go`); sem isso, atrás do proxy, tanto o log quanto o rate limit por IP veriam só o IP do container do Caddy.
+Eventos de segurança (login falho, tentativa de conta banida) saem em **WARN** com tipo/email/IP — a senha nunca é logada —, para permitir detectar brute-force. O IP real do cliente chega via `X-Real-IP` que o Caddy define de forma não-forjável, a partir do `CF-Connecting-IP` da Cloudflare (`internal/adapter/http/middleware/real_ip.go`); sem isso, atrás do túnel e do proxy, tanto o log quanto o rate limit por IP veriam só o IP do container do Caddy.
 
 **Para estudar:**
 - [Go — pacote log/slog](https://pkg.go.dev/log/slog) (handlers, níveis, atributos estruturados)
@@ -646,7 +651,7 @@ O SvelteKit delega o formato do build final a um *adapter*. O projeto usa o `@sv
 Dois detalhes que já custaram caro nesse caminho:
 
 - **`envPrefix: 'PUBLIC_'` em `frontend/vite.config.ts` é obrigatório.** O Vite só expõe variáveis com prefixo `VITE_` por padrão, e o plugin do SvelteKit **não** ajusta isso para quem usa `import.meta.env` (o prefixo `PUBLIC_` só é convenção nos módulos `$env/*`). Sem a linha, `import.meta.env.PUBLIC_API_URL` sai `undefined` e o `frontend/src/lib/api/client.ts` cai calado no fallback `http://localhost:8080` — o build passa, os testes passam, e só o site publicado quebra.
-- **O valor padrão é `/api`, relativo.** Uma URL absoluta amarraria a imagem a um domínio, o que impede publicá-la pronta no registry. Como o Caddy serve frontend e API na mesma origem, o caminho relativo resolve no domínio corrente; funciona porque toda página que consome a API declara `ssr = false`, então o `fetch` nunca roda no servidor Node (onde não haveria base para resolver o caminho).
+- **O valor padrão é `/api`, relativo.** Uma URL absoluta amarraria a imagem a um domínio, o que impede reaproveitar a mesma imagem no ensaio local e no servidor. Como o Caddy serve frontend e API na mesma origem, o caminho relativo resolve no domínio corrente; funciona porque toda página que consome a API declara `ssr = false`, então o `fetch` nunca roda no servidor Node (onde não haveria base para resolver o caminho).
 
 Ver `docs/producao.md`.
 

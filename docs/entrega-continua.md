@@ -1,5 +1,14 @@
 # 🔄 Entrega contínua e varredura de vulnerabilidades
 
+> [!CAUTION]
+> **Documento histórico.** Em 23/10/2026 a esteira do GitHub Actions foi
+> removida junto com a VPS: hoje o deploy é `scripts/implantar.sh`, rodado à mão
+> para o servidor no WSL ([producao.md](producao.md)), e nada abaixo roda
+> sozinho. Fica como registro de estudo — o raciocínio das ferramentas de
+> varredura e os casos reais continuam valendo; os comandos manuais
+> equivalentes estão em [tecnologias.md](tecnologias.md), seção *Varredura de
+> dependências*.
+
 > Como um commit vira produção neste projeto, e o que impede uma dependência
 > vulnerável de ir junto. Documento de estudo: cada decisão vem com o porquê e
 > com o caso real que a motivou.
