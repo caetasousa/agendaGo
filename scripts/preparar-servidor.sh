@@ -86,8 +86,16 @@ if [ ! -f "$home/.config/systemd/user/docker.service" ]; then
 	[ -f "$home/.config/systemd/user/docker.service" ] || { echo "o instalador do rootless não criou o serviço"; exit 1; }
 	feito "Docker rootless de $usuario instalado"
 fi
+# Habilitar e ligar são coisas diferentes, e se conferem separadas: o instalador
+# deixa o daemon ativo mas NÃO habilitado. Conferindo só "está ativo?", o
+# enable nunca rodava — e na próxima subida da distro o linger subia o systemd
+# do usuário sem o Docker (o site ficou fora do ar por isso, em 2026-11-02).
+if ! como_usuario systemctl --user is-enabled --quiet docker; then
+	como_usuario systemctl --user enable docker
+	feito "Docker rootless de $usuario habilitado na subida"
+fi
 if ! como_usuario systemctl --user is-active --quiet docker; then
-	como_usuario systemctl --user enable --now docker
+	como_usuario systemctl --user start docker
 	feito "Docker rootless de $usuario ligado"
 fi
 
