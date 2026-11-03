@@ -188,16 +188,16 @@ O `scripts/preparar-servidor.sh` é idempotente e diz o que mudou:
 | garante `docker.io`, `docker-compose-v2`, `rootlesskit`, `uidmap`, `slirp4netns`, `cron`, `curl` | o rootless, o backup diário e a verificação do deploy |
 | cria o `agendago`, **sem sudo**, só com a chave de deploy | o mínimo para subir a stack |
 | `loginctl enable-linger agendago` | sem isso, o Docker do usuário morre no primeiro logout |
-| instala e liga o Docker rootless dele | ver *Por que Docker rootless* acima |
+| instala o Docker rootless dele, **habilita** (`systemctl --user enable docker`) e liga | o linger só sobe o systemd do usuário; sem o `enable`, o Docker não volta quando a distro reinicia. Ver *Por que Docker rootless* acima |
 | cria o contexto `rootless` como padrão | o SSH não interativo e o cron não leem o `.bashrc`; sem o contexto, `docker` procuraria o daemon de sistema, desligado |
 
 **Confira:**
 
 ```bash
-ssh -i ~/.ssh/agendago_servidor -p 2222 agendago@127.0.0.1 'docker context show && docker ps'
+ssh -i ~/.ssh/agendago_servidor -p 2222 agendago@127.0.0.1 'systemctl --user is-enabled docker && docker context show && docker ps'
 ```
 
-✅ `rootless` e uma lista (vazia) de containers.
+✅ `enabled`, `rootless` e uma lista (vazia) de containers.
 
 ---
 
@@ -804,14 +804,15 @@ certificado de `agendago.d4ffy.com` sozinha. O Caddy fala só HTTP, em
 O site só fica no ar **com o PC ligado e a `ubuntu-server` de pé**. A tarefa
 agendada do Windows criada pelo studygo (`studygo-servidor`) mantém a distro
 acordada a partir do logon; com a distro de pé, o `docker` rootless do
-`agendago` sobe sozinho (linger) e os containers voltam pelo
+`agendago` sobe sozinho — o linger sobe o systemd do usuário e o serviço
+`docker` **habilitado** sobe com ele — e os containers voltam pelo
 `restart: unless-stopped`.
 
 | Sintoma | Causa provável | O que fazer |
 |---|---|---|
 | 502 da Cloudflare | o túnel chegou ao servidor, mas o Caddy não respondeu | `docker compose -f docker-compose.prod.yml ps -a` no servidor; confira se a rota é `HTTP` → `localhost:8481` |
 | 1033 / túnel indisponível | o `cloudflared` caiu ou a distro está parada | `wsl.exe -l -v`; no servidor, `systemctl status cloudflared` (pelo usuário `studygo`, que tem sudo) |
-| Nada responde, nem em `127.0.0.1:8481` | o Docker do `agendago` não está de pé | `systemctl --user status docker`, como `agendago` |
+| Nada responde, nem em `127.0.0.1:8481` | o Docker do `agendago` não está de pé — se aparece `disabled`, ele não volta sozinho depois que a distro reinicia | `systemctl --user status docker`, como `agendago`; se estiver `disabled`, `systemctl --user enable --now docker` |
 
 O `cloudflared` e o token do túnel pertencem ao servidor, não a este
 repositório: são montados pelo Ansible do studygo
